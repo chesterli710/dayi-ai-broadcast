@@ -5,14 +5,10 @@
 export default {
   app: {
     name: 'DaYi AI Director System',
-    version: 'Version',
-    language: 'Language',
-    theme: 'Theme'
+    version: 'Version'
   },
   nav: {
-    home: 'Home',
-    theme: 'Theme',
-    about: 'About'
+    planSelection: 'Plan Selection'
   },
   login: {
     title: 'Welcome',
@@ -28,34 +24,25 @@ export default {
     phoneTest: 'Phone',
     passwordTest: 'Password'
   },
-  theme: {
-    settings: 'Theme Settings',
-    config: 'Theme Configuration',
-    info: 'Theme Information',
-    mode: 'Theme Mode',
-    default: 'Default Theme',
-    dark: 'Dark Theme',
-    custom: 'Custom Theme',
-    primaryColor: 'Primary Color',
-    successColor: 'Success Color',
-    warningColor: 'Warning Color',
-    dangerColor: 'Danger Color',
-    infoColor: 'Info Color',
-    resetDefault: 'Reset to Default',
-    preview: 'Preview',
-    description: 'You can customize the application theme in the following ways:',
-    modeDescription: {
-      default: 'Element Plus default light theme',
-      dark: 'Element Plus built-in dark theme',
-      custom: 'Customize colors according to your preferences'
-    },
-    colorDescription: {
-      primary: 'The main color of the application, used for buttons, links, etc.',
-      success: 'Color representing success status',
-      warning: 'Color representing warning status',
-      danger: 'Color representing danger status',
-      info: 'Color representing general information'
-    }
+  planSelection: {
+    title: 'Plan Selection',
+    subtitle: 'Please select a broadcast plan to operate',
+    channels: 'Channel List',
+    plans: 'Plan List',
+    branches: 'Branch List',
+    noChannels: 'No available channels',
+    noPlans: 'No available plans',
+    noBranches: 'No available branches',
+    enterButton: 'Enter',
+    scheduleCount: '{count} schedules',
+    loadingChannels: 'Loading channels...',
+    loadingPlans: 'Loading plans...',
+    loadingBranches: 'Loading branches...',
+    errorLoadingChannels: 'Failed to load channels, please try again later',
+    retry: 'Retry',
+    logout: 'Logout',
+    logoutConfirm: 'Are you sure you want to logout?',
+    logoutSuccess: 'Logged out successfully'
   },
   common: {
     save: 'Save',
@@ -73,26 +60,5 @@ export default {
     unknown: 'Unknown',
     yes: 'Yes',
     no: 'No'
-  },
-  button: {
-    default: 'Default Button',
-    primary: 'Primary Button',
-    success: 'Success Button',
-    warning: 'Warning Button',
-    danger: 'Danger Button',
-    info: 'Info Button'
-  },
-  tag: {
-    default: 'Default Tag',
-    primary: 'Primary Tag',
-    success: 'Success Tag',
-    warning: 'Warning Tag',
-    danger: 'Danger Tag',
-    info: 'Info Tag'
-  },
-  notFound: {
-    title: 'Page Not Found',
-    message: 'The page you visited does not exist',
-    back: 'Back to Home'
   }
 } 

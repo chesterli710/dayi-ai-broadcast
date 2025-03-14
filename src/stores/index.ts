@@ -1,6 +1,8 @@
 import { createPinia } from 'pinia'
 import { useAppStore } from './appStore'
 import { useUserStore } from './userStore'
+import { useAudioStore } from './audioStore'
+import { usePlanStore } from './planStore'
 
 /**
  * 创建Pinia实例
@@ -9,6 +11,6 @@ import { useUserStore } from './userStore'
 const pinia = createPinia()
 
 // 导出所有状态存储
-export { useAppStore, useUserStore }
+export { useAppStore, useUserStore, useAudioStore, usePlanStore }
 
 export default pinia 

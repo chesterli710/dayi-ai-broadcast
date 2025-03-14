@@ -39,7 +39,6 @@ export default defineConfig({
   // 服务器配置
   server: {
     host: '0.0.0.0',
-    port: 5173
   },
   // 构建配置
   build: {

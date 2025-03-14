@@ -1,34 +1,23 @@
 /**
- * Mock 数据服务
- * 用于模拟 API 请求响应
+ * Mock数据入口文件
+ * 用于初始化所有Mock数据
  */
-import Mock from 'mockjs'
+import { setupPlanMock } from './plan'
+import { setupLayoutMock } from './layout'
 import { setupUserMock } from './user'
-import { setupBroadcastMock } from './broadcast'
 
 /**
- * 设置全局延迟
- * 模拟网络请求延迟
- */
-Mock.setup({
-  timeout: '200-600'
-})
-
-/**
- * 初始化 Mock 服务
+ * 初始化所有Mock数据
  */
 export function setupMock() {
-  // 判断是否启用 Mock
-  const useMock = import.meta.env.VITE_USE_MOCK === 'true'
-  
-  if (!useMock) {
-    console.log('Mock 服务已禁用')
-    return
-  }
-  
-  console.log('Mock 服务已启用')
-  
-  // 设置各模块的 Mock 数据
+  // 设置用户相关的Mock数据
   setupUserMock()
-  setupBroadcastMock()
+  
+  // 设置计划相关的Mock数据
+  setupPlanMock()
+  
+  // 设置布局模板相关的Mock数据
+  setupLayoutMock()
+  
+  console.log('Mock数据初始化完成')
 } 

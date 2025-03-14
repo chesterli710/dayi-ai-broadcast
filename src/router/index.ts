@@ -24,34 +24,25 @@ class RouterConfig {
     {
       path: '/',
       name: 'Home',
-      component: () => import('../views/Home.vue'),
+      redirect: '/plan-selection',
       meta: {
         title: '首页',
         requiresAuth: true
       }
     },
     {
-      path: '/about',
-      name: 'About',
-      component: () => import('../views/About.vue'),
+      path: '/plan-selection',
+      name: 'PlanSelection',
+      component: () => import('../views/PlanSelectionView.vue'),
       meta: {
-        title: '关于',
-        requiresAuth: true
-      }
-    },
-    {
-      path: '/theme',
-      name: 'Theme',
-      component: () => import('../views/ThemeSettings.vue'),
-      meta: {
-        title: '主题设置',
+        title: '计划选择',
         requiresAuth: true
       }
     },
     {
       path: '/:pathMatch(.*)*',
       name: 'NotFound',
-      component: () => import('../views/NotFound.vue'),
+      redirect: '/plan-selection',
       meta: {
         title: '页面未找到',
         requiresAuth: false
@@ -72,7 +63,7 @@ class RouterConfig {
     // 全局前置守卫，处理登录验证和页面标题
     router.beforeEach(async (to, from, next) => {
       // 设置页面标题
-      document.title = `${to.meta.title || '大易AI播报'}`
+      document.title = `${to.meta.title || '大医AI导播系统'}`
       
       // 检查路由是否需要登录验证
       if (to.meta.requiresAuth) {
