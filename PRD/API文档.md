@@ -159,7 +159,6 @@ GET /api/plan/all
                     {
                       "id": 1,
                       "template": "surgery-single",
-                      "displayName": "单画面手术",
                       "description": "适用于单摄像头手术直播",
                       "background": "https://example.com/backgrounds/surgery-bg.jpg"
                     }
@@ -185,8 +184,8 @@ GET /api/plan/all
                     {
                       "id": 1,
                       "template": "lecture-single",
-                      "displayName": "单画面讲座",
-                      "description": "适用于单摄像头讲座直播"
+                      "description": "适用于单摄像头讲课直播",
+                      "background": "https://example.com/backgrounds/lecture-bg.jpg"
                     }
                   ],
                   "lectureInfo": {
@@ -400,7 +399,6 @@ GET /api/plan/branches?planId=plan-1
             {
               "id": 1,
               "template": "surgery-single",
-              "displayName": "单画面手术",
               "description": "适用于单摄像头手术直播",
               "background": "https://example.com/backgrounds/surgery-bg.jpg"
             }
@@ -466,7 +464,6 @@ GET /api/plan/branches/branch-1
           {
             "id": 1,
             "template": "surgery-single",
-            "displayName": "单画面手术",
             "description": "适用于单摄像头手术直播",
             "background": "https://example.com/backgrounds/surgery-bg.jpg"
           }
@@ -519,129 +516,187 @@ GET /api/layout/templates
   "code": 0,
   "data": [
     {
-      "template": "surgery-single",
+      "template": "1s1b",
       "name": {
-        "zh-CN": "单画面手术",
-        "en-US": "Single View Surgery"
+        "zh-CN": "一小一大",
+        "en-US": "One Small One Big"
       },
+      "thumbnail": "https://example.com/thumbnails/1s1b_200x113.png",
       "elements": [
         {
           "id": 1,
-          "x": 0,
-          "y": 0,
-          "width": 1920,
-          "height": 1080,
+          "x": 12,
+          "y": 132,
+          "width": 402,
+          "height": 227,
           "zIndex": 1,
           "type": "media",
-          "sourceId": "camera-1",
-          "sourceName": "主摄像头",
           "transparentBackground": false
         },
         {
           "id": 2,
-          "x": 50,
-          "y": 50,
-          "width": 300,
-          "height": 80,
+          "x": 424,
+          "y": 132,
+          "width": 1486,
+          "height": 836,
           "zIndex": 2,
-          "type": "host-label",
-          "fontStyle": {
-            "fontFamily": "Arial",
-            "fontSize": 24,
-            "fontWeight": "bold",
-            "fontColor": "#ffffff"
-          },
-          "orientation": "horizontal"
+          "type": "media",
+          "transparentBackground": false
         },
         {
           "id": 3,
-          "x": 50,
-          "y": 140,
-          "width": 300,
-          "height": 60,
-          "zIndex": 2,
+          "x": 12,
+          "y": 370,
+          "width": 402,
+          "height": 117,
+          "zIndex": 10001,
           "type": "host-info",
           "fontStyle": {
-            "fontFamily": "Arial",
-            "fontSize": 20,
-            "fontWeight": "regular",
-            "fontColor": "#ffffff"
+            "fontSize": 30,
+            "fontWeight": "medium",
+            "fontColor": "#FFFFFF"
           },
-          "orientation": "horizontal"
-        }
-      ]
-    },
-    {
-      "template": "surgery-double",
-      "name": {
-        "zh-CN": "双画面手术",
-        "en-US": "Double View Surgery"
-      },
-      "elements": [
-        {
-          "id": 1,
-          "x": 0,
-          "y": 0,
-          "width": 1280,
-          "height": 1080,
-          "zIndex": 1,
-          "type": "media",
-          "sourceId": "camera-1",
-          "sourceName": "主摄像头",
-          "transparentBackground": false
-        },
-        {
-          "id": 2,
-          "x": 1280,
-          "y": 0,
-          "width": 640,
-          "height": 540,
-          "zIndex": 1,
-          "type": "media",
-          "sourceId": "camera-2",
-          "sourceName": "辅助摄像头",
-          "transparentBackground": false
-        },
-        {
-          "id": 3,
-          "x": 1280,
-          "y": 550,
-          "width": 300,
-          "height": 60,
-          "zIndex": 2,
-          "type": "subject-label",
-          "fontStyle": {
-            "fontFamily": "Arial",
-            "fontSize": 22,
-            "fontWeight": "bold",
-            "fontColor": "#ffffff"
-          },
-          "orientation": "horizontal"
+          "orientation": "vertical"
         },
         {
           "id": 4,
-          "x": 1280,
-          "y": 620,
-          "width": 640,
-          "height": 100,
-          "zIndex": 2,
+          "x": 12,
+          "y": 495,
+          "width": 402,
+          "height": 175,
+          "zIndex": 10002,
           "type": "subject-info",
           "fontStyle": {
-            "fontFamily": "Arial",
-            "fontSize": 18,
-            "fontWeight": "medium",
-            "fontColor": "#ffffff"
+            "fontSize": 32,
+            "fontWeight": "bold",
+            "fontColor": "#FFFFFF"
           },
-          "orientation": "horizontal"
+          "orientation": "vertical"
+        },
+        {
+          "id": 5,
+          "x": 12,
+          "y": 680,
+          "width": 402,
+          "height": 40,
+          "zIndex": 10003,
+          "type": "guest-label",
+          "fontStyle": {
+            "fontSize": 24,
+            "fontWeight": "bold",
+            "fontColor": "#FFFFFF"
+          },
+          "orientation": "vertical"
+        },
+        {
+          "id": 6,
+          "x": 12,
+          "y": 735,
+          "width": 402,
+          "height": 233,
+          "zIndex": 10004,
+          "type": "guest-info",
+          "fontStyle": {
+            "fontSize": 26,
+            "fontWeight": "regular",
+            "fontColor": "#FFFFFF"
+          },
+          "orientation": "vertical"
         }
       ]
     },
     {
-      "template": "lecture-single",
+      "template": "2s1b",
       "name": {
-        "zh-CN": "单画面讲座",
-        "en-US": "Single View Lecture"
+        "zh-CN": "二小一大",
+        "en-US": "Two Small One Big"
       },
+      "thumbnail": "https://example.com/thumbnails/2s1b_200x113.png",
+      "elements": [
+        {
+          "id": 1,
+          "x": 12,
+          "y": 132,
+          "width": 402,
+          "height": 227,
+          "zIndex": 1,
+          "type": "media",
+          "transparentBackground": false
+        },
+        {
+          "id": 2,
+          "x": 424,
+          "y": 132,
+          "width": 1486,
+          "height": 836,
+          "zIndex": 2,
+          "type": "media",
+          "transparentBackground": false
+        },
+        {
+          "id": 3,
+          "x": 12,
+          "y": 579,
+          "width": 402,
+          "height": 227,
+          "zIndex": 3,
+          "type": "media",
+          "transparentBackground": false
+        },
+        {
+          "id": 4,
+          "x": 12,
+          "y": 370,
+          "width": 402,
+          "height": 40,
+          "zIndex": 10003,
+          "type": "host-label",
+          "fontStyle": {
+            "fontSize": 24,
+            "fontWeight": "bold",
+            "fontColor": "#FFFFFF"
+          },
+          "orientation": "vertical"
+        },
+        {
+          "id": 5,
+          "x": 12,
+          "y": 420,
+          "width": 402,
+          "height": 117,
+          "zIndex": 10001,
+          "type": "host-info",
+          "fontStyle": {
+            "fontSize": 30,
+            "fontWeight": "medium",
+            "fontColor": "#FFFFFF"
+          },
+          "orientation": "vertical"
+        },
+        {
+          "id": 6,
+          "x": 424,
+          "y": 968,
+          "width": 1486,
+          "height": 112,
+          "zIndex": 10002,
+          "type": "subject-info",
+          "fontStyle": {
+            "fontSize": 46,
+            "fontWeight": "bold",
+            "fontColor": "#FFFFFF"
+          },
+          "orientation": "vertical"
+        }
+      ]
+    },
+    {
+      "template": "fullscreen",
+      "name": {
+        "zh-CN": "全屏",
+        "en-US": "Fullscreen"
+      },
+      "thumbnail": "https://example.com/thumbnails/fullscreen_200x113.png",
       "elements": [
         {
           "id": 1,
@@ -651,41 +706,37 @@ GET /api/layout/templates
           "height": 1080,
           "zIndex": 1,
           "type": "media",
-          "sourceId": "camera-1",
-          "sourceName": "主摄像头",
+          "transparentBackground": false
+        }
+      ]
+    },
+    {
+      "template": "2es",
+      "name": {
+        "zh-CN": "二等分",
+        "en-US": "Two Equal Split"
+      },
+      "thumbnail": "https://example.com/thumbnails/2es_200x113.png",
+      "elements": [
+        {
+          "id": 1,
+          "x": 10,
+          "y": 284,
+          "width": 945,
+          "height": 532,
+          "zIndex": 1,
+          "type": "media",
           "transparentBackground": false
         },
         {
           "id": 2,
-          "x": 50,
-          "y": 900,
-          "width": 400,
-          "height": 50,
-          "zIndex": 3,
-          "type": "guest-label",
-          "fontStyle": {
-            "fontFamily": "Arial",
-            "fontSize": 24,
-            "fontWeight": "bold",
-            "fontColor": "#ffffff"
-          },
-          "orientation": "horizontal"
-        },
-        {
-          "id": 3,
-          "x": 50,
-          "y": 960,
-          "width": 400,
-          "height": 100,
-          "zIndex": 3,
-          "type": "guest-info",
-          "fontStyle": {
-            "fontFamily": "Arial",
-            "fontSize": 20,
-            "fontWeight": "regular",
-            "fontColor": "#ffffff"
-          },
-          "orientation": "horizontal"
+          "x": 967,
+          "y": 284,
+          "width": 945,
+          "height": 532,
+          "zIndex": 2,
+          "type": "media",
+          "transparentBackground": false
         }
       ]
     }
@@ -743,6 +794,7 @@ GET /api/layout/templates/surgery-single
       "zh-CN": "单画面手术",
       "en-US": "Single View Surgery"
     },
+    "thumbnail": "https://example.com/thumbnails/surgery-single_200x113.png",
     "elements": [
       {
         "id": 1,
@@ -777,7 +829,6 @@ GET /api/layout/templates/surgery-single
         "zIndex": 3,
         "type": "host-label",
         "fontStyle": {
-          "fontFamily": "Arial",
           "fontSize": 24,
           "fontWeight": "bold",
           "fontColor": "#ffffff"
@@ -793,7 +844,6 @@ GET /api/layout/templates/surgery-single
         "zIndex": 3,
         "type": "host-info",
         "fontStyle": {
-          "fontFamily": "Arial",
           "fontSize": 20,
           "fontWeight": "regular",
           "fontColor": "#ffffff"
@@ -867,7 +917,6 @@ interface Schedule {
 interface Layout {
   id: number                      // 该布局在当前schedule中的id，多个布局顺序排列不重复即可
   template: string                // 该布局的模板唯一识别ID
-  displayName?: string            // 该布局的显示名字（暂存于此，方便调用）
   description?: string            // 该布局的用途描述
   background?: string             // 布局背景图url
   foreground?: string             // 布局前景图url
@@ -885,106 +934,7 @@ interface LayoutTemplate {
     "zh-CN": string,              // 布局模板的中文名称
     "en-US": string               // 布局模板的英文名称
   },
+  thumbnail?: string              // 布局模板的缩略图url，建议使用16:9比例、200像素宽的图片
   elements?: LayoutElement[]      // 该布局包含的布局元素（一个布局内包含多个布局元素）
 }
 ```
-
-### LayoutElement（布局元素）
-
-```typescript
-interface LayoutElement {
-  id?: number                  // 该媒体元素在所在布局的出现顺序号
-  x: number                   // 元素x坐标（左上角为原点，下同）
-  y: number                   // 元素y坐标
-  width: number               // 元素宽度（单位为px）
-  height: number              // 元素高度
-  zIndex?: number             // 元素zindex
-  type: LayoutElementType     // 元素类型
-}
-```
-
-### MediaLayoutElement（媒体布局元素）
-
-```typescript
-interface MediaLayoutElement extends LayoutElement {
-  type: 'media'               // 媒体类型
-  sourceId?: string           // 媒体源id
-  sourceName?: string         // 媒体源名称
-  transparentBackground?: boolean // true:元素背景透明 false：元素黑色背景
-}
-```
-
-### TextLayoutElement（文本布局元素）
-
-```typescript
-interface TextLayoutElement extends LayoutElement {
-  fontStyle: FontStyle        // 字体样式
-  orientation?: "horizontal" | "vertical" // 文本方向
-}
-```
-
-### 特定文本布局元素类型
-
-```typescript
-interface HostLabelText extends TextLayoutElement {
-  type: 'host-label'          // 主持人标签
-}
-
-interface HostInfoText extends TextLayoutElement {
-  type: 'host-info'           // 主持人信息
-}
-
-interface SubjectLabelText extends TextLayoutElement {
-  type: 'subject-label'       // 主题标签
-}
-
-interface SubjectInfoText extends TextLayoutElement {
-  type: 'subject-info'        // 主题信息
-}
-
-interface GuestLabelText extends TextLayoutElement {
-  type: 'guest-label'         // 嘉宾标签
-}
-
-interface GuestInfoText extends TextLayoutElement {
-  type: 'guest-info'          // 嘉宾信息
-}
-```
-
-### FontStyle（字体样式）
-
-```typescript
-interface FontStyle {
-  fontFamily: string          // 字体家族
-  fontSize: number            // 字体大小
-  fontWeight: "regular" | "medium" | "bold" // 字体粗细
-  fontColor: string           // 字体颜色
-}
-```
-
-### LayoutElementType（布局元素类型）
-
-```typescript
-enum LayoutElementType {
-  MEDIA = 'media',            // 媒体元素
-  HOST_LABEL = 'host-label',  // 主持人标签
-  HOST_INFO = 'host-info',    // 主持人信息
-  SUBJECT_LABEL = 'subject-label', // 主题标签
-  SUBJECT_INFO = 'subject-info',   // 主题信息
-  GUEST_LABEL = 'guest-label',     // 嘉宾标签
-  GUEST_INFO = 'guest-info'        // 嘉宾信息
-}
-```
-
-### StreamConfig（推流配置）
-
-```typescript
-interface StreamConfig {
-  bitrate?: number       // 视频码率(kbps)
-  resolution?: string    // 视频分辨率(例如: "1920x1080")
-  fps?: number          // 帧率
-  codec?: string        // 编码器类型
-  preset?: "performance" | "zerolatency" // 高画质/低时延
-  streamUrl?: string        // 推流地址
-  streamSecret?: string     // 推流密钥
-}

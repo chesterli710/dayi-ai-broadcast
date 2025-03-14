@@ -21,9 +21,9 @@ export function setupPlanMock() {
           name: '肝胆外科手术直播',
           plannedStartDateTime: new Date('2023-06-15T09:00:00'),
           plannedEndDateTime: new Date('2023-06-15T12:00:00'),
-          cover: 'https://a2.vzan.com/live/11749549/upload/image/png/20250312/9a6137c37f404df3ad96b759bf201ddb.png',
-          background: 'https://a2.vzan.com/live/11749549/upload/image/png/20250127/8da07910e10c46e7a6f1482f9d58c72c.png',
-          labelBackground: 'https://example.com/backgrounds/label-blue.png',
+          cover: 'https://picsum.photos/id/237/400/225',
+          background: 'https://picsum.photos/id/1/1920/1080',
+          labelBackground: 'https://picsum.photos/id/20/400/100',
           textColor: '#ffffff',
           branches: [
             {
@@ -39,10 +39,21 @@ export function setupPlanMock() {
                   layouts: [
                     {
                       id: 1,
-                      template: 'surgery-single',
-                      displayName: '单画面手术',
-                      description: '适用于单摄像头手术直播',
-                      background: 'https://example.com/backgrounds/surgery-bg.jpg'
+                      template: 'fullscreen',
+                      description: '全屏手术直播',
+                      background: 'https://picsum.photos/id/10/1920/1080'
+                    },
+                    {
+                      id: 2,
+                      template: '1s1b',
+                      description: '一小一大布局',
+                      background: 'https://picsum.photos/id/11/1920/1080'
+                    },
+                    {
+                      id: 3,
+                      template: '2s1b',
+                      description: '二小一大布局',
+                      background: 'https://picsum.photos/id/12/1920/1080'
                     }
                   ],
                   surgeryInfo: {
@@ -65,9 +76,15 @@ export function setupPlanMock() {
                   layouts: [
                     {
                       id: 1,
-                      template: 'lecture-single',
-                      displayName: '单画面讲座',
-                      description: '适用于单摄像头讲座直播'
+                      template: 'fullscreen',
+                      description: '全屏讲座直播',
+                      background: 'https://picsum.photos/id/11/1920/1080'
+                    },
+                    {
+                      id: 2,
+                      template: '2es',
+                      description: '二等分布局',
+                      background: 'https://picsum.photos/id/13/1920/1080'
                     }
                   ],
                   lectureInfo: {
@@ -97,7 +114,7 @@ export function setupPlanMock() {
           name: '心脏外科手术直播',
           plannedStartDateTime: new Date('2023-06-20T10:00:00'),
           plannedEndDateTime: new Date('2023-06-20T14:00:00'),
-          cover: 'https://example.com/covers/heart-surgery.jpg',
+          cover: 'https://picsum.photos/id/239/400/225',
           branches: [
             {
               id: 'branch-2-1',
@@ -112,9 +129,15 @@ export function setupPlanMock() {
                   layouts: [
                     {
                       id: 1,
-                      template: 'surgery-double',
-                      displayName: '双画面手术',
-                      description: '适用于双摄像头手术直播'
+                      template: '2es',
+                      description: '二等分布局',
+                      background: 'https://picsum.photos/id/12/1920/1080'
+                    },
+                    {
+                      id: 2,
+                      template: 'fullscreen',
+                      description: '全屏手术直播',
+                      background: 'https://picsum.photos/id/14/1920/1080'
                     }
                   ],
                   surgeryInfo: {
@@ -137,9 +160,9 @@ export function setupPlanMock() {
                   layouts: [
                     {
                       id: 1,
-                      template: 'lecture-single',
-                      displayName: '单画面讲座',
-                      description: '适用于单摄像头讲座直播'
+                      template: 'fullscreen',
+                      description: '全屏讲座直播',
+                      background: 'https://picsum.photos/id/13/1920/1080'
                     }
                   ],
                   lectureInfo: {
@@ -160,9 +183,21 @@ export function setupPlanMock() {
                   layouts: [
                     {
                       id: 1,
-                      template: 'surgery-single',
-                      displayName: '单画面手术',
-                      description: '适用于单摄像头手术直播'
+                      template: 'fullscreen',
+                      description: '全屏手术直播',
+                      background: 'https://picsum.photos/id/14/1920/1080'
+                    },
+                    {
+                      id: 2,
+                      template: '1s1b',
+                      description: '一小一大布局',
+                      background: 'https://picsum.photos/id/15/1920/1080'
+                    },
+                    {
+                      id: 3,
+                      template: '2s1b',
+                      description: '二小一大布局',
+                      background: 'https://picsum.photos/id/16/1920/1080'
                     }
                   ],
                   surgeryInfo: {
@@ -200,9 +235,15 @@ export function setupPlanMock() {
                   layouts: [
                     {
                       id: 1,
-                      template: 'lecture-with-slides',
-                      displayName: '讲座带幻灯片',
-                      description: '适用于带幻灯片的讲座直播'
+                      template: '1s1b',
+                      description: '一小一大布局',
+                      background: 'https://picsum.photos/id/16/1920/1080'
+                    },
+                    {
+                      id: 2,
+                      template: '2es',
+                      description: '二等分布局',
+                      background: 'https://picsum.photos/id/17/1920/1080'
                     }
                   ],
                   lectureInfo: {
@@ -223,9 +264,15 @@ export function setupPlanMock() {
                   layouts: [
                     {
                       id: 1,
-                      template: 'lecture-with-slides',
-                      displayName: '讲座带幻灯片',
-                      description: '适用于带幻灯片的讲座直播'
+                      template: '2s1b',
+                      description: '二小一大布局',
+                      background: 'https://picsum.photos/id/17/1920/1080'
+                    },
+                    {
+                      id: 2,
+                      template: 'fullscreen',
+                      description: '全屏讲座直播',
+                      background: 'https://picsum.photos/id/18/1920/1080'
                     }
                   ],
                   lectureInfo: {
@@ -262,9 +309,9 @@ export function setupPlanMock() {
           name: '医学教育讲座',
           plannedStartDateTime: new Date('2023-06-18T14:00:00'),
           plannedEndDateTime: new Date('2023-06-18T16:00:00'),
-          cover: 'https://example.com/covers/lecture.jpg',
-          background: 'https://example.com/backgrounds/green.jpg',
-          labelBackground: 'https://example.com/backgrounds/label-green.png',
+          cover: 'https://picsum.photos/id/250/400/225',
+          background: 'https://picsum.photos/id/3/1920/1080',
+          labelBackground: 'https://picsum.photos/id/22/400/100',
           textColor: '#333333',
           branches: [
             {
@@ -280,9 +327,21 @@ export function setupPlanMock() {
                   layouts: [
                     {
                       id: 1,
-                      template: 'lecture-single',
-                      displayName: '单画面讲座',
-                      description: '适用于单摄像头讲座直播'
+                      template: 'fullscreen',
+                      description: '全屏讲座直播',
+                      background: 'https://picsum.photos/id/18/1920/1080'
+                    },
+                    {
+                      id: 2,
+                      template: '1s1b',
+                      description: '一小一大布局',
+                      background: 'https://picsum.photos/id/19/1920/1080'
+                    },
+                    {
+                      id: 3,
+                      template: '2es',
+                      description: '二等分布局',
+                      background: 'https://picsum.photos/id/20/1920/1080'
                     }
                   ],
                   lectureInfo: {
@@ -303,9 +362,15 @@ export function setupPlanMock() {
                   layouts: [
                     {
                       id: 1,
-                      template: 'lecture-with-slides',
-                      displayName: '讲座带幻灯片',
-                      description: '适用于带幻灯片的讲座直播'
+                      template: '2s1b',
+                      description: '二小一大布局',
+                      background: 'https://picsum.photos/id/19/1920/1080'
+                    },
+                    {
+                      id: 2,
+                      template: '2es',
+                      description: '二等分布局',
+                      background: 'https://picsum.photos/id/21/1920/1080'
                     }
                   ],
                   lectureInfo: {
@@ -341,9 +406,15 @@ export function setupPlanMock() {
                   layouts: [
                     {
                       id: 1,
-                      template: 'lecture-with-slides',
-                      displayName: '讲座带幻灯片',
-                      description: '适用于带幻灯片的讲座直播'
+                      template: '2s1b',
+                      description: '二小一大布局',
+                      background: 'https://picsum.photos/id/24/1920/1080'
+                    },
+                    {
+                      id: 2,
+                      template: 'fullscreen',
+                      description: '全屏讲座直播',
+                      background: 'https://picsum.photos/id/25/1920/1080'
                     }
                   ],
                   lectureInfo: {
@@ -364,9 +435,21 @@ export function setupPlanMock() {
                   layouts: [
                     {
                       id: 1,
-                      template: 'surgery-single',
-                      displayName: '单画面手术',
-                      description: '适用于单摄像头手术直播'
+                      template: 'fullscreen',
+                      description: '全屏手术直播',
+                      background: 'https://picsum.photos/id/21/1920/1080'
+                    },
+                    {
+                      id: 2,
+                      template: '1s1b',
+                      description: '一小一大布局',
+                      background: 'https://picsum.photos/id/22/1920/1080'
+                    },
+                    {
+                      id: 3,
+                      template: '2es',
+                      description: '二等分布局',
+                      background: 'https://picsum.photos/id/23/1920/1080'
                     }
                   ],
                   surgeryInfo: {
@@ -404,9 +487,15 @@ export function setupPlanMock() {
                   layouts: [
                     {
                       id: 1,
-                      template: 'surgery-double',
-                      displayName: '双画面手术',
-                      description: '适用于双摄像头手术直播'
+                      template: '2es',
+                      description: '二等分布局',
+                      background: 'https://picsum.photos/id/23/1920/1080'
+                    },
+                    {
+                      id: 2,
+                      template: '2s1b',
+                      description: '二小一大布局',
+                      background: 'https://picsum.photos/id/24/1920/1080'
                     }
                   ],
                   surgeryInfo: {
@@ -429,9 +518,21 @@ export function setupPlanMock() {
                   layouts: [
                     {
                       id: 1,
-                      template: 'lecture-single',
-                      displayName: '单画面讲座',
-                      description: '适用于单摄像头讲座直播'
+                      template: 'fullscreen',
+                      description: '全屏讲座直播',
+                      background: 'https://picsum.photos/id/15/1920/1080'
+                    },
+                    {
+                      id: 2,
+                      template: '1s1b',
+                      description: '一小一大布局',
+                      background: 'https://picsum.photos/id/16/1920/1080'
+                    },
+                    {
+                      id: 3,
+                      template: '2s1b',
+                      description: '二小一大布局',
+                      background: 'https://picsum.photos/id/17/1920/1080'
                     }
                   ],
                   lectureInfo: {

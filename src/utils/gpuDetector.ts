@@ -45,9 +45,7 @@ class GPUDetector {
   async getGPUInfo(): Promise<GPUInfo> {
     try {
       // 在Electron环境中，通过IPC调用主进程获取GPU信息
-      if (typeof window !== 'undefined' && 
-          window.electronAPI && 
-          typeof window.electronAPI.getGPUInfo === 'function') {
+      if (this.isElectronAPIAvailable() && window.electronAPI?.getGPUInfo) {
         const gpuInfo = await window.electronAPI.getGPUInfo();
         return this.parseGPUInfo(gpuInfo);
       }
@@ -64,13 +62,22 @@ class GPUDetector {
   }
   
   /**
+   * 检查Electron API是否可用
+   * @returns boolean 是否可用
+   */
+  private isElectronAPIAvailable(): boolean {
+    return typeof window !== 'undefined' && !!window.electronAPI;
+  }
+  
+  /**
    * 从WebGL获取GPU信息
    * @returns GPUInfo GPU信息
    */
   private getGPUInfoFromWebGL(): GPUInfo {
     try {
       const canvas = document.createElement('canvas');
-      const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+      const gl = canvas.getContext('webgl') as WebGLRenderingContext || 
+                 canvas.getContext('experimental-webgl') as WebGLRenderingContext;
       
       if (!gl) {
         throw new Error('无法创建WebGL上下文');

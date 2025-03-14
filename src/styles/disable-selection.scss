@@ -1,0 +1,91 @@
+/**
+ * 全局禁用文本选择样式
+ * 禁用界面内的文字圈选功能，但保留输入框的文本选择功能
+ */
+
+/* 全局禁用文本选择 */
+body {
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+  cursor: default;
+}
+
+/* 允许输入框内的文本选择 */
+input, 
+textarea, 
+[contenteditable="true"],
+.el-input,
+.el-input__inner,
+.el-textarea,
+.el-textarea__inner,
+.allow-select {
+  -webkit-user-select: text !important;
+  -moz-user-select: text !important;
+  -ms-user-select: text !important;
+  user-select: text !important;
+  cursor: text !important;
+}
+
+/* 允许代码块内的文本选择 */
+pre, 
+code,
+.code-block {
+  -webkit-user-select: text !important;
+  -moz-user-select: text !important;
+  -ms-user-select: text !important;
+  user-select: text !important;
+  cursor: text !important;
+}
+
+/* 允许表格内容选择 */
+.el-table__cell {
+  -webkit-user-select: text !important;
+  -moz-user-select: text !important;
+  -ms-user-select: text !important;
+  user-select: text !important;
+}
+
+/* 允许特定需要选择的元素 */
+.allow-select * {
+  -webkit-user-select: text !important;
+  -moz-user-select: text !important;
+  -ms-user-select: text !important;
+  user-select: text !important;
+  cursor: text !important;
+}
+
+/* Element Plus 特定组件 */
+.el-select-dropdown__item,
+.el-cascader-node,
+.el-tree-node,
+.el-menu-item,
+.el-submenu__title {
+  -webkit-user-select: none !important;
+  -moz-user-select: none !important;
+  -ms-user-select: none !important;
+  user-select: none !important;
+  cursor: pointer !important;
+}
+
+/* 允许复制的特定元素 */
+.el-alert__description,
+.el-notification__content,
+.el-message-box__message,
+.el-tooltip__content {
+  -webkit-user-select: text !important;
+  -moz-user-select: text !important;
+  -ms-user-select: text !important;
+  user-select: text !important;
+}
+
+/* 确保按钮和链接保持正确的鼠标指针 */
+button,
+a,
+.el-button,
+.el-link,
+[role="button"],
+.clickable {
+  cursor: pointer !important;
+} 

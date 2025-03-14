@@ -36,5 +36,29 @@ contextBridge.exposeInMainWorld('electronAPI', {
       // 添加新的监听器
       ipcRenderer.on(channel, (_, ...args) => func(...args))
     }
+  },
+
+  /**
+   * 检查MacOS上Blackhole是否已安装
+   * @returns Promise<boolean> 是否已安装
+   */
+  checkBlackholeInstalled: () => {
+    return ipcRenderer.invoke('check-blackhole-installed')
+  },
+
+  /**
+   * 检查Windows上立体声混音是否已启用
+   * @returns Promise<boolean> 是否已启用
+   */
+  checkStereoMixEnabled: () => {
+    return ipcRenderer.invoke('check-stereo-mix-enabled')
+  },
+
+  /**
+   * 获取系统显卡信息
+   * @returns Promise<{vendor: string, model: string}> 显卡信息
+   */
+  getGPUInfo: () => {
+    return ipcRenderer.invoke('get-gpu-info')
   }
 }) 

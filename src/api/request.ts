@@ -53,6 +53,8 @@ service.interceptors.response.use(
   (response: AxiosResponse<ResponseData>) => {
     const res = response.data
     
+    console.log('API响应数据:', response.config.url, res);
+    
     // 如果响应码不为0，表示请求出错
     if (res.code !== 0) {
       console.error('响应错误:', res.message)
@@ -69,7 +71,8 @@ service.interceptors.response.use(
       return Promise.reject(new Error(res.message || '请求失败'))
     }
     
-    return res.data
+    // 返回完整的响应对象，包含 data 字段
+    return response
   },
   (error) => {
     console.error('响应错误:', error)

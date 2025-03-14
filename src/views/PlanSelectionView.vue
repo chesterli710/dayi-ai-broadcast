@@ -96,6 +96,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { useI18n } from 'vue-i18n'
 import planApi from '../api/plan'
 import type { Channel, Plan, Branch } from '../types/broadcast'
+import { usePlanStore } from '../stores/planStore'
 
 export default defineComponent({
   name: 'PlanSelectionView',
@@ -103,6 +104,7 @@ export default defineComponent({
   setup() {
     const router = useRouter()
     const { t } = useI18n()
+    const planStore = usePlanStore()
     const channels = ref<Channel[]>([])
     const loading = ref(true)
     const error = ref('')
@@ -135,13 +137,26 @@ export default defineComponent({
     }
     
     // 选择分支
-    const selectBranch = (plan: Plan, branch: Branch) => {
-      // 存储选中的计划和分支信息
-      localStorage.setItem('selectedPlan', JSON.stringify(plan))
-      localStorage.setItem('selectedBranch', JSON.stringify(branch))
+    const selectBranch = async (plan: Plan, branch: Branch) => {
+      // 找到对应的频道
+      const channel = channels.value.find(c => c.plans.some(p => p.id === plan.id))
       
-      // 跳转到主界面
-      router.push('/')
+      if (channel) {
+        try {
+          // 将选中的频道、计划和分支信息存储到 planStore 中
+          planStore.setCurrentChannel(channel)
+          planStore.setCurrentPlan(plan)
+          planStore.setCurrentBranch(branch)
+          
+          // 跳转到主界面
+          router.push('/main')
+        } catch (error) {
+          console.error('选择分支失败:', error)
+          ElMessage.error(t('planSelection.errorSelectingBranch'))
+        }
+      } else {
+        ElMessage.error(t('planSelection.errorSelectingBranch'))
+      }
     }
     
     // 退出登录

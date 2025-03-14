@@ -6,6 +6,16 @@ import type { AudioDevice, SystemAudioStatus } from '../types/audio';
 import { AudioSourceType } from '../types/audio';
 import { isMacOS, isWindows } from './platformUtils';
 
+// 声明全局 Electron API 类型
+declare global {
+  interface Window {
+    electronAPI?: {
+      checkBlackholeInstalled: () => Promise<boolean>;
+      checkStereoMixEnabled: () => Promise<boolean>;
+    }
+  }
+}
+
 /**
  * 音频设备管理器类
  * 负责检测和管理系统音频设备
@@ -72,12 +82,8 @@ class AudioDeviceManager {
    */
   private async checkBlackholeInstalled(): Promise<boolean> {
     try {
-      // 在Electron环境中，可以通过IPC调用主进程执行命令行检查
-      // 这里需要通过Electron的IPC机制调用主进程
-      // 简化实现，实际应通过IPC调用主进程执行shell命令
-      if (typeof window !== 'undefined' && 
-          window.electronAPI && 
-          typeof window.electronAPI.checkBlackholeInstalled === 'function') {
+      // 在Electron环境中，通过IPC调用主进程执行命令行检查
+      if (this.isElectronAPIAvailable() && window.electronAPI?.checkBlackholeInstalled) {
         return await window.electronAPI.checkBlackholeInstalled();
       }
       
@@ -99,12 +105,8 @@ class AudioDeviceManager {
    */
   private async checkStereoMixEnabled(): Promise<boolean> {
     try {
-      // 在Electron环境中，可以通过IPC调用主进程执行命令行检查
-      // 这里需要通过Electron的IPC机制调用主进程
-      // 简化实现，实际应通过IPC调用主进程执行相关检查
-      if (typeof window !== 'undefined' && 
-          window.electronAPI && 
-          typeof window.electronAPI.checkStereoMixEnabled === 'function') {
+      // 在Electron环境中，通过IPC调用主进程执行命令行检查
+      if (this.isElectronAPIAvailable() && window.electronAPI?.checkStereoMixEnabled) {
         return await window.electronAPI.checkStereoMixEnabled();
       }
       
@@ -119,6 +121,14 @@ class AudioDeviceManager {
       console.error('检查立体声混音状态失败:', error);
       return false;
     }
+  }
+
+  /**
+   * 检查Electron API是否可用
+   * @returns boolean 是否可用
+   */
+  private isElectronAPIAvailable(): boolean {
+    return typeof window !== 'undefined' && !!window.electronAPI;
   }
 
   /**

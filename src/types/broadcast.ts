@@ -105,7 +105,6 @@ export interface PersonInfo {
 export interface Layout {
   id: number                      // 该布局在当前schedule中的id，多个布局顺序排列不重复即可
   template: string                // 该布局的模板唯一识别ID
-  displayName?: string    // 该布局的显示名字（暂存于此，方便调用）
   description?: string     // 该布局的用途描述
   background?: string             // 布局背景图url
   foreground?: string             // 布局前景图url
@@ -118,6 +117,11 @@ export interface Layout {
  */
 export interface LayoutTemplate {
   template: string                // 布局的唯一识别模式名
+  name?: {
+    "zh-CN": string,              // 布局模板的中文名称
+    "en-US": string               // 布局模板的英文名称
+  },
+  thumbnail?: string              // 布局模板的缩略图url
   elements?: LayoutElement[]      // 该布局包含的布局元素（一个布局内包含多个布局元素）
 }
 
@@ -131,6 +135,7 @@ export interface LayoutElement {
   width: number               // 元素宽度（单位为px）
   height: number              // 元素高度
   zIndex?: number             // 元素zindex
+  type?: string               // 元素类型
 }
 
 /**
@@ -179,8 +184,20 @@ export interface GuestInfoText extends TextLayoutElement {}
  * 字体样式
  */
 export interface FontStyle {
-  fontFamily: string
   fontSize: number,
   fontWeight: "regular" | "medium" | "bold",
   fontColor: string,
+}
+
+/**
+ * 布局元素类型
+ */
+export enum LayoutElementType {
+  MEDIA = 'media',            // 媒体元素
+  HOST_LABEL = 'host-label',  // 主持人标签
+  HOST_INFO = 'host-info',    // 主持人信息
+  SUBJECT_LABEL = 'subject-label', // 主题标签
+  SUBJECT_INFO = 'subject-info',   // 主题信息
+  GUEST_LABEL = 'guest-label',     // 嘉宾标签
+  GUEST_INFO = 'guest-info'        // 嘉宾信息
 }

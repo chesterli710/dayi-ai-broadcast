@@ -1,0 +1,329 @@
+{
+  "version": "1.0",
+  "lastUpdated": "2024-02-04",
+  "templates": {
+    "1s1b": {
+      "id": "layout_1s1b",
+      "name": {
+        "zh-CN": "一小一大",
+        "en-US": "One Small One Big"
+      },
+      "mode": "1s1b",
+      "elements": [
+        {
+          "id": 1,
+          "type": "media",
+          "status": "placeholder",
+          "position": {
+            "x": 12,
+            "y": 132,
+            "width": 402,
+            "height": 227,
+            "zIndex": 1
+          }
+        },
+        {
+          "id": 2,
+          "type": "media",
+          "status": "placeholder",
+          "position": {
+            "x": 424,
+            "y": 132,
+            "width": 1486,
+            "height": 836,
+            "zIndex": 2
+          }
+        },
+        {
+          "id": 3,
+          "type": "host-info",
+          "orientation": "vertical",
+          "status": "placeholder",
+          "position": {
+            "x": 12,
+            "y": 370,
+            "width": 402,
+            "height": 117,
+            "zIndex": 10001
+          },
+          "fontstyle": {
+            "fontSize": 30,
+            "fontWeight": "medium",
+            "fontColor": "#FFFFFF"
+          },
+          "organizationFontstyle": {
+            "fontSize": 26,
+            "fontWeight": "regular",
+            "fontColor": "#FFFFFF"
+          }
+        },
+        {
+          "id": 4,
+          "type": "subject-info",
+          "orientation": "vertical",
+          "status": "placeholder",
+          "position": {
+            "x": 12,
+            "y": 495,
+            "width": 402,
+            "height": 175,
+            "zIndex": 10002
+          },
+          "fontstyle": {
+            "fontSize": 32,
+            "fontWeight": "bold"
+          }
+        },
+        {
+          "id": 5,
+          "type": "guest-label",
+          "orientation": "vertical",
+          "status": "placeholder",
+          "position": {
+            "x": 12,
+            "y": 680,
+            "width": 402,
+            "height": 40,
+            "zIndex": 10003
+          },
+          "fontstyle": {
+            "fontSize": 24,
+            "fontWeight": "bold"
+          }
+        },
+        {
+          "id": 6,
+          "type": "guest-info",
+          "orientation": "vertical",
+          "status": "placeholder",
+          "position": {
+            "x": 12,
+            "y": 735,
+            "width": 402,
+            "height": 233,
+            "zIndex": 10004
+          },
+          "fontstyle": {
+            "fontSize": 26,
+            "fontWeight": "regular"
+          }
+        }
+      ]
+    },
+    "2s1b": {
+      "id": "layout_2s1b",
+      "name": {
+        "zh-CN": "二小一大",
+        "en-US": "Two Small One Big"
+      },
+      "mode": "2s1b",
+      "elements": [
+        {
+          "id": 1,
+          "type": "media",
+          "status": "placeholder",
+          "position": {
+            "x": 12,
+            "y": 132,
+            "width": 402,
+            "height": 227,
+            "zIndex": 1
+          }
+        },
+        {
+          "id": 2,
+          "type": "media",
+          "status": "placeholder",
+          "position": {
+            "x": 424,
+            "y": 132,
+            "width": 1486,
+            "height": 836,
+            "zIndex": 2
+          }
+        },
+        {
+          "id": 3,
+          "type": "media",
+          "status": "placeholder",
+          "position": {
+            "x": 12,
+            "y": 579,
+            "width": 402,
+            "height": 227,
+            "zIndex": 3
+          }
+        },
+        {
+          "id": 4,
+          "type": "host-label",
+          "orientation": "vertical",
+          "status": "placeholder",
+          "position": {
+            "x": 12,
+            "y": 370,
+            "width": 402,
+            "height": 40,
+            "zIndex": 10003
+          },
+          "fontstyle": {
+            "fontSize": 24,
+            "fontWeight": "bold"
+          }
+        },
+        {
+          "id": 5,
+          "type": "host-info",
+          "orientation": "vertical",
+          "status": "placeholder",
+          "position": {
+            "x": 12,
+            "y": 420,
+            "width": 402,
+            "height": 117,
+            "zIndex": 10001
+          },
+          "fontstyle": {
+            "fontSize": 30,
+            "fontWeight": "medium",
+            "fontColor": "#FFFFFF"
+          },
+          "organizationFontstyle": {
+            "fontSize": 26,
+            "fontWeight": "regular",
+            "fontColor": "#FFFFFF"
+          }
+        },
+        {
+          "id": 6,
+          "type": "subject-info",
+          "orientation": "vertical",
+          "status": "placeholder",
+          "position": {
+            "x": 424,
+            "y": 968,
+            "width": 1486,
+            "height": 112,
+            "zIndex": 10002
+          },
+          "fontstyle": {
+            "fontSize": 46,
+            "fontWeight": "bold"
+          }
+        },
+        {
+          "id": 7,
+          "type": "guest-label",
+          "orientation": "vertical",
+          "status": "placeholder",
+          "position": {
+            "x": 12,
+            "y": 813,
+            "width": 402,
+            "height": 40,
+            "zIndex": 10003
+          },
+          "fontstyle": {
+            "fontSize": 24,
+            "fontWeight": "bold"
+          }
+        },
+        {
+          "id": 8,
+          "type": "guest-info",
+          "orientation": "vertical",
+          "status": "placeholder",
+          "position": {
+            "x": 12,
+            "y": 858,
+            "width": 402,
+            "height": 223,
+            "zIndex": 10004
+          },
+          "fontstyle": {
+            "fontSize": 22,
+            "fontWeight": "regular"
+          }
+        }
+      ]
+    },
+    "fullscreen": {
+      "id": "layout_fullscreen",
+      "name": {
+        "zh-CN": "全屏",
+        "en-US": "Fullscreen"
+      },
+      "mode": "fullscreen",
+      "elements": [
+        {
+          "id": 1,
+          "type": "media",
+          "status": "placeholder",
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 1920,
+            "height": 1080,
+            "zIndex": 1
+          }
+        }
+      ]
+    },
+    "2es": {
+      "id": "layout_2es",
+      "name": {
+        "zh-CN": "二等分",
+        "en-US": "Two Equal Split"
+      },
+      "mode": "2es",
+      "elements": [
+        {
+          "id": 1,
+          "type": "media",
+          "status": "placeholder",
+          "position": {
+            "x": 10,
+            "y": 284,
+            "width": 945,
+            "height": 532,
+            "zIndex": 1
+          }
+        },
+        {
+          "id": 2,
+          "type": "media",
+          "status": "placeholder",
+          "position": {
+            "x": 967,
+            "y": 284,
+            "width": 945,
+            "height": 532,
+            "zIndex": 2
+          }
+        }
+      ]
+    },
+    "1b": {
+      "id": "layout_1b",
+      "name": {
+        "zh-CN": "一大",
+        "en-US": "One Big"
+      },
+      "mode": "1b",
+      "elements": [
+        {
+          "id": 1,
+          "type": "media",
+          "status": "placeholder",
+          "position": {
+            "x": 424,
+            "y": 132,
+            "width": 1486,
+            "height": 836,
+            "zIndex": 1
+          }
+        }
+      ]
+    }
+  }
+} 
