@@ -4,6 +4,7 @@
  */
 import request from './request'
 import type { LayoutTemplate } from '../types/broadcast'
+import layoutThumbnailGenerator from '../utils/layoutThumbnailGenerator'
 
 /**
  * 布局模板最后更新时间响应
@@ -115,7 +116,16 @@ class LayoutApi {
         
         // 如果本地数据是最新的，直接返回
         if (localLastUpdated >= serverLastUpdated) {
-          return JSON.parse(storedData)
+          const templates = JSON.parse(storedData)
+          
+          // 为每个模板生成本地缩略图
+          for (const template of templates) {
+            // 生成并替换缩略图URL
+            const thumbnailUrl = await layoutThumbnailGenerator.getThumbnail(template)
+            template.thumbnail = thumbnailUrl
+          }
+          
+          return templates
         }
       }
       
@@ -123,7 +133,7 @@ class LayoutApi {
       const templates = await this.getLayoutTemplates()
       
       // 检查每个模板的结构
-      templates.forEach((template: LayoutTemplate, index: number) => {
+      for (const template of templates) {
         // 确保 name 字段存在且格式正确
         if (!template.name || typeof template.name !== 'object') {
           template.name = {
@@ -134,7 +144,11 @@ class LayoutApi {
           template.name['zh-CN'] = template.name['zh-CN'] || template.template
           template.name['en-US'] = template.name['en-US'] || template.template
         }
-      })
+        
+        // 生成并替换缩略图URL - 强制更新缩略图
+        const thumbnailUrl = await layoutThumbnailGenerator.getThumbnail(template, true)
+        template.thumbnail = thumbnailUrl
+      }
       
       // 保存到本地存储
       localStorage.setItem('layoutTemplates', JSON.stringify(templates))
@@ -147,7 +161,16 @@ class LayoutApi {
       // 如果有本地数据，返回本地数据作为备用
       const storedData = localStorage.getItem('layoutTemplates')
       if (storedData) {
-        return JSON.parse(storedData)
+        const templates = JSON.parse(storedData)
+        
+        // 为每个模板生成本地缩略图 - 强制更新缩略图
+        for (const template of templates) {
+          // 生成并替换缩略图URL
+          const thumbnailUrl = await layoutThumbnailGenerator.getThumbnail(template, true)
+          template.thumbnail = thumbnailUrl
+        }
+        
+        return templates
       }
       
       // 否则返回空数组

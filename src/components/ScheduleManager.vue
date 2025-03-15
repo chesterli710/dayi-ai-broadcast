@@ -2,6 +2,12 @@
   <div class="schedule-manager">
     <div class="panel-header">
       <h3>{{ $t('scheduleManager.title') }}</h3>
+      <div class="header-actions">
+        <button class="edit-schedule-button" @click="openScheduleEditor(null)">
+          <i class="bi bi-pencil-square"></i>
+          {{ $t('scheduleManager.editSchedule') }}
+        </button>
+      </div>
     </div>
     <div class="panel-content">
       <div class="schedule-list" v-if="currentBranch && currentBranch.schedules.length > 0">
@@ -76,6 +82,15 @@
       @close="closeLayoutEditor"
       @save="saveLayout"
     />
+    
+    <!-- 日程编辑器Modal -->
+    <ScheduleEditorModal
+      v-if="showScheduleEditor"
+      :visible="showScheduleEditor"
+      :schedule="editingSchedule"
+      @close="closeScheduleEditor"
+      @save="saveSchedule"
+    />
   </div>
 </template>
 
@@ -85,6 +100,7 @@ import { usePlanStore } from '../stores/planStore';
 import { ScheduleType, type Schedule, type Layout } from '../types/broadcast';
 import { useI18n } from 'vue-i18n';
 import LayoutEditorModal from './LayoutEditorModal.vue';
+import ScheduleEditorModal from './ScheduleEditorModal.vue';
 
 const planStore = usePlanStore();
 const { locale, t } = useI18n();
@@ -100,6 +116,10 @@ const selectedLayout = ref<Layout>({
 });
 const selectedSchedule = ref<Schedule | null>(null);
 const selectedScheduleType = ref('');
+
+// 日程编辑器状态
+const showScheduleEditor = ref(false);
+const editingSchedule = ref<Schedule | null>(null);
 
 // 组件挂载时检查布局模板
 onMounted(() => {
@@ -348,6 +368,43 @@ function saveSimilarLayouts(layout: Layout): void {
     }
   });
 }
+
+/**
+ * 打开日程编辑器
+ * @param schedule 日程对象
+ */
+function openScheduleEditor(schedule: Schedule | null): void {
+  editingSchedule.value = schedule;
+  showScheduleEditor.value = true;
+}
+
+/**
+ * 关闭日程编辑器
+ */
+function closeScheduleEditor(): void {
+  showScheduleEditor.value = false;
+}
+
+/**
+ * 保存日程
+ * @param schedule 更新后的日程
+ */
+function saveSchedule(schedule: Schedule): void {
+  if (!currentBranch.value || !editingSchedule.value) return;
+  
+  if (editingSchedule.value.id) {
+    // 更新现有日程
+    const scheduleIndex = currentBranch.value.schedules.findIndex(s => s.id === editingSchedule.value?.id);
+    
+    if (scheduleIndex !== -1) {
+      // 更新日程
+      currentBranch.value.schedules[scheduleIndex] = schedule;
+    }
+  } else {
+    // 添加新日程
+    currentBranch.value.schedules.push(schedule);
+  }
+}
 </script>
 
 <style scoped>
@@ -365,6 +422,9 @@ function saveSimilarLayouts(layout: Layout): void {
   padding: 10px 15px;
   border-bottom: 1px solid var(--el-border-color);
   background-color: var(--el-fill-color-light);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 }
 
 .panel-header h3 {
@@ -372,6 +432,33 @@ function saveSimilarLayouts(layout: Layout): void {
   font-size: 16px;
   font-weight: bold;
   color: var(--el-text-color-primary);
+}
+
+.header-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.edit-schedule-button {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 12px;
+  border-radius: var(--el-border-radius-base);
+  background-color: var(--el-color-primary);
+  color: #fff;
+  border: none;
+  font-size: var(--el-font-size-small);
+  cursor: pointer;
+  transition: background-color 0.3s;
+}
+
+.edit-schedule-button:hover {
+  background-color: var(--el-color-primary-dark-2);
+}
+
+.edit-schedule-button i {
+  font-size: 14px;
 }
 
 .panel-content {

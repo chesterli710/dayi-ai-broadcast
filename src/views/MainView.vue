@@ -57,17 +57,17 @@ const router = useRouter();
 async function loadLayoutTemplates() {
   try {
     // 从API获取布局模板数据
-    const templates = await layoutApi.getLayoutTemplates();
+    const templates = await layoutApi.loadAllLayoutTemplates();
     
     // 检查模板数据结构
     if (Array.isArray(templates)) {
       // 更新planStore中的布局模板
       planStore.setLayoutTemplates(templates);
     } else {
-      console.error('API返回的布局模板数据格式不正确');
+      console.error('[MainView.vue 主界面] API返回的布局模板数据格式不正确');
     }
   } catch (error) {
-    console.error('加载布局模板失败:', error);
+    console.error('[MainView.vue 主界面] 加载布局模板失败:', error);
   }
 }
 
