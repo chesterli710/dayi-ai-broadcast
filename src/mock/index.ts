@@ -11,6 +11,14 @@ import { setupSvgIconsMock } from './svg'
  * 初始化所有Mock数据
  */
 export function setupMock() {
+  // 检查环境变量是否启用Mock
+  const useMock = import.meta.env.VITE_USE_MOCK === 'true'
+  
+  if (!useMock) {
+    console.log('Mock数据已禁用')
+    return
+  }
+  
   // 设置用户相关的Mock数据
   setupUserMock()
   

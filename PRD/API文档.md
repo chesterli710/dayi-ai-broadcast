@@ -8,6 +8,9 @@
 - [认证相关](#认证相关)
 - [计划相关](#计划相关)
 - [布局相关](#布局相关)
+- [日程管理API](#日程管理api)
+  - [保存日程](#保存日程)
+  - [删除日程](#删除日程)
 
 ## 通用说明
 
@@ -853,6 +856,127 @@ GET /api/layout/templates/surgery-single
     ]
   },
   "message": "获取布局模板详情成功"
+}
+```
+
+## 日程管理API
+
+### 保存日程
+
+**请求方法**：POST（新建）/ PUT（更新）
+
+**请求路径**：
+- 新建：`/plan/branches/{branchId}/schedules`
+- 更新：`/plan/branches/{branchId}/schedules/{scheduleId}`
+
+**请求参数**：
+
+| 参数名 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| branchId | string | 是 | 分支ID，路径参数 |
+| scheduleId | string | 更新时必填 | 日程ID，路径参数，仅更新时需要 |
+| schedule | Schedule | 是 | 日程数据，请求体 |
+
+**请求体示例**：
+
+```json
+{
+  "id": "1234567890",
+  "type": "surgery",
+  "plannedStartDateTime": "2023-03-15T09:00:00Z",
+  "plannedDuration": 120,
+  "layouts": [
+    {
+      "id": "layout-1",
+      "template": "template-1",
+      "description": "手术全景",
+      "elements": []
+    }
+  ],
+  "surgeryInfo": {
+    "procedure": "腹腔镜胆囊切除术",
+    "surgeons": [
+      {
+        "name": "张三",
+        "title": "主任医师",
+        "organization": "北京协和医院"
+      }
+    ],
+    "guests": []
+  }
+}
+```
+
+**响应参数**：
+
+| 参数名 | 类型 | 说明 |
+| --- | --- | --- |
+| code | number | 状态码，0表示成功 |
+| data | Schedule | 保存后的日程数据 |
+| message | string | 响应消息 |
+
+**响应示例**：
+
+```json
+{
+  "code": 0,
+  "data": {
+    "id": "1234567890",
+    "type": "surgery",
+    "plannedStartDateTime": "2023-03-15T09:00:00Z",
+    "plannedDuration": 120,
+    "layouts": [
+      {
+        "id": "layout-1",
+        "template": "template-1",
+        "description": "手术全景",
+        "elements": []
+      }
+    ],
+    "surgeryInfo": {
+      "procedure": "腹腔镜胆囊切除术",
+      "surgeons": [
+        {
+          "name": "张三",
+          "title": "主任医师",
+          "organization": "北京协和医院"
+        }
+      ],
+      "guests": []
+    }
+  },
+  "message": "保存日程成功"
+}
+```
+
+### 删除日程
+
+**请求方法**：DELETE
+
+**请求路径**：`/plan/branches/{branchId}/schedules/{scheduleId}`
+
+**请求参数**：
+
+| 参数名 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| branchId | string | 是 | 分支ID，路径参数 |
+| scheduleId | string | 是 | 日程ID，路径参数 |
+
+**响应参数**：
+
+| 参数名 | 类型 | 说明 |
+| --- | --- | --- |
+| code | number | 状态码，0表示成功 |
+| data | null | 无数据返回 |
+| message | string | 响应消息 |
+
+**响应示例**：
+
+```json
+{
+  "code": 0,
+  "data": null,
+  "message": "删除日程成功"
 }
 ```
 

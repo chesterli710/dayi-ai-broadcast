@@ -3,7 +3,7 @@
  * 用于请求直播计划相关数据
  */
 import request from '../utils/request'
-import type { Channel, Plan, Branch } from '../types/broadcast'
+import type { Channel, Plan, Branch, Schedule } from '../types/broadcast'
 
 /**
  * 获取频道列表参数
@@ -83,6 +83,55 @@ class PlanApi {
    */
   getBranchDetail(branchId: string) {
     return request.get<Branch>(`/plan/branches/${branchId}`)
+  }
+  
+  /**
+   * 创建新日程
+   * @param branchId - 分支ID
+   * @param schedule - 日程数据（不包含ID）
+   * @returns Promise<Schedule> 创建后的日程数据
+   */
+  createSchedule(branchId: string, schedule: Omit<Schedule, 'id'> & { id?: string }) {
+    return request.post<Schedule>(`/plan/branches/${branchId}/schedules`, schedule)
+  }
+  
+  /**
+   * 更新日程
+   * @param branchId - 分支ID
+   * @param schedule - 日程数据（包含ID）
+   * @returns Promise<Schedule> 更新后的日程数据
+   */
+  updateSchedule(branchId: string, schedule: Schedule) {
+    return request.put<Schedule>(`/plan/branches/${branchId}/schedules/${schedule.id}`, schedule)
+  }
+  
+  /**
+   * 保存日程（兼容旧版本，内部根据ID是否存在决定创建或更新）
+   * @param branchId - 分支ID
+   * @param schedule - 日程数据
+   * @returns Promise<Schedule> 保存后的日程数据
+   */
+  saveSchedule(branchId: string, schedule: Schedule) {
+    if (schedule.id && 
+        schedule.id.toString().length > 5 && 
+        !schedule.id.startsWith('schedule-') && 
+        !schedule.id.toString().match(/^\d{13,}$/)) {
+      // 更新现有日程
+      return this.updateSchedule(branchId, schedule)
+    } else {
+      // 创建新日程
+      return this.createSchedule(branchId, schedule)
+    }
+  }
+  
+  /**
+   * 删除日程
+   * @param branchId - 分支ID
+   * @param scheduleId - 日程ID
+   * @returns Promise<void>
+   */
+  deleteSchedule(branchId: string, scheduleId: string) {
+    return request.delete<void>(`/plan/branches/${branchId}/schedules/${scheduleId}`)
   }
 }
 

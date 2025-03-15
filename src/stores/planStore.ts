@@ -4,8 +4,10 @@
  */
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import type { Channel, Plan, Branch, Layout, LayoutTemplate } from '../types/broadcast'
+import type { Channel, Plan, Branch, Layout, LayoutTemplate, Schedule } from '../types/broadcast'
 import { initializeApp } from '../utils/initializeApp'
+import planApi from '../api/plan'
+import { ElMessage } from 'element-plus'
 
 /**
  * 计划存储
@@ -184,6 +186,122 @@ export const usePlanStore = defineStore('plan', () => {
     return !layoutTemplatesLastUpdated.value
   })
   
+  /**
+   * 创建新日程
+   * @param schedule - 日程数据（不包含ID）
+   * @returns Promise<boolean> 是否创建成功
+   */
+  async function createSchedule(schedule: Omit<Schedule, 'id'> & { id?: string }): Promise<boolean> {
+    if (!currentBranch.value) {
+      ElMessage.error('当前没有选中分支，无法创建日程')
+      return false
+    }
+    
+    try {
+      // 调用API创建日程
+      const response = await planApi.createSchedule(currentBranch.value.id, schedule)
+      
+      // 从响应中获取日程数据
+      const savedSchedule = response.data
+      
+      // 添加到分支的日程列表中
+      currentBranch.value.schedules.push(savedSchedule)
+      
+      ElMessage.success('日程创建成功')
+      return true
+    } catch (error) {
+      console.error('创建日程失败:', error)
+      ElMessage.error('创建日程失败，请稍后重试')
+      return false
+    }
+  }
+  
+  /**
+   * 更新日程
+   * @param schedule - 日程数据（包含ID）
+   * @returns Promise<boolean> 是否更新成功
+   */
+  async function updateSchedule(schedule: Schedule): Promise<boolean> {
+    if (!currentBranch.value) {
+      ElMessage.error('当前没有选中分支，无法更新日程')
+      return false
+    }
+    
+    if (!schedule.id) {
+      ElMessage.error('日程ID不能为空')
+      return false
+    }
+    
+    try {
+      // 调用API更新日程
+      const response = await planApi.updateSchedule(currentBranch.value.id, schedule)
+      
+      // 从响应中获取日程数据
+      const updatedSchedule = response.data
+      
+      // 更新本地数据
+      const existingIndex = currentBranch.value.schedules.findIndex(s => s.id === updatedSchedule.id)
+      
+      if (existingIndex >= 0) {
+        // 更新现有日程
+        currentBranch.value.schedules[existingIndex] = updatedSchedule
+      } else {
+        console.warn('未找到要更新的日程，将添加为新日程')
+        currentBranch.value.schedules.push(updatedSchedule)
+      }
+      
+      ElMessage.success('日程更新成功')
+      return true
+    } catch (error) {
+      console.error('更新日程失败:', error)
+      ElMessage.error('更新日程失败，请稍后重试')
+      return false
+    }
+  }
+  
+  /**
+   * 保存日程（兼容旧版本，内部根据ID是否存在决定创建或更新）
+   * @param schedule - 日程数据
+   * @returns Promise<boolean> 是否保存成功
+   */
+  async function saveSchedule(schedule: Schedule): Promise<boolean> {
+    if (schedule.id) {
+      return updateSchedule(schedule)
+    } else {
+      return createSchedule(schedule)
+    }
+  }
+  
+  /**
+   * 删除日程
+   * @param scheduleId - 日程ID
+   * @returns Promise<boolean> 是否删除成功
+   */
+  async function deleteSchedule(scheduleId: string): Promise<boolean> {
+    if (!currentBranch.value) {
+      ElMessage.error('当前没有选中分支，无法删除日程')
+      return false
+    }
+    
+    try {
+      // 调用API删除日程
+      await planApi.deleteSchedule(currentBranch.value.id, scheduleId)
+      
+      // 更新本地数据
+      const index = currentBranch.value.schedules.findIndex(s => s.id === scheduleId)
+      if (index >= 0) {
+        currentBranch.value.schedules.splice(index, 1)
+      }
+      
+      ElMessage.success('日程删除成功')
+      return true
+    } catch (error) {
+      console.error('删除日程失败:', error)
+      ElMessage.error('删除日程失败，请稍后重试')
+      return false
+    }
+  }
+  
   return {
     currentChannel,
     currentPlan,
@@ -198,6 +316,10 @@ export const usePlanStore = defineStore('plan', () => {
     setLayoutTemplates,
     loadLayoutTemplatesFromLocalStorage,
     saveLayoutTemplatesToLocalStorage,
-    completeLayoutInfo
+    completeLayoutInfo,
+    saveSchedule,
+    deleteSchedule,
+    createSchedule,
+    updateSchedule
   }
 }) 

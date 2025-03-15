@@ -9,6 +9,11 @@
     "preview": "vite preview",
     "electron:dev": "vite --config electron.vite.config.ts",
     "electron:build": "vue-tsc -b && vite build --config electron.vite.config.ts && electron-builder",
+    "electron:build:no-check": "vite build --config electron.vite.config.ts && electron-builder",
+    "build:win": "vite build --config electron.vite.config.ts && electron-builder --win",
+    "build:mac": "vite build --config electron.vite.config.ts && electron-builder --mac",
+    "build:win:check": "vue-tsc -b && vite build --config electron.vite.config.ts && electron-builder --win",
+    "build:mac:check": "vue-tsc -b && vite build --config electron.vite.config.ts && electron-builder --mac",
     "electron:preview": "electron-builder install-app-deps && npm run electron:build && electron ."
   },
   "dependencies": {

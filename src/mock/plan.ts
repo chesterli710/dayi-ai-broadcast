@@ -736,4 +736,195 @@ export function setupPlanMock() {
       message: '获取分支详情成功'
     }
   })
+  
+  // 保存日程（新建）
+  Mock.mock(new RegExp('/api/plan/branches/([^/]+)/schedules$'), 'post', (options) => {
+    try {
+      // 解析请求参数
+      const url = options.url
+      const matches = url.match(/\/api\/plan\/branches\/([^/]+)\/schedules$/)
+      if (!matches || !matches[1]) {
+        return {
+          code: 400,
+          message: '无效的请求URL',
+          data: null
+        }
+      }
+      
+      const branchId = matches[1]
+      const body = JSON.parse(options.body)
+      
+      // 查找对应的分支
+      const branch = findBranchById(branchId)
+      if (!branch) {
+        return {
+          code: 404,
+          message: '分支不存在',
+          data: null
+        }
+      }
+      
+      // 生成新的ID（确保唯一性）
+      const newId = `schedule-${Date.now()}`
+      
+      // 创建新的日程对象
+      const newSchedule: Schedule = {
+        ...body,
+        id: newId
+      }
+      
+      // 添加到分支的日程列表中
+      branch.schedules.push(newSchedule)
+      
+      // 返回成功响应
+      return {
+        code: 0,
+        message: '保存日程成功',
+        data: newSchedule
+      }
+    } catch (error) {
+      console.error('Mock保存日程失败:', error)
+      return {
+        code: 500,
+        message: '保存日程失败',
+        data: null
+      }
+    }
+  })
+  
+  // 保存日程（更新）
+  Mock.mock(new RegExp('/api/plan/branches/([^/]+)/schedules/([^/]+)$'), 'put', (options) => {
+    try {
+      // 解析请求参数
+      const url = options.url
+      const matches = url.match(/\/api\/plan\/branches\/([^/]+)\/schedules\/([^/]+)$/)
+      if (!matches || !matches[1] || !matches[2]) {
+        return {
+          code: 400,
+          message: '无效的请求URL',
+          data: null
+        }
+      }
+      
+      const branchId = matches[1]
+      const scheduleId = matches[2]
+      const body = JSON.parse(options.body)
+      
+      // 查找对应的分支
+      const branch = findBranchById(branchId)
+      if (!branch) {
+        return {
+          code: 404,
+          message: '分支不存在',
+          data: null
+        }
+      }
+      
+      // 查找对应的日程
+      const scheduleIndex = branch.schedules.findIndex(s => s.id === scheduleId)
+      if (scheduleIndex === -1) {
+        return {
+          code: 404,
+          message: '日程不存在',
+          data: null
+        }
+      }
+      
+      // 更新日程
+      const updatedSchedule: Schedule = {
+        ...body,
+        id: scheduleId // 确保ID不变
+      }
+      
+      // 替换原有日程
+      branch.schedules[scheduleIndex] = updatedSchedule
+      
+      // 返回成功响应
+      return {
+        code: 0,
+        message: '更新日程成功',
+        data: updatedSchedule
+      }
+    } catch (error) {
+      console.error('Mock更新日程失败:', error)
+      return {
+        code: 500,
+        message: '更新日程失败',
+        data: null
+      }
+    }
+  })
+  
+  // 删除日程
+  Mock.mock(new RegExp('/api/plan/branches/([^/]+)/schedules/([^/]+)$'), 'delete', (options) => {
+    try {
+      // 解析请求参数
+      const url = options.url
+      const matches = url.match(/\/api\/plan\/branches\/([^/]+)\/schedules\/([^/]+)$/)
+      if (!matches || !matches[1] || !matches[2]) {
+        return {
+          code: 400,
+          message: '无效的请求URL',
+          data: null
+        }
+      }
+      
+      const branchId = matches[1]
+      const scheduleId = matches[2]
+      
+      // 查找对应的分支
+      const branch = findBranchById(branchId)
+      if (!branch) {
+        return {
+          code: 404,
+          message: '分支不存在',
+          data: null
+        }
+      }
+      
+      // 查找对应的日程
+      const scheduleIndex = branch.schedules.findIndex(s => s.id === scheduleId)
+      if (scheduleIndex === -1) {
+        return {
+          code: 404,
+          message: '日程不存在',
+          data: null
+        }
+      }
+      
+      // 删除日程
+      branch.schedules.splice(scheduleIndex, 1)
+      
+      // 返回成功响应
+      return {
+        code: 0,
+        message: '删除日程成功',
+        data: null
+      }
+    } catch (error) {
+      console.error('Mock删除日程失败:', error)
+      return {
+        code: 500,
+        message: '删除日程失败',
+        data: null
+      }
+    }
+  })
+  
+  /**
+   * 根据ID查找分支
+   * @param branchId 分支ID
+   * @returns 找到的分支或undefined
+   */
+  function findBranchById(branchId: string): Branch | undefined {
+    for (const channel of mockChannels) {
+      for (const plan of channel.plans) {
+        const branch = plan.branches?.find(b => b.id === branchId)
+        if (branch) {
+          return branch
+        }
+      }
+    }
+    return undefined
+  }
 } 

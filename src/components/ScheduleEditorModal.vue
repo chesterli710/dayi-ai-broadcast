@@ -12,31 +12,49 @@
       <div class="schedule-list-panel">
         <div class="panel-header">
           <h3>{{ $t('scheduleManager.title') }}</h3>
-          <el-button type="primary" size="small" @click="createNewSchedule">
+          <el-button type="primary" size="small" @click="handleCreateNewSchedule">
             <i class="bi bi-plus"></i> {{ $t('common.add') }}
           </el-button>
         </div>
         <div class="schedule-list">
-          <div 
-            v-for="item in scheduleList" 
-            :key="item.id" 
-            class="schedule-item"
-            :class="{ 'active': selectedScheduleId === item.id }"
-            @click="selectSchedule(item)"
-          >
-            <div class="schedule-type-tag" :class="item.type">
-              {{ scheduleTypeText(item.type) }}
+          <div v-for="(item, index) in sortedScheduleList" :key="item.id">
+            <div class="schedule-item-container">
+              <!-- 日程时间信息 -->
+              <div class="schedule-time-container">
+                <div class="schedule-time start-time">{{ formatDateTime(item.plannedStartDateTime, false) }}</div>
+                <div class="schedule-time end-time">{{ getEndTimeDisplay(item, false) }}</div>
+              </div>
+              
+              <!-- 日程项 -->
+              <div 
+                class="schedule-item"
+                :class="{ 'active': selectedScheduleId === item.id }"
+                @click="handleSelectSchedule(item)"
+              >
+                <div class="schedule-type-tag" :class="item.type">
+                  {{ scheduleTypeText(item.type) }}
+                </div>
+                <div class="schedule-item-content">
+                  <div class="schedule-item-title">{{ getScheduleTitle(item) }}</div>
+                  <div class="schedule-item-info">
+                    <span class="schedule-item-duration" v-if="item.plannedDuration">
+                      {{ item.plannedDuration }}{{ $t('scheduleManager.minutes') }}
+                    </span>
+                  </div>
+                </div>
+              </div>
             </div>
-            <div class="schedule-item-content">
-              <div class="schedule-item-title">{{ getScheduleTitle(item) }}</div>
-              <div class="schedule-item-time">
-                {{ formatDateTime(item.plannedStartDateTime) }}
-                <span v-if="item.plannedDuration">
-                  ({{ item.plannedDuration }}{{ $t('scheduleManager.minutes') }})
-                </span>
+            
+            <!-- 日程间隔 -->
+            <div class="schedule-gap-container" v-if="getGapWithNextSchedule(item, index)">
+              <div class="schedule-gap">
+                <div class="gap-content">
+                  {{ $t('scheduleEditor.gap') }}: {{ getGapWithNextSchedule(item, index) }}
+                </div>
               </div>
             </div>
           </div>
+          
           <div v-if="!scheduleList.length" class="empty-list">
             {{ $t('scheduleManager.noSchedules') }}
           </div>
@@ -71,8 +89,9 @@
             <div class="time-row">
               <el-form-item :label="getPlanDateLabel()" prop="plannedStartDateTime">
                 <el-time-picker
-                  v-model="scheduleForm.plannedStartDateTime"
+                  v-model="timePickerValue"
                   format="HH:mm"
+                  value-format="HH:mm"
                   placeholder="选择时间"
                   class="time-input"
                   @change="updateEndTime"
@@ -282,9 +301,57 @@
                     class="thumbnail-img"
                     @error="handleThumbnailError"
                   />
+                  <div class="layout-actions">
+                    <div class="layout-action-buttons">
+                      <el-button 
+                        type="danger" 
+                        size="small" 
+                        class="layout-action-btn"
+                        @click.stop="removeLayout(index)"
+                      >
+                        <i class="bi bi-trash"></i> {{ $t('scheduleEditor.delete') }}
+                      </el-button>
+                      <el-button 
+                        type="primary" 
+                        size="small" 
+                        class="layout-action-btn"
+                        @click.stop="showTemplateSelector(index)"
+                      >
+                        <i class="bi bi-arrow-repeat"></i> {{ $t('scheduleEditor.change') }}
+                      </el-button>
+                    </div>
+                  </div>
                 </div>
                 <div class="layout-info">
-                  <div class="layout-description">{{ layout.description || $t('scheduleManager.unnamedLayout') }}</div>
+                  <div class="layout-description">
+                    <template v-if="editingLayoutIndex !== index">
+                      {{ layout.description || $t('scheduleManager.unnamedLayout') }}
+                      <el-button 
+                        link
+                        size="small" 
+                        class="edit-description-btn"
+                        @click.stop="startEditingDescription(index)"
+                      >
+                        <i class="bi bi-pencil-square"></i>
+                      </el-button>
+                    </template>
+                    <div v-else class="edit-description-container">
+                      <el-input 
+                        v-model="editingLayoutDescription" 
+                        size="small"
+                        @keyup.enter="saveLayoutDescription(index)"
+                        ref="descriptionInputRef"
+                      />
+                      <el-button 
+                        type="success" 
+                        size="small" 
+                        class="save-description-btn"
+                        @click.stop="saveLayoutDescription(index)"
+                      >
+                        <i class="bi bi-check-lg"></i>
+                      </el-button>
+                    </div>
+                  </div>
                   <div class="layout-template-name">
                     <span v-if="getLayoutTemplateName(layout.template) !== layout.template">
                       {{ getLayoutTemplateName(layout.template) }}
@@ -299,7 +366,7 @@
               {{ $t('scheduleEditor.noLayouts') }}
             </div>
             
-            <el-button type="primary" plain class="add-button">
+            <el-button type="primary" plain class="add-button" @click="showAddLayoutDialog">
               <i class="bi bi-plus"></i> {{ $t('scheduleEditor.addLayout') }}
             </el-button>
           </div>
@@ -314,16 +381,67 @@
         </div>
       </div>
     </div>
+    
+    <!-- 布局模板选择对话框 -->
+    <el-dialog
+      v-model="showTemplateDialog"
+      :title="$t('scheduleEditor.selectTemplate')"
+      width="70%"
+      append-to-body
+    >
+      <div class="template-grid">
+        <div 
+          v-for="template in planStore.layoutTemplates" 
+          :key="template.template" 
+          class="template-card"
+          @click="handleTemplateSelection(template.template)"
+        >
+          <div class="template-thumbnail">
+            <img 
+              :src="template.thumbnail || '/placeholder-thumbnail.png'" 
+              :alt="getTemplateDisplayName(template)" 
+              class="thumbnail-img"
+              @error="handleThumbnailError"
+            />
+          </div>
+          <div class="template-info">
+            <div class="template-name">{{ getTemplateDisplayName(template) }}</div>
+            <div class="template-id">{{ template.template }}</div>
+          </div>
+        </div>
+      </div>
+      <div v-if="!planStore.layoutTemplates.length" class="empty-templates">
+        {{ $t('scheduleEditor.noTemplates') }}
+      </div>
+    </el-dialog>
+    
+    <!-- 未保存更改确认对话框 -->
+    <el-dialog
+      v-model="showUnsavedChangesDialog"
+      :title="$t('scheduleEditor.unsavedChanges')"
+      width="30%"
+      append-to-body
+    >
+      <span>{{ $t('scheduleEditor.unsavedChangesMessage') }}</span>
+      <template #footer>
+        <span class="dialog-footer">
+          <el-button @click="discardChanges">{{ $t('scheduleEditor.discard') }}</el-button>
+          <el-button type="primary" @click="saveChanges">{{ $t('scheduleEditor.save') }}</el-button>
+        </span>
+      </template>
+    </el-dialog>
   </el-dialog>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, reactive, onMounted } from 'vue';
+import { ref, computed, watch, reactive, onMounted, nextTick } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { ScheduleType, type Schedule, type PersonInfo, type Layout } from '../types/broadcast';
 import { usePlanStore } from '../stores/planStore';
 import type { FormInstance, FormRules } from 'element-plus';
+import { ElMessage } from 'element-plus';
 import draggable from 'vuedraggable';
+import { cloneDeep } from 'lodash-es';
 
 // Props
 const props = defineProps<{
@@ -352,6 +470,15 @@ const dialogVisible = computed({
 // 日程列表
 const scheduleList = computed(() => {
   return planStore.currentBranch?.schedules || [];
+});
+
+// 按开始时间排序的日程列表
+const sortedScheduleList = computed(() => {
+  return [...scheduleList.value].sort((a, b) => {
+    const timeA = a.plannedStartDateTime ? new Date(a.plannedStartDateTime).getTime() : 0;
+    const timeB = b.plannedStartDateTime ? new Date(b.plannedStartDateTime).getTime() : 0;
+    return timeA - timeB;
+  });
 });
 
 // 选中的日程ID
@@ -409,6 +536,34 @@ const scheduleRules = reactive<FormRules>({
   ]
 });
 
+// 错误信息
+const validationErrors = ref<string[]>([]);
+
+// 未保存更改相关状态
+const hasUnsavedChanges = ref<boolean>(false);
+const originalFormData = ref<any>(null);
+const showUnsavedChangesDialog = ref<boolean>(false);
+const pendingAction = ref<'new' | 'select' | 'close' | null>(null);
+const pendingSchedule = ref<Schedule | null>(null);
+
+// 在script setup部分添加一个标志变量
+const isCreatingNew = ref<boolean>(false);
+
+// 时间选择器的值
+const timePickerValue = ref<string>('');
+
+// 监听scheduleForm.plannedStartDateTime变化，更新timePickerValue
+watch(() => scheduleForm.plannedStartDateTime, (newDateTime) => {
+  if (newDateTime) {
+    const date = new Date(newDateTime);
+    const hours = date.getHours().toString().padStart(2, '0');
+    const minutes = date.getMinutes().toString().padStart(2, '0');
+    timePickerValue.value = `${hours}:${minutes}`;
+  } else {
+    timePickerValue.value = '';
+  }
+}, { immediate: true });
+
 // 监听visible变化
 watch(() => props.visible, (newVisible) => {
   if (newVisible) {
@@ -420,8 +575,18 @@ watch(() => props.visible, (newVisible) => {
       selectedScheduleId.value = '';
       showForm.value = false;
     }
+    // 重置未保存更改状态
+    hasUnsavedChanges.value = false;
   }
 }, { immediate: true });
+
+// 监听表单变化，检测未保存的更改
+watch(() => scheduleForm, () => {
+  if (showForm.value && originalFormData.value) {
+    // 比较当前表单数据和原始数据
+    hasUnsavedChanges.value = !isEqual(scheduleForm, originalFormData.value);
+  }
+}, { deep: true });
 
 // 监听plannedDuration变化，更新小时和分钟
 watch(() => scheduleForm.plannedDuration, (newDuration) => {
@@ -435,71 +600,182 @@ watch(() => scheduleForm.plannedDuration, (newDuration) => {
   updatePlannedEndTime();
 }, { immediate: true });
 
-// 监听plannedStartDateTime变化，更新结束时间
-watch(() => scheduleForm.plannedStartDateTime, () => {
-  updatePlannedEndTime();
-}, { immediate: true });
+/**
+ * 检查两个对象是否相等（简化版）
+ */
+function isEqual(obj1: any, obj2: any): boolean {
+  // 使用JSON.stringify进行简单比较
+  // 注意：这种方法不能处理循环引用和函数等特殊情况
+  // 但对于我们的表单数据比较已经足够
+  return JSON.stringify(obj1) === JSON.stringify(obj2);
+}
 
 /**
- * 更新计划结束时间
+ * 处理创建新日程
  */
-function updatePlannedEndTime() {
-  if (scheduleForm.plannedStartDateTime && scheduleForm.plannedDuration) {
-    const startTime = new Date(scheduleForm.plannedStartDateTime);
-    const endTime = new Date(startTime.getTime() + scheduleForm.plannedDuration * 60 * 1000);
-    
-    // 格式化为 YYYY-MM-DD HH:MM
-    const year = endTime.getFullYear();
-    const month = (endTime.getMonth() + 1).toString().padStart(2, '0');
-    const day = endTime.getDate().toString().padStart(2, '0');
-    const hours = endTime.getHours().toString().padStart(2, '0');
-    const minutes = endTime.getMinutes().toString().padStart(2, '0');
-    
-    plannedEndTimeDisplay.value = `${year}-${month}-${day} ${hours}:${minutes}`;
+function handleCreateNewSchedule(): void {
+  if (hasUnsavedChanges.value) {
+    // 有未保存的更改，显示确认对话框
+    pendingAction.value = 'new';
+    showUnsavedChangesDialog.value = true;
   } else {
-    plannedEndTimeDisplay.value = '';
+    // 没有未保存的更改，直接创建新日程
+    createNewSchedule();
   }
 }
 
 /**
- * 获取计划日期标签
- * @returns 带有计划日期的标签文本
+ * 处理选择日程
  */
-function getPlanDateLabel() {
-  if (planStore.currentPlan?.plannedStartDateTime) {
-    const date = new Date(planStore.currentPlan.plannedStartDateTime);
-    const year = date.getFullYear();
-    const month = (date.getMonth() + 1).toString().padStart(2, '0');
-    const day = date.getDate().toString().padStart(2, '0');
-    return `${t('scheduleEditor.plannedStartTime')}（${year}-${month}-${day}）`;
+function handleSelectSchedule(schedule: Schedule): void {
+  if (hasUnsavedChanges.value) {
+    // 有未保存的更改，显示确认对话框
+    pendingAction.value = 'select';
+    pendingSchedule.value = schedule;
+    showUnsavedChangesDialog.value = true;
+  } else {
+    // 没有未保存的更改，直接选择日程
+    selectSchedule(schedule);
   }
-  return t('scheduleEditor.plannedStartTime');
 }
 
 /**
- * 更新持续时间
+ * 处理关闭对话框
  */
-function updateDuration() {
-  // 获取当前输入的分钟数
-  const minutes = durationMinutes.value || 0;
-  
-  // 处理分钟超过59的情况
-  if (minutes > 59) {
-    // 清空小时输入框已有数据后进行换算
-    const totalMinutes = minutes;
-    durationHours.value = Math.floor(totalMinutes / 60);
-    durationMinutes.value = totalMinutes % 60;
+function handleClose(): void {
+  if (hasUnsavedChanges.value) {
+    // 有未保存的更改，显示确认对话框
+    pendingAction.value = 'close';
+    showUnsavedChangesDialog.value = true;
   } else {
-    // 正常情况，保留小时数
-    const hours = durationHours.value || 0;
-    scheduleForm.plannedDuration = hours * 60 + minutes;
+    // 没有未保存的更改，直接关闭
+    emit('close');
   }
+}
+
+/**
+ * 保存更改并继续
+ */
+async function saveChanges(): Promise<void> {
+  // 关闭确认对话框
+  showUnsavedChangesDialog.value = false;
   
-  // 转换为分钟存储
-  scheduleForm.plannedDuration = (durationHours.value || 0) * 60 + (durationMinutes.value || 0);
+  try {
+    // 保存当前表单
+    const saveResult = await handleSaveAndReturn();
+    
+    // 如果保存失败，不继续执行后续操作
+    if (!saveResult) {
+      return;
+    }
+    
+    // 根据待处理的操作继续执行
+    nextTick(() => {
+      if (pendingAction.value === 'new') {
+        createNewSchedule();
+      } else if (pendingAction.value === 'select' && pendingSchedule.value) {
+        selectSchedule(pendingSchedule.value);
+      } else if (pendingAction.value === 'close') {
+        emit('close');
+      }
+      
+      // 重置待处理操作
+      pendingAction.value = null;
+      pendingSchedule.value = null;
+    });
+  } catch (error) {
+    console.error('保存日程失败:', error);
+    ElMessage.error(t('scheduleEditor.saveFailed'));
+  }
+}
+
+/**
+ * 保存日程并返回保存结果
+ * @returns 保存是否成功
+ */
+async function handleSaveAndReturn(): Promise<boolean> {
+  // 重置错误信息
+  validationErrors.value = [];
   
-  // 更新结束时间显示
-  updatePlannedEndTime();
+  // 验证表单
+  try {
+    const valid = await scheduleFormRef.value?.validate();
+    if (!valid) {
+      // 表单基本验证失败，收集错误信息
+      collectFormErrors();
+      // 显示验证错误
+      if (validationErrors.value.length > 0) {
+        ElMessage.error({
+          message: t('scheduleEditor.validationError') + ': ' + validationErrors.value.join(', '),
+          duration: 5000
+        });
+      } else {
+        ElMessage.error(t('scheduleEditor.validationError'));
+      }
+      return false;
+    }
+    
+    // 进行额外验证
+    const additionalValidation = validateAdditionalFields();
+    if (!additionalValidation) {
+      // 显示验证错误
+      if (validationErrors.value.length > 0) {
+        ElMessage.error({
+          message: t('scheduleEditor.validationError') + ': ' + validationErrors.value.join(', '),
+          duration: 5000
+        });
+      }
+      return false;
+    }
+    
+    // 构建日程对象
+    const schedule: Schedule = {
+      id: isCreatingNew.value ? '' : scheduleForm.id, // 新建时不提供ID，编辑时使用原ID
+      type: scheduleForm.type,
+      plannedStartDateTime: scheduleForm.plannedStartDateTime || undefined,
+      plannedDuration: scheduleForm.plannedDuration || undefined,
+      layouts: scheduleForm.layouts || [], // 保留原有布局
+    };
+    
+    // 根据类型添加特定信息
+    if (scheduleForm.type === ScheduleType.SURGERY) {
+      schedule.surgeryInfo = {
+        procedure: scheduleForm.surgeryInfo.procedure,
+        surgeons: scheduleForm.surgeryInfo.surgeons.filter(s => s.name.trim() !== ''),
+        guests: scheduleForm.surgeryInfo.guests.filter(g => g.name.trim() !== '')
+      };
+    } else if (scheduleForm.type === ScheduleType.LECTURE) {
+      schedule.lectureInfo = {
+        topic: scheduleForm.lectureInfo.topic,
+        speaker: scheduleForm.lectureInfo.speaker
+      };
+    }
+    
+    // 根据模式选择保存方法
+    let success = false;
+    
+    if (isCreatingNew.value) {
+      // 新建日程
+      success = await planStore.createSchedule(schedule);
+    } else {
+      // 更新日程
+      success = await planStore.updateSchedule(schedule);
+    }
+    
+    if (success) {
+      // 更新原始表单数据，重置未保存更改状态
+      originalFormData.value = cloneDeep(scheduleForm);
+      hasUnsavedChanges.value = false;
+      return true;
+    } else {
+      ElMessage.error(t('scheduleEditor.saveFailed'));
+      return false;
+    }
+  } catch (error) {
+    console.error('保存日程失败:', error);
+    ElMessage.error(t('scheduleEditor.saveFailed'));
+    return false;
+  }
 }
 
 /**
@@ -509,12 +785,37 @@ function updateDuration() {
 function selectSchedule(schedule: Schedule): void {
   selectedScheduleId.value = schedule.id;
   showForm.value = true;
+  isCreatingNew.value = false; // 标记为编辑模式
   
   // 填充表单数据
   scheduleForm.id = schedule.id;
   scheduleForm.type = schedule.type;
-  scheduleForm.plannedStartDateTime = schedule.plannedStartDateTime || null;
-  scheduleForm.plannedDuration = schedule.plannedDuration || null;
+  
+  // 处理开始时间，确保只保留时分信息
+  if (schedule.plannedStartDateTime) {
+    const date = new Date(schedule.plannedStartDateTime);
+    // 从当前计划日期获取年月日
+    let baseDate = new Date();
+    if (planStore.currentPlan?.plannedStartDateTime) {
+      baseDate = new Date(planStore.currentPlan.plannedStartDateTime);
+    }
+    
+    // 创建新的日期对象，使用计划日期的年月日和选择的时分
+    const newDate = new Date(
+      baseDate.getFullYear(),
+      baseDate.getMonth(),
+      baseDate.getDate(),
+      date.getHours(),
+      date.getMinutes()
+    );
+    
+    scheduleForm.plannedStartDateTime = newDate;
+  } else {
+    scheduleForm.plannedStartDateTime = null;
+  }
+  
+  // 设置持续时间，如果没有则默认为1小时
+  scheduleForm.plannedDuration = schedule.plannedDuration || 60;
   scheduleForm.layouts = schedule.layouts || [];
   
   // 设置持续时间的小时和分钟
@@ -522,8 +823,8 @@ function selectSchedule(schedule: Schedule): void {
     durationHours.value = Math.floor(schedule.plannedDuration / 60);
     durationMinutes.value = schedule.plannedDuration % 60;
   } else {
-    durationHours.value = null;
-    durationMinutes.value = null;
+    durationHours.value = 1; // 默认1小时
+    durationMinutes.value = 0;
   }
   
   // 更新结束时间
@@ -546,6 +847,10 @@ function selectSchedule(schedule: Schedule): void {
     scheduleForm.lectureInfo.topic = '';
     scheduleForm.lectureInfo.speaker = { name: '', title: '教授', organization: '' };
   }
+  
+  // 保存原始表单数据用于比较
+  originalFormData.value = cloneDeep(scheduleForm);
+  hasUnsavedChanges.value = false;
 }
 
 /**
@@ -554,7 +859,35 @@ function selectSchedule(schedule: Schedule): void {
 function createNewSchedule(): void {
   selectedScheduleId.value = '';
   showForm.value = true;
+  isCreatingNew.value = true; // 标记为新建模式
   resetForm();
+  
+  // 设置默认持续时间为1小时
+  scheduleForm.plannedDuration = 60;
+  durationHours.value = 1;
+  durationMinutes.value = 0;
+  
+  // 设置默认开始时间为最后一个日程的结束时间
+  if (sortedScheduleList.value.length > 0) {
+    const lastSchedule = sortedScheduleList.value[sortedScheduleList.value.length - 1];
+    if (lastSchedule.plannedStartDateTime && lastSchedule.plannedDuration) {
+      const lastStartTime = new Date(lastSchedule.plannedStartDateTime);
+      const lastEndTime = new Date(lastStartTime.getTime() + lastSchedule.plannedDuration * 60 * 1000);
+      scheduleForm.plannedStartDateTime = lastEndTime;
+      
+      // 更新时间选择器的值
+      const hours = lastEndTime.getHours().toString().padStart(2, '0');
+      const minutes = lastEndTime.getMinutes().toString().padStart(2, '0');
+      timePickerValue.value = `${hours}:${minutes}`;
+    }
+  }
+  
+  // 更新结束时间
+  updatePlannedEndTime();
+  
+  // 保存原始表单数据用于比较
+  originalFormData.value = cloneDeep(scheduleForm);
+  hasUnsavedChanges.value = false;
 }
 
 /**
@@ -564,7 +897,7 @@ function resetForm(): void {
   scheduleForm.id = '';
   scheduleForm.type = ScheduleType.SURGERY;
   scheduleForm.plannedStartDateTime = null;
-  scheduleForm.plannedDuration = null;
+  scheduleForm.plannedDuration = 60; // 默认持续时间为1小时
   scheduleForm.surgeryInfo.procedure = '';
   scheduleForm.surgeryInfo.surgeons = [{ name: '', title: '教授', organization: '' }];
   scheduleForm.surgeryInfo.guests = [];
@@ -573,8 +906,8 @@ function resetForm(): void {
   scheduleForm.layouts = [];
   
   // 重置持续时间的小时和分钟
-  durationHours.value = null;
-  durationMinutes.value = null;
+  durationHours.value = 1; // 默认1小时
+  durationMinutes.value = 0;
   
   // 重置结束时间显示
   plannedEndTimeDisplay.value = '';
@@ -626,44 +959,83 @@ function removeGuest(index: number): void {
 }
 
 /**
- * 关闭对话框
+ * 保存日程
  */
-function handleClose(): void {
-  emit('close');
+async function handleSave(): Promise<void> {
+  const success = await handleSaveAndReturn();
+  if (success) {
+    // 不关闭对话框，而是返回到初始界面
+    selectedScheduleId.value = '';
+    showForm.value = false;
+    // 重置未保存更改状态
+    hasUnsavedChanges.value = false;
+  }
 }
 
 /**
- * 保存日程
+ * 放弃更改并继续
  */
-function handleSave(): void {
-  scheduleFormRef.value?.validate((valid) => {
-    if (valid) {
-      // 构建日程对象
-      const schedule: Schedule = {
-        id: scheduleForm.id || Date.now().toString(), // 如果是新建，生成一个临时ID
-        type: scheduleForm.type,
-        plannedStartDateTime: scheduleForm.plannedStartDateTime || undefined,
-        plannedDuration: scheduleForm.plannedDuration || undefined,
-        layouts: scheduleForm.layouts || [], // 保留原有布局
-      };
-      
-      // 根据类型添加特定信息
-      if (scheduleForm.type === ScheduleType.SURGERY) {
-        schedule.surgeryInfo = {
-          procedure: scheduleForm.surgeryInfo.procedure,
-          surgeons: scheduleForm.surgeryInfo.surgeons.filter(s => s.name.trim() !== ''),
-          guests: scheduleForm.surgeryInfo.guests.filter(g => g.name.trim() !== '')
-        };
-      } else if (scheduleForm.type === ScheduleType.LECTURE) {
-        schedule.lectureInfo = {
-          topic: scheduleForm.lectureInfo.topic,
-          speaker: scheduleForm.lectureInfo.speaker
-        };
-      }
-      
-      emit('save', schedule);
+function discardChanges(): void {
+  // 关闭确认对话框
+  showUnsavedChangesDialog.value = false;
+  
+  // 重置未保存更改状态
+  hasUnsavedChanges.value = false;
+  
+  // 根据待处理的操作继续执行
+  if (pendingAction.value === 'new') {
+    createNewSchedule();
+  } else if (pendingAction.value === 'select' && pendingSchedule.value) {
+    selectSchedule(pendingSchedule.value);
+  } else if (pendingAction.value === 'close') {
+    emit('close');
+  }
+  
+  // 重置待处理操作
+  pendingAction.value = null;
+  pendingSchedule.value = null;
+}
+
+/**
+ * 验证额外字段
+ * @returns 验证是否通过
+ */
+function validateAdditionalFields(): boolean {
+  let isValid = true;
+  
+  // 验证术者/讲者
+  if (scheduleForm.type === ScheduleType.SURGERY) {
+    const validSurgeons = scheduleForm.surgeryInfo.surgeons.filter(s => s.name.trim() !== '');
+    if (validSurgeons.length === 0) {
+      validationErrors.value.push(t('scheduleEditor.surgeonsRequired'));
+      isValid = false;
     }
-  });
+  } else if (scheduleForm.type === ScheduleType.LECTURE) {
+    if (!scheduleForm.lectureInfo.speaker.name.trim()) {
+      validationErrors.value.push(t('scheduleEditor.speakerRequired'));
+      isValid = false;
+    }
+  }
+  
+  // 验证布局
+  if (!scheduleForm.layouts || scheduleForm.layouts.length === 0) {
+    validationErrors.value.push(t('scheduleEditor.layoutsRequired'));
+    isValid = false;
+  }
+  
+  return isValid;
+}
+
+/**
+ * 收集表单错误信息
+ */
+function collectFormErrors(): void {
+  // 检查术式/讲题
+  if (scheduleForm.type === ScheduleType.SURGERY && !scheduleForm.surgeryInfo.procedure) {
+    validationErrors.value.push(t('scheduleEditor.procedureRequired'));
+  } else if (scheduleForm.type === ScheduleType.LECTURE && !scheduleForm.lectureInfo.topic) {
+    validationErrors.value.push(t('scheduleEditor.topicRequired'));
+  }
 }
 
 /**
@@ -685,14 +1057,22 @@ function scheduleTypeText(type: ScheduleType): string {
 /**
  * 格式化日期时间
  * @param date 日期时间
+ * @param showFullTime 是否显示完整时间（包含日期）
  * @returns 格式化后的日期时间字符串
  */
-function formatDateTime(date?: Date): string {
+function formatDateTime(date?: Date | null, showFullTime: boolean = false): string {
   if (!date) return t('scheduleManager.unsetTime');
   
   const d = new Date(date);
   const hours = d.getHours().toString().padStart(2, '0');
   const minutes = d.getMinutes().toString().padStart(2, '0');
+  
+  if (showFullTime) {
+    const year = d.getFullYear();
+    const month = (d.getMonth() + 1).toString().padStart(2, '0');
+    const day = d.getDate().toString().padStart(2, '0');
+    return `${year}-${month}-${day} ${hours}:${minutes}`;
+  }
   
   return `${hours}:${minutes}`;
 }
@@ -716,9 +1096,31 @@ function getScheduleTitle(schedule: Schedule): string {
   return t('scheduleManager.unnamedSchedule');
 }
 
-function updateEndTime(value: Date | null) {
+/**
+ * 更新结束时间
+ * @param value 时间值
+ */
+function updateEndTime(value: string | null) {
   if (value) {
-    scheduleForm.plannedStartDateTime = value;
+    // 从当前计划日期获取年月日
+    let baseDate = new Date();
+    if (planStore.currentPlan?.plannedStartDateTime) {
+      baseDate = new Date(planStore.currentPlan.plannedStartDateTime);
+    }
+    
+    // 解析时间字符串 (HH:mm)
+    const [hours, minutes] = value.split(':').map(Number);
+    
+    // 创建新的日期对象，使用计划日期的年月日和选择的时分
+    const newDate = new Date(
+      baseDate.getFullYear(),
+      baseDate.getMonth(),
+      baseDate.getDate(),
+      hours,
+      minutes
+    );
+    
+    scheduleForm.plannedStartDateTime = newDate;
     updatePlannedEndTime();
   } else {
     plannedEndTimeDisplay.value = '';
@@ -762,6 +1164,293 @@ const handleThumbnailError = (event: Event) => {
   const target = event.target as HTMLImageElement
   target.src = '/placeholder-thumbnail.png'
 }
+
+// 布局描述编辑
+const editingLayoutIndex = ref<number>(-1);
+const editingLayoutDescription = ref<string>('');
+const descriptionInputRef = ref<any>(null);
+
+/**
+ * 开始编辑布局描述
+ * @param index 布局索引
+ */
+function startEditingDescription(index: number): void {
+  editingLayoutIndex.value = index;
+  editingLayoutDescription.value = scheduleForm.layouts[index].description || '';
+  
+  // 等待DOM更新后聚焦输入框
+  setTimeout(() => {
+    if (descriptionInputRef.value && typeof descriptionInputRef.value.focus === 'function') {
+      descriptionInputRef.value.focus();
+    }
+  }, 100);
+}
+
+/**
+ * 保存布局描述
+ * @param index 布局索引
+ */
+function saveLayoutDescription(index: number): void {
+  if (index >= 0 && index < scheduleForm.layouts.length) {
+    scheduleForm.layouts[index].description = editingLayoutDescription.value;
+  }
+  editingLayoutIndex.value = -1;
+}
+
+// 布局模板选择
+const showTemplateDialog = ref<boolean>(false);
+const currentEditingLayoutIndex = ref<number>(-1);
+const isAddingNewLayout = ref<boolean>(false);
+
+/**
+ * 移除布局
+ * @param index 布局索引
+ */
+function removeLayout(index: number): void {
+  if (index >= 0 && index < scheduleForm.layouts.length) {
+    scheduleForm.layouts.splice(index, 1);
+  }
+}
+
+/**
+ * 显示模板选择器
+ * @param index 布局索引
+ */
+function showTemplateSelector(index: number): void {
+  currentEditingLayoutIndex.value = index;
+  isAddingNewLayout.value = false;
+  showTemplateDialog.value = true;
+}
+
+/**
+ * 显示添加布局对话框
+ */
+function showAddLayoutDialog(): void {
+  isAddingNewLayout.value = true;
+  showTemplateDialog.value = true;
+}
+
+/**
+ * 处理模板选择
+ * @param templateId 模板ID
+ */
+function handleTemplateSelection(templateId: string): void {
+  if (isAddingNewLayout.value) {
+    // 添加新布局
+    addNewLayout(templateId);
+  } else {
+    // 更改现有布局模板
+    changeLayoutTemplate(templateId);
+  }
+}
+
+/**
+ * 添加新布局
+ * @param templateId 模板ID
+ */
+function addNewLayout(templateId: string): void {
+  // 创建新布局
+  const newLayout = {
+    id: Date.now().toString(), // 生成临时ID
+    template: templateId,
+    description: '',
+    elements: []
+  };
+  
+  // 添加到布局列表
+  scheduleForm.layouts.push(newLayout);
+  
+  // 关闭对话框
+  showTemplateDialog.value = false;
+  
+  // 设置新添加的布局为编辑状态
+  const newIndex = scheduleForm.layouts.length - 1;
+  setTimeout(() => {
+    startEditingDescription(newIndex);
+  }, 100);
+}
+
+/**
+ * 更改布局模板
+ * @param templateId 模板ID
+ */
+function changeLayoutTemplate(templateId: string): void {
+  const index = currentEditingLayoutIndex.value;
+  if (index >= 0 && index < scheduleForm.layouts.length) {
+    // 保存原有的描述信息和媒体源信息
+    const description = scheduleForm.layouts[index].description;
+    const elements = scheduleForm.layouts[index].elements || [];
+    
+    // 更新模板但保留媒体源信息
+    scheduleForm.layouts[index] = {
+      id: scheduleForm.layouts[index].id,
+      template: templateId,
+      description: description,
+      elements: elements // 保留原有的媒体源信息
+    };
+  }
+  
+  // 关闭对话框
+  showTemplateDialog.value = false;
+  currentEditingLayoutIndex.value = -1;
+}
+
+/**
+ * 获取模板显示名称
+ * @param template 布局模板
+ * @returns 显示名称
+ */
+const getTemplateDisplayName = (template: any): string => {
+  const { locale } = useI18n();
+  const currentLocale = locale.value;
+  
+  if (currentLocale === 'zh-CN') {
+    return template.name?.['zh-CN'] || template.name?.['en-US'] || template.template;
+  } else {
+    return template.name?.['en-US'] || template.name?.['zh-CN'] || template.template;
+  }
+};
+
+/**
+ * 获取计划日期标签
+ * @returns 带有计划日期的标签文本
+ */
+function getPlanDateLabel() {
+  if (planStore.currentPlan?.plannedStartDateTime) {
+    const date = new Date(planStore.currentPlan.plannedStartDateTime);
+    const year = date.getFullYear();
+    const month = (date.getMonth() + 1).toString().padStart(2, '0');
+    const day = date.getDate().toString().padStart(2, '0');
+    return `${t('scheduleEditor.plannedStartTime')}（${year}-${month}-${day}）`;
+  }
+  return t('scheduleEditor.plannedStartTime');
+}
+
+/**
+ * 更新持续时间
+ */
+function updateDuration() {
+  // 获取当前输入的分钟数
+  const minutes = durationMinutes.value || 0;
+  
+  // 处理分钟超过59的情况
+  if (minutes > 59) {
+    // 清空小时输入框已有数据后进行换算
+    const totalMinutes = minutes;
+    durationHours.value = Math.floor(totalMinutes / 60);
+    durationMinutes.value = totalMinutes % 60;
+  } else {
+    // 正常情况，保留小时数
+    const hours = durationHours.value || 0;
+    scheduleForm.plannedDuration = hours * 60 + minutes;
+  }
+  
+  // 转换为分钟存储
+  scheduleForm.plannedDuration = (durationHours.value || 0) * 60 + (durationMinutes.value || 0);
+  
+  // 更新结束时间显示
+  updatePlannedEndTime();
+}
+
+/**
+ * 更新计划结束时间
+ */
+function updatePlannedEndTime() {
+  if (scheduleForm.plannedStartDateTime && scheduleForm.plannedDuration) {
+    const startTime = new Date(scheduleForm.plannedStartDateTime);
+    const endTime = new Date(startTime.getTime() + scheduleForm.plannedDuration * 60 * 1000);
+    
+    // 格式化为 YYYY-MM-DD HH:MM
+    const year = endTime.getFullYear();
+    const month = (endTime.getMonth() + 1).toString().padStart(2, '0');
+    const day = endTime.getDate().toString().padStart(2, '0');
+    const hours = endTime.getHours().toString().padStart(2, '0');
+    const minutes = endTime.getMinutes().toString().padStart(2, '0');
+    
+    plannedEndTimeDisplay.value = `${year}-${month}-${day} ${hours}:${minutes}`;
+  } else {
+    plannedEndTimeDisplay.value = '';
+  }
+}
+
+/**
+ * 获取日程结束时间
+ * @param schedule 日程对象
+ * @returns 结束时间
+ */
+function getEndTime(schedule: Schedule): Date | null {
+  if (!schedule.plannedStartDateTime || !schedule.plannedDuration) {
+    return null;
+  }
+  
+  const startTime = new Date(schedule.plannedStartDateTime);
+  return new Date(startTime.getTime() + schedule.plannedDuration * 60 * 1000);
+}
+
+/**
+ * 获取日程结束时间显示
+ * @param schedule 日程对象
+ * @param showFullTime 是否显示完整时间（包含日期）
+ * @returns 结束时间字符串
+ */
+function getEndTimeDisplay(schedule: Schedule, showFullTime: boolean = true): string {
+  const endTime = getEndTime(schedule);
+  if (!endTime) {
+    return t('scheduleManager.unsetTime');
+  }
+  
+  return formatDateTime(endTime, showFullTime);
+}
+
+/**
+ * 获取日程间隔
+ * @param schedule 当前日程
+ * @param index 当前日程索引
+ * @returns 时间间隔字符串，如果没有间隔则返回空字符串
+ */
+function getGapWithNextSchedule(schedule: Schedule, index: number): string {
+  // 如果是最后一个日程，没有间隔
+  if (index === sortedScheduleList.value.length - 1) return '';
+  
+  // 如果当前日程没有开始时间或持续时间，没有间隔
+  if (!schedule.plannedStartDateTime || !schedule.plannedDuration) return '';
+  
+  // 获取下一个日程
+  const nextSchedule = sortedScheduleList.value[index + 1];
+  
+  // 如果下一个日程没有开始时间，没有间隔
+  if (!nextSchedule.plannedStartDateTime) return '';
+  
+  // 计算当前日程的结束时间
+  const currentStartTime = new Date(schedule.plannedStartDateTime);
+  const currentEndTime = new Date(currentStartTime.getTime() + schedule.plannedDuration * 60 * 1000);
+  
+  // 下一个日程的开始时间
+  const nextStartTime = new Date(nextSchedule.plannedStartDateTime);
+  
+  // 如果当前日程的结束时间等于下一个日程的开始时间，没有间隔
+  if (currentEndTime.getTime() === nextStartTime.getTime()) return '';
+  
+  // 如果下一个日程的开始时间早于当前日程的结束时间，表示日程重叠，没有间隔
+  if (nextStartTime.getTime() < currentEndTime.getTime()) return '';
+  
+  // 计算间隔时间（毫秒）
+  const gapMs = nextStartTime.getTime() - currentEndTime.getTime();
+  
+  // 转换为小时和分钟
+  const gapMinutes = Math.floor(gapMs / (60 * 1000));
+  const hours = Math.floor(gapMinutes / 60);
+  const minutes = gapMinutes % 60;
+  
+  // 格式化间隔时间
+  if (hours > 0 && minutes > 0) {
+    return `${hours}${t('scheduleEditor.hours')} ${minutes}${t('scheduleEditor.minutes')}`;
+  } else if (hours > 0) {
+    return `${hours}${t('scheduleEditor.hours')}`;
+  } else {
+    return `${minutes}${t('scheduleEditor.minutes')}`;
+  }
+}
 </script>
 
 <style scoped>
@@ -777,7 +1466,7 @@ const handleThumbnailError = (event: Event) => {
 }
 
 .schedule-list-panel {
-  width: 300px;
+  width: 400px;
   border-right: 1px solid var(--el-border-color);
   display: flex;
   flex-direction: column;
@@ -812,15 +1501,47 @@ const handleThumbnailError = (event: Event) => {
   padding: 10px;
 }
 
+.schedule-item-container {
+  margin-bottom: 5px;
+  display: flex;
+  position: relative;
+}
+
+.schedule-time-container {
+  width: 45px;
+  margin-right: 5px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  position: relative;
+}
+
+.schedule-time {
+  font-size: 12px;
+  color: #409eff;
+  white-space: nowrap;
+}
+
+.start-time {
+  position: absolute;
+  top: 0;
+}
+
+.end-time {
+  position: absolute;
+  bottom: 0;
+}
+
 .schedule-item {
+  flex: 1;
   padding: 10px;
   border-radius: var(--el-border-radius-base);
-  margin-bottom: 10px;
   cursor: pointer;
   border: 1px solid var(--el-border-color-lighter);
   transition: all 0.3s;
   display: flex;
   align-items: flex-start;
+  min-height: 60px;
 }
 
 .schedule-item:hover {
@@ -866,9 +1587,37 @@ const handleThumbnailError = (event: Event) => {
   text-overflow: ellipsis;
 }
 
-.schedule-item-time {
+.schedule-item-info {
+  display: flex;
+  justify-content: space-between;
   font-size: var(--el-font-size-extra-small);
   color: var(--el-text-color-secondary);
+}
+
+.schedule-item-duration {
+  color: var(--el-color-primary);
+}
+
+.schedule-gap-container {
+  display: flex;
+  margin: 5px 0;
+  padding-left: 50px;
+}
+
+.schedule-gap {
+  flex: 1;
+  padding: 5px;
+  border: 1px dashed var(--el-border-color);
+  border-radius: var(--el-border-radius-base);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.gap-content {
+  font-size: var(--el-font-size-extra-small);
+  color: var(--el-text-color-secondary);
+  text-align: center;
 }
 
 .empty-list {
@@ -976,15 +1725,17 @@ const handleThumbnailError = (event: Event) => {
 }
 
 .person-name {
-  flex: 2;
+  width: 140px;
+  flex: 0 0 auto;
 }
 
 .person-title {
-  flex: 1;
+  width: 80px;
+  flex: 0 0 auto;
 }
 
 .person-org {
-  flex: 2;
+  flex: 1;
 }
 
 .remove-button {
@@ -1041,25 +1792,28 @@ h4 {
 .layout-grid {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: 20px;
+  justify-content: flex-start;
 }
 
 .layout-card {
-  width: calc(33.33% - 10px);
+  width: 240px;
   display: flex;
   flex-direction: column;
   align-items: center;
   padding: 10px;
   border: 1px solid var(--el-border-color-lighter);
   border-radius: var(--el-border-radius-base);
+  margin-bottom: 10px;
 }
 
 .layout-thumbnail {
-  width: 100%;
-  height: 150px;
+  width: 240px;
+  height: 135px;
   overflow: hidden;
   border-radius: var(--el-border-radius-base);
   margin-bottom: 10px;
+  position: relative;
 }
 
 .thumbnail-img {
@@ -1077,6 +1831,9 @@ h4 {
   font-weight: 500;
   color: var(--el-text-color-primary);
   margin-bottom: 5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .layout-template-name {
@@ -1094,5 +1851,122 @@ h4 {
   margin-bottom: 10px;
   color: var(--el-text-color-secondary);
   font-size: var(--el-font-size-extra-small);
+}
+
+.edit-description-btn {
+  margin-left: 5px;
+  padding: 2px;
+  font-size: 14px;
+  color: var(--el-color-primary);
+}
+
+.edit-description-container {
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.save-description-btn {
+  margin-left: 5px;
+  padding: 4px 8px;
+  font-size: 14px;
+  border-radius: 4px;
+}
+
+.layout-actions {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.6);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  opacity: 0;
+  transition: opacity 0.3s;
+  border-radius: var(--el-border-radius-base);
+}
+
+.layout-thumbnail:hover .layout-actions {
+  opacity: 1;
+}
+
+.layout-action-buttons {
+  display: flex;
+  flex-direction: row;
+  gap: 10px;
+  justify-content: center;
+  align-items: center;
+}
+
+.layout-action-btn {
+  width: auto;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 12px;
+}
+
+/* 模板选择对话框样式 */
+.template-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 15px;
+  margin-bottom: 20px;
+}
+
+.template-card {
+  width: calc(25% - 15px);
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: var(--el-border-radius-base);
+  overflow: hidden;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.template-card:hover {
+  border-color: var(--el-color-primary);
+  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
+}
+
+.template-thumbnail {
+  width: 100%;
+  height: 120px;
+  overflow: hidden;
+}
+
+.template-info {
+  padding: 10px;
+  text-align: center;
+}
+
+.template-name {
+  font-size: var(--el-font-size-small);
+  font-weight: 500;
+  color: var(--el-text-color-primary);
+  margin-bottom: 5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.template-id {
+  font-size: var(--el-font-size-extra-small);
+  color: var(--el-text-color-secondary);
+}
+
+.empty-templates {
+  text-align: center;
+  padding: 30px;
+  color: var(--el-text-color-secondary);
+}
+
+/* 确认对话框样式 */
+.dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
 }
 </style> 

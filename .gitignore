@@ -25,3 +25,6 @@ dist-ssr
 
 # SVG图标目录
 public/assets/svg/
+
+#Release目录
+release/
