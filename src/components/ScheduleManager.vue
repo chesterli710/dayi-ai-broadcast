@@ -146,10 +146,34 @@ function formatDateTime(date?: Date): string {
  */
 function getScheduleTitle(schedule: Schedule): string {
   if (schedule.type === ScheduleType.SURGERY && schedule.surgeryInfo) {
-    return schedule.surgeryInfo.procedure;
+    // 手术演示：术式 - 术者1 称谓 / 术者2 称谓 / ...
+    const surgeryInfo = schedule.surgeryInfo;
+    const procedure = surgeryInfo.procedure;
+    
+    // 获取所有术者信息
+    let surgeonsInfo = '';
+    if (surgeryInfo.surgeons && surgeryInfo.surgeons.length > 0) {
+      surgeonsInfo = surgeryInfo.surgeons.map(surgeon => {
+        return `${surgeon.name}${surgeon.title ? ` ${surgeon.title}` : ''}`;
+      }).join(' / ');
+    }
+    
+    return surgeonsInfo ? `${procedure} - ${surgeonsInfo}` : procedure;
   } else if (schedule.type === ScheduleType.LECTURE && schedule.lectureInfo) {
-    return schedule.lectureInfo.topic;
+    // 讲课：讲题 - 讲者 称谓
+    const lectureInfo = schedule.lectureInfo;
+    const topic = lectureInfo.topic;
+    const speaker = lectureInfo.speaker;
+    
+    // 获取讲者信息
+    let speakerInfo = '';
+    if (speaker) {
+      speakerInfo = `${speaker.name}${speaker.title ? ` ${speaker.title}` : ''}`;
+    }
+    
+    return speakerInfo ? `${topic} - ${speakerInfo}` : topic;
   }
+  
   return t('scheduleManager.unnamedSchedule');
 }
 
@@ -367,11 +391,22 @@ function saveSimilarLayouts(layout: Layout): void {
   border-radius: var(--el-border-radius-base);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
   overflow: hidden;
+  border: 1px solid var(--el-border-color-light);
+}
+
+:root.dark .schedule-card {
+  background-color: var(--el-fill-color-darker);
+  border-color: var(--el-border-color);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.3);
 }
 
 .schedule-info {
   padding: 12px;
   border-bottom: 1px solid var(--el-border-color-lighter);
+}
+
+:root.dark .schedule-info {
+  border-bottom-color: var(--el-border-color);
 }
 
 .schedule-header {
@@ -418,6 +453,10 @@ function saveSimilarLayouts(layout: Layout): void {
   padding: 8px;
 }
 
+:root.dark .layout-list {
+  background-color: var(--el-fill-color-dark);
+}
+
 .layout-item {
   width: 50%;
   padding: 4px;
@@ -434,6 +473,12 @@ function saveSimilarLayouts(layout: Layout): void {
   background-color: var(--el-fill-color-light);
   margin-right: 8px;
   position: relative;
+  border: 1px solid var(--el-border-color-lighter);
+}
+
+:root.dark .layout-thumbnail {
+  border-color: var(--el-border-color);
+  background-color: var(--el-fill-color-darker);
 }
 
 .thumbnail-img {
@@ -512,5 +557,10 @@ function saveSimilarLayouts(layout: Layout): void {
   background-color: var(--el-fill-color-light);
   border-radius: var(--el-border-radius-base);
   color: var(--el-text-color-secondary);
+}
+
+:root.dark .empty-state {
+  background-color: var(--el-fill-color-darker);
+  border: 1px solid var(--el-border-color);
 }
 </style> 

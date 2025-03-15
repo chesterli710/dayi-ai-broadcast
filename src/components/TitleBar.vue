@@ -1,9 +1,8 @@
 <template>
   <div class="title-bar">
     <div class="left-section">
-      <button class="back-button" @click="goBack">
-        <i class="fas fa-arrow-left"></i>
-        {{ $t('titleBar.back') }}
+      <button class="back-button" @click="goBack" :title="$t('titleBar.back')">
+        <i class="bi bi-chevron-left"></i>
       </button>
       <div class="info-section">
         <span v-if="planStore.currentChannel">{{ planStore.currentChannel.name }}</span>
@@ -17,7 +16,7 @@
       <LanguageSwitch />
       <ThemeSwitch />
       <div class="user-info">
-        <span>{{ userStore.userInfo?.username || $t('titleBar.notLoggedIn') }}</span>
+        <span>{{ userStore.userInfo?.nickname || $t('titleBar.notLoggedIn') }}</span>
       </div>
     </div>
   </div>
@@ -69,19 +68,22 @@ function goBack() {
 .back-button {
   display: flex;
   align-items: center;
-  gap: 5px;
-  padding: 8px 12px;
-  border: none;
-  border-radius: var(--el-border-radius-base);
-  background-color: var(--el-color-primary);
-  color: white;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--el-border-color);
+  border-radius: 6px;
+  background-color: var(--el-bg-color-page);
+  color: var(--el-text-color-primary);
   cursor: pointer;
-  font-size: var(--el-font-size-base);
-  transition: background-color 0.3s;
+  font-size: 18px;
+  font-weight: bold;
+  transition: all 0.3s;
 }
 
 .back-button:hover {
-  background-color: var(--el-color-primary-dark-2);
+  background-color: var(--el-fill-color-light);
+  border-color: var(--el-border-color-hover);
 }
 
 .info-section {

@@ -14,21 +14,27 @@
         @keyup.enter="handleLogin"
       >
         <el-form-item prop="phone">
-          <el-input
-            v-model="loginForm.phone"
-            :placeholder="$t('login.phonePlaceholder')"
-            prefix-icon="Phone"
-          />
+          <div class="input-with-icon">
+            <i class="bi bi-phone input-icon"></i>
+            <el-input
+              v-model="loginForm.phone"
+              :placeholder="$t('login.phonePlaceholder')"
+              class="custom-input"
+            />
+          </div>
         </el-form-item>
         
         <el-form-item prop="password">
-          <el-input
-            v-model="loginForm.password"
-            :placeholder="$t('login.passwordPlaceholder')"
-            prefix-icon="Lock"
-            type="password"
-            show-password
-          />
+          <div class="input-with-icon">
+            <i class="bi bi-shield-lock input-icon"></i>
+            <el-input
+              v-model="loginForm.password"
+              :placeholder="$t('login.passwordPlaceholder')"
+              type="password"
+              show-password
+              class="custom-input"
+            />
+          </div>
         </el-form-item>
         
         <el-form-item>
@@ -56,6 +62,9 @@ import { useUserStore } from '../stores/userStore'
 import { Phone, Lock } from '@element-plus/icons-vue'
 import type { FormInstance, FormRules } from 'element-plus'
 import { useI18n } from 'vue-i18n'
+
+// 确保引入Bootstrap图标CSS
+import 'bootstrap-icons/font/bootstrap-icons.css'
 
 const { t } = useI18n()
 const userStore = useUserStore()
@@ -137,9 +146,34 @@ const handleLogin = async () => {
   margin-bottom: 20px;
 }
 
+.input-with-icon {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+  
+  .input-icon {
+    position: absolute;
+    left: 10px;
+    font-size: 18px;
+    color: var(--el-text-color-secondary);
+    z-index: 1;
+  }
+  
+  .custom-input {
+    width: 100%;
+    
+    :deep(.el-input__wrapper) {
+      padding-left: 35px;
+      height: 40px;
+    }
+  }
+}
+
 .login-button {
   width: 100%;
   padding: 12px 0;
+  height: 40px;
 }
 
 .login-error {
