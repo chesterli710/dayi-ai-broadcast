@@ -1,66 +1,70 @@
 <template>
   <div class="schedule-manager">
-    <h2 class="schedule-manager-title">日程管理</h2>
-    <div class="schedule-list" v-if="currentBranch && currentBranch.schedules.length > 0">
-      <div 
-        v-for="schedule in currentBranch.schedules" 
-        :key="schedule.id" 
-        class="schedule-card"
-      >
-        <!-- 上区块：信息区块 -->
-        <div class="schedule-info">
-          <div class="schedule-header">
-            <div class="schedule-type-tag" :class="schedule.type">
-              {{ scheduleTypeText(schedule.type) }}
-            </div>
-            <div class="schedule-time">
-              {{ formatDateTime(schedule.plannedStartDateTime) }}
-              <span v-if="schedule.plannedDuration">
-                ({{ schedule.plannedDuration }}分钟)
-              </span>
-            </div>
-          </div>
-          <div class="schedule-title">
-            {{ getScheduleTitle(schedule) }}
-          </div>
-        </div>
-        
-        <!-- 下区块：布局列表区块 -->
-        <div class="layout-list">
-          <div 
-            v-for="(layout, index) in schedule.layouts" 
-            :key="layout.id" 
-            class="layout-item"
-            :class="{ 'layout-item-odd': index % 2 === 0, 'layout-item-even': index % 2 === 1 }"
-          >
-            <div class="layout-thumbnail">
-              <img 
-                :src="getLayoutThumbnail(layout)" 
-                :alt="layout.description || '布局缩略图'" 
-                class="thumbnail-img"
-                @error="handleThumbnailError"
-              />
-              <div class="layout-actions">
-                <button class="edit-button" @click="openLayoutEditor(schedule, layout)">
-                  编辑
-                </button>
+    <div class="panel-header">
+      <h3>{{ $t('scheduleManager.title') }}</h3>
+    </div>
+    <div class="panel-content">
+      <div class="schedule-list" v-if="currentBranch && currentBranch.schedules.length > 0">
+        <div 
+          v-for="schedule in currentBranch.schedules" 
+          :key="schedule.id" 
+          class="schedule-card"
+        >
+          <!-- 上区块：信息区块 -->
+          <div class="schedule-info">
+            <div class="schedule-header">
+              <div class="schedule-type-tag" :class="schedule.type">
+                {{ scheduleTypeText(schedule.type) }}
+              </div>
+              <div class="schedule-time">
+                {{ formatDateTime(schedule.plannedStartDateTime) }}
+                <span v-if="schedule.plannedDuration">
+                  ({{ schedule.plannedDuration }}{{ $t('scheduleManager.minutes') }})
+                </span>
               </div>
             </div>
-            <div class="layout-info">
-              <div class="layout-description">{{ layout.description || '未命名布局' }}</div>
-              <div class="layout-template-name">
-                <span v-if="getLayoutTemplateName(layout.template) !== layout.template">
-                  {{ getLayoutTemplateName(layout.template) }}
-                </span>
-                <span v-else class="template-id">{{ layout.template }}</span>
+            <div class="schedule-title">
+              {{ getScheduleTitle(schedule) }}
+            </div>
+          </div>
+          
+          <!-- 下区块：布局列表区块 -->
+          <div class="layout-list">
+            <div 
+              v-for="(layout, index) in schedule.layouts" 
+              :key="layout.id" 
+              class="layout-item"
+              :class="{ 'layout-item-odd': index % 2 === 0, 'layout-item-even': index % 2 === 1 }"
+            >
+              <div class="layout-thumbnail">
+                <img 
+                  :src="getLayoutThumbnail(layout)" 
+                  :alt="layout.description || $t('scheduleManager.unnamedLayout')" 
+                  class="thumbnail-img"
+                  @error="handleThumbnailError"
+                />
+                <div class="layout-actions">
+                  <button class="edit-button" @click="openLayoutEditor(schedule, layout)">
+                    {{ $t('common.edit') }}
+                  </button>
+                </div>
+              </div>
+              <div class="layout-info">
+                <div class="layout-description">{{ layout.description || $t('scheduleManager.unnamedLayout') }}</div>
+                <div class="layout-template-name">
+                  <span v-if="getLayoutTemplateName(layout.template) !== layout.template">
+                    {{ getLayoutTemplateName(layout.template) }}
+                  </span>
+                  <span v-else class="template-id">{{ layout.template }}</span>
+                </div>
               </div>
             </div>
           </div>
         </div>
       </div>
-    </div>
-    <div class="empty-state" v-else>
-      <p>当前计划分支没有日程</p>
+      <div class="empty-state" v-else>
+        <p>{{ $t('scheduleManager.noSchedules') }}</p>
+      </div>
     </div>
     
     <!-- 布局编辑器Modal -->
@@ -83,7 +87,7 @@ import { useI18n } from 'vue-i18n';
 import LayoutEditorModal from './LayoutEditorModal.vue';
 
 const planStore = usePlanStore();
-const { locale } = useI18n();
+const { locale, t } = useI18n();
 
 // 获取当前分支
 const currentBranch = computed(() => planStore.currentBranch);
@@ -112,11 +116,11 @@ onMounted(() => {
 function scheduleTypeText(type: ScheduleType): string {
   switch (type) {
     case ScheduleType.SURGERY:
-      return '手术演示';
+      return t('scheduleManager.surgeryType');
     case ScheduleType.LECTURE:
-      return '讲课';
+      return t('scheduleManager.lectureType');
     default:
-      return '未知类型';
+      return t('scheduleManager.unknownType');
   }
 }
 
@@ -126,7 +130,7 @@ function scheduleTypeText(type: ScheduleType): string {
  * @returns 格式化后的日期时间字符串
  */
 function formatDateTime(date?: Date): string {
-  if (!date) return '未设置时间';
+  if (!date) return t('scheduleManager.unsetTime');
   
   const d = new Date(date);
   const hours = d.getHours().toString().padStart(2, '0');
@@ -146,7 +150,7 @@ function getScheduleTitle(schedule: Schedule): string {
   } else if (schedule.type === ScheduleType.LECTURE && schedule.lectureInfo) {
     return schedule.lectureInfo.topic;
   }
-  return '未命名日程';
+  return t('scheduleManager.unnamedSchedule');
 }
 
 /**
@@ -324,17 +328,32 @@ function saveSimilarLayouts(layout: Layout): void {
 
 <style scoped>
 .schedule-manager {
-  padding: 16px;
   height: 100%;
-  overflow-y: auto;
+  border: 1px solid var(--el-border-color);
+  border-radius: var(--el-border-radius-base);
+  background-color: var(--el-bg-color);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
-.schedule-manager-title {
-  margin-top: 0;
-  margin-bottom: 16px;
-  font-size: 18px;
+.panel-header {
+  padding: 10px 15px;
+  border-bottom: 1px solid var(--el-border-color);
+  background-color: var(--el-fill-color-light);
+}
+
+.panel-header h3 {
+  margin: 0;
+  font-size: 16px;
   font-weight: bold;
-  color: #333;
+  color: var(--el-text-color-primary);
+}
+
+.panel-content {
+  flex: 1;
+  padding: 15px;
+  overflow-y: auto;
 }
 
 .schedule-list {
@@ -344,15 +363,15 @@ function saveSimilarLayouts(layout: Layout): void {
 }
 
 .schedule-card {
-  background-color: #fff;
-  border-radius: 8px;
+  background-color: var(--el-bg-color);
+  border-radius: var(--el-border-radius-base);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
   overflow: hidden;
 }
 
 .schedule-info {
   padding: 12px;
-  border-bottom: 1px solid #f0f0f0;
+  border-bottom: 1px solid var(--el-border-color-lighter);
 }
 
 .schedule-header {
@@ -365,29 +384,29 @@ function saveSimilarLayouts(layout: Layout): void {
 .schedule-type-tag {
   display: inline-block;
   padding: 2px 8px;
-  border-radius: 4px;
-  font-size: 12px;
+  border-radius: var(--el-border-radius-small);
+  font-size: var(--el-font-size-extra-small);
   font-weight: 500;
   color: #fff;
 }
 
 .schedule-type-tag.surgery {
-  background-color: #1890ff;
+  background-color: var(--el-color-primary);
 }
 
 .schedule-type-tag.lecture {
-  background-color: #52c41a;
+  background-color: var(--el-color-success);
 }
 
 .schedule-time {
-  font-size: 12px;
-  color: #666;
+  font-size: var(--el-font-size-extra-small);
+  color: var(--el-text-color-secondary);
 }
 
 .schedule-title {
-  font-size: 14px;
+  font-size: var(--el-font-size-base);
   font-weight: 500;
-  color: #333;
+  color: var(--el-text-color-primary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -410,9 +429,9 @@ function saveSimilarLayouts(layout: Layout): void {
 .layout-thumbnail {
   width: 60px;
   height: 40px;
-  border-radius: 4px;
+  border-radius: var(--el-border-radius-small);
   overflow: hidden;
-  background-color: #f5f5f5;
+  background-color: var(--el-fill-color-light);
   margin-right: 8px;
   position: relative;
 }
@@ -442,17 +461,17 @@ function saveSimilarLayouts(layout: Layout): void {
 }
 
 .edit-button {
-  background-color: #1976d2;
+  background-color: var(--el-color-primary);
   color: #fff;
   border: none;
-  border-radius: 4px;
+  border-radius: var(--el-border-radius-small);
   padding: 2px 8px;
-  font-size: 12px;
+  font-size: var(--el-font-size-extra-small);
   cursor: pointer;
 }
 
 .edit-button:hover {
-  background-color: #1565c0;
+  background-color: var(--el-color-primary-dark-2);
 }
 
 .layout-info {
@@ -461,25 +480,25 @@ function saveSimilarLayouts(layout: Layout): void {
 }
 
 .layout-description {
-  font-size: 12px;
+  font-size: var(--el-font-size-small);
   font-weight: 500;
-  color: #333;
+  color: var(--el-text-color-primary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .layout-template-name {
-  font-size: 11px;
-  color: #666;
+  font-size: var(--el-font-size-extra-small);
+  color: var(--el-text-color-secondary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .template-id {
-  font-size: 11px;
-  color: #999;
+  font-size: var(--el-font-size-extra-small);
+  color: var(--el-text-color-placeholder);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -490,8 +509,8 @@ function saveSimilarLayouts(layout: Layout): void {
   justify-content: center;
   align-items: center;
   height: 200px;
-  background-color: #f9f9f9;
-  border-radius: 8px;
-  color: #999;
+  background-color: var(--el-fill-color-light);
+  border-radius: var(--el-border-radius-base);
+  color: var(--el-text-color-secondary);
 }
 </style> 

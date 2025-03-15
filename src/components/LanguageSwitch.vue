@@ -1,88 +1,72 @@
 <template>
   <div class="language-switch">
-    <el-dropdown @command="handleLanguageChange">
-      <span class="language-dropdown-link">
-        {{ currentLanguageLabel }}
-        <el-icon class="el-icon--right">
-          <arrow-down />
-        </el-icon>
-      </span>
-      <template #dropdown>
-        <el-dropdown-menu>
-          <el-dropdown-item
-            v-for="lang in languageOptions"
-            :key="lang.value"
-            :command="lang.value"
-            :class="{ 'is-active': currentLanguage === lang.value }"
-          >
-            {{ lang.label }}
-          </el-dropdown-item>
-        </el-dropdown-menu>
-      </template>
-    </el-dropdown>
+    <el-tooltip :content="$t('languageSwitch.tooltip')" placement="bottom">
+      <el-button circle @click="toggleLanguage">
+        <span class="language-icon">{{ currentLocale === 'zh-CN' ? 'EN' : '中' }}</span>
+      </el-button>
+    </el-tooltip>
   </div>
 </template>
 
-<script lang="ts">
-import { defineComponent, computed } from 'vue'
-import { useAppStore } from '../stores/appStore'
-import { languageOptions } from '../locales'
-import { ArrowDown } from '@element-plus/icons-vue'
-
+<script setup lang="ts">
 /**
  * 语言切换组件
- * 用于切换应用的语言
+ * 用于在中文和英文之间切换
  */
-export default defineComponent({
-  name: 'LanguageSwitch',
-  components: {
-    ArrowDown
-  },
-  setup() {
-    const appStore = useAppStore()
-    
-    // 当前语言
-    const currentLanguage = computed(() => appStore.currentLanguage)
-    
-    // 当前语言标签
-    const currentLanguageLabel = computed(() => {
-      const lang = languageOptions.find(lang => lang.value === currentLanguage.value)
-      return lang ? lang.label : languageOptions[0].label
-    })
-    
-    // 处理语言变更
-    const handleLanguageChange = (command: string) => {
-      if (command === 'zh-CN' || command === 'en-US') {
-        appStore.switchLanguage(command)
-      }
-    }
-    
-    return {
-      currentLanguage,
-      currentLanguageLabel,
-      languageOptions,
-      handleLanguageChange
-    }
-  }
-})
+import { ref, computed } from 'vue';
+import { useI18n } from 'vue-i18n';
+import { useAppStore } from '../stores/appStore';
+
+const appStore = useAppStore();
+const { locale, t } = useI18n();
+
+// 当前语言
+const currentLocale = computed(() => locale.value);
+
+// 当前是否为暗黑模式
+const isDarkMode = computed(() => appStore.isDarkMode);
+
+/**
+ * 切换语言
+ */
+function toggleLanguage() {
+  const newLocale = currentLocale.value === 'zh-CN' ? 'en-US' : 'zh-CN';
+  locale.value = newLocale;
+  appStore.switchLanguage(newLocale);
+}
 </script>
 
 <style scoped>
 .language-switch {
-  display: inline-flex;
-  align-items: center;
-}
-
-.language-dropdown-link {
   display: flex;
   align-items: center;
-  cursor: pointer;
-  color: var(--text-color);
-  font-size: 14px;
 }
 
-.is-active {
-  color: var(--el-color-primary);
+.language-switch .el-button {
+  background-color: transparent;
+  border-color: var(--el-border-color);
+  color: var(--el-text-color-primary);
   font-weight: bold;
+}
+
+.language-switch .el-button:hover {
+  background-color: var(--el-fill-color-light);
+  border-color: var(--el-border-color-hover);
+}
+
+.language-icon {
+  font-size: 14px;
+  font-weight: bold;
+}
+
+/* 暗黑模式下的样式 */
+:root.dark .language-switch .el-button {
+  border-color: rgba(255, 255, 255, 0.3);
+  color: #fff;
+}
+
+:root.dark .language-switch .el-button:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.5);
 }
 </style> 

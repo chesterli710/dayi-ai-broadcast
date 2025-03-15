@@ -60,5 +60,75 @@ export default {
     unknown: '未知',
     yes: '是',
     no: '否'
+  },
+  titleBar: {
+    back: '返回',
+    notLoggedIn: '未登录'
+  },
+  themeSwitch: {
+    toDarkMode: '切换到暗色模式',
+    toLightMode: '切换到亮色模式'
+  },
+  languageSwitch: {
+    tooltip: '切换语言'
+  },
+  scheduleManager: {
+    title: '日程管理',
+    noSchedules: '当前计划分支没有日程',
+    surgeryType: '手术演示',
+    lectureType: '讲课',
+    unknownType: '未知类型',
+    unnamedSchedule: '未命名日程',
+    unnamedLayout: '未命名布局',
+    minutes: '分钟',
+    unsetTime: '未设置时间'
+  },
+  layoutEditor: {
+    title: '布局编辑器',
+    mediaSources: '媒体源',
+    refreshing: '刷新中...',
+    refresh: '刷新',
+    dragHint: '拖放媒体源到此处',
+    deleteSource: '删除媒体源',
+    preview: '预览',
+    live: '直播',
+    streaming: '直播中',
+    notStarted: '未开始',
+    saveOptions: '保存布局',
+    saveCurrentOnly: '仅保存当前布局',
+    saveCurrentDesc: '将编辑应用到当前布局，其他布局不受影响',
+    saveSimilar: '保存到相似布局',
+    saveSimilarDesc: '将编辑应用到所有相同类型和模板的布局',
+    noAvailableSources: '没有可用的{type}'
+  },
+  statusBar: {
+    network: '正常',
+    video: '正常',
+    audio: '正常',
+    stream: '未开始'
+  },
+  liveControlPanel: {
+    title: '直播控制',
+    emptyText: '直播控制面板开发中',
+    startLive: '开始直播',
+    stopLive: '停止直播',
+    streamSettings: '推流设置',
+    recordSettings: '录制设置',
+    streamStatus: '推流状态',
+    bitrate: '码率',
+    fps: '帧率',
+    resolution: '分辨率',
+    codec: '编码器'
+  },
+  audioPanel: {
+    title: '音频控制',
+    noDevices: '没有可用的音频设备',
+    volume: '音量',
+    mute: '静音',
+    deviceTypes: {
+      microphone: '麦克风',
+      systemAudio: '系统音频',
+      unknown: '未知设备'
+    }
   }
 } 

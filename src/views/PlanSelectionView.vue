@@ -3,6 +3,8 @@
     <header class="header">
       <h1>{{ t('app.name') }}</h1>
       <div class="user-info">
+        <ThemeSwitch />
+        <LanguageSwitch />
         <span>{{ userInfo.name }}</span>
         <el-button link @click="handleLogout">{{ t('planSelection.logout') }}</el-button>
       </div>
@@ -97,14 +99,22 @@ import { useI18n } from 'vue-i18n'
 import planApi from '../api/plan'
 import type { Channel, Plan, Branch } from '../types/broadcast'
 import { usePlanStore } from '../stores/planStore'
+import { useAppStore } from '../stores/appStore'
+import ThemeSwitch from '../components/ThemeSwitch.vue'
+import LanguageSwitch from '../components/LanguageSwitch.vue'
 
 export default defineComponent({
   name: 'PlanSelectionView',
+  components: {
+    ThemeSwitch,
+    LanguageSwitch
+  },
   
   setup() {
     const router = useRouter()
     const { t } = useI18n()
     const planStore = usePlanStore()
+    const appStore = useAppStore()
     const channels = ref<Channel[]>([])
     const loading = ref(true)
     const error = ref('')
@@ -310,7 +320,7 @@ export default defineComponent({
 }
 
 .channel-card {
-  background-color: #fff;
+  background-color: var(--el-bg-color);
   border-radius: 8px;
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
   overflow: hidden;
@@ -334,7 +344,7 @@ export default defineComponent({
 .plan-card {
   display: flex;
   flex-direction: column;
-  background-color: #fff;
+  background-color: var(--el-bg-color);
   border-radius: 8px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
   overflow: hidden;
@@ -403,6 +413,7 @@ export default defineComponent({
   margin: 0 0 8px 0;
   font-size: 16px;
   font-weight: bold;
+  color: var(--el-text-color-primary);
 }
 
 .plan-time {
@@ -410,6 +421,7 @@ export default defineComponent({
   align-items: center;
   gap: 8px;
   font-size: 14px;
+  color: var(--el-text-color-secondary);
 }
 
 .branches-list {
@@ -434,14 +446,14 @@ export default defineComponent({
   justify-content: space-between;
   align-items: center;
   padding: 12px;
-  background-color: #fff;
+  background-color: var(--el-bg-color-overlay);
   border-radius: 4px;
   cursor: pointer;
   transition: background-color 0.3s;
 }
 
 .branch-item:hover {
-  background-color: #ecf5ff;
+  background-color: var(--el-color-primary-light-9);
 }
 
 .branch-info {

@@ -3,7 +3,7 @@
     <div class="modal-overlay" @click="handleClose"></div>
     <div class="modal-container">
       <div class="modal-header">
-        <h2 class="modal-title">布局编辑器</h2>
+        <h2 class="modal-title">{{ $t('layoutEditor.title') }}</h2>
         <button class="close-button" @click="handleClose">
           <span class="close-icon">×</span>
         </button>
@@ -37,7 +37,7 @@
                 v-if="element.sourceId && hoveredElement === element.id" 
                 class="delete-source-button"
                 @click.stop="clearMediaElement(element)"
-                title="删除媒体源"
+                :title="$t('layoutEditor.deleteSource')"
               >
                 <i class="bi bi-trash" style="font-size: 18px; color: #ffffff;"></i>
               </div>
@@ -68,7 +68,7 @@
               <!-- 如果没有媒体源，显示提示 -->
               <div v-else class="placeholder-hint">
                 <div class="placeholder-icon">+</div>
-                <div class="placeholder-text">拖放媒体源到此处</div>
+                <div class="placeholder-text">{{ $t('layoutEditor.dragHint') }}</div>
               </div>
             </div>
           </div>
@@ -77,10 +77,10 @@
         <!-- 右侧媒体源列表 -->
         <div class="media-sources-container">
           <div class="sources-header">
-            <h3>媒体源</h3>
+            <h3>{{ $t('layoutEditor.mediaSources') }}</h3>
             <button class="refresh-button" @click="refreshSources" :disabled="isRefreshing">
-              <span v-if="isRefreshing">刷新中...</span>
-              <span v-else>刷新</span>
+              <span v-if="isRefreshing">{{ $t('layoutEditor.refreshing') }}</span>
+              <span v-else>{{ $t('layoutEditor.refresh') }}</span>
             </button>
           </div>
           
@@ -154,7 +154,7 @@
                 
                 <!-- 空状态 -->
                 <div v-if="group.sources.length === 0" class="empty-sources">
-                  <p>没有可用的{{ group.title }}</p>
+                  <p>{{ $t('layoutEditor.noAvailableSources', { type: group.title }) }}</p>
                 </div>
               </div>
             </div>
@@ -163,27 +163,41 @@
       </div>
       
       <div class="modal-footer">
-        <button class="cancel-button" @click="handleClose">取消</button>
-        <button class="save-button" @click="showSaveOptions">保存</button>
+        <button class="cancel-button" @click="handleClose">{{ $t('common.cancel') }}</button>
+        <button class="save-button" @click="showSaveOptions">{{ $t('common.save') }}</button>
       </div>
       
       <!-- 保存选项对话框 -->
       <div class="save-options-dialog" v-if="showingSaveOptions">
         <div class="dialog-overlay" @click="showingSaveOptions = false"></div>
         <div class="dialog-container">
-          <h3 class="dialog-title">保存选项</h3>
-          <div class="dialog-content">
-            <div class="save-option">
-              <button class="save-current-button" @click="saveCurrentLayout">仅保存当前布局</button>
-              <p class="option-description">将编辑应用到当前布局</p>
-            </div>
-            <div class="save-option">
-              <button class="save-similar-button" @click="saveSimilarLayouts">保存相似布局</button>
-              <p class="option-description">将编辑应用到所有相同类型和模板的布局</p>
-            </div>
+          <div class="dialog-header">
+            <h3 class="dialog-title">{{ $t('layoutEditor.saveOptions') }}</h3>
+            <button class="dialog-close-button" @click="showingSaveOptions = false">
+              <i class="bi bi-x" style="font-size: 20px;"></i>
+            </button>
           </div>
-          <div class="dialog-footer">
-            <button class="cancel-button" @click="showingSaveOptions = false">取消</button>
+          <div class="dialog-content">
+            <div class="save-options">
+              <div class="save-option" @click="saveCurrentLayout">
+                <div class="option-icon">
+                  <i class="bi bi-file-earmark-check" style="font-size: 24px;"></i>
+                </div>
+                <div class="option-info">
+                  <h4 class="option-title">{{ $t('layoutEditor.saveCurrentOnly') }}</h4>
+                  <p class="option-description">{{ $t('layoutEditor.saveCurrentDesc') }}</p>
+                </div>
+              </div>
+              <div class="save-option" @click="saveSimilarLayouts">
+                <div class="option-icon">
+                  <i class="bi bi-files" style="font-size: 24px;"></i>
+                </div>
+                <div class="option-info">
+                  <h4 class="option-title">{{ $t('layoutEditor.saveSimilar') }}</h4>
+                  <p class="option-description">{{ $t('layoutEditor.saveSimilarDesc') }}</p>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -195,11 +209,14 @@
 import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue';
 import { usePlanStore } from '../stores/planStore';
 import { useVideoStore } from '../stores/videoStore';
+import { useI18n } from 'vue-i18n';
 import type { Layout, LayoutElement, MediaLayoutElement } from '../types/broadcast';
 import { LayoutElementType } from '../types/broadcast';
 import type { VideoDevice } from '../types/video';
 import { VideoSourceType } from '../types/video';
 import videoDeviceManager from '../utils/videoDeviceManager';
+
+const { t } = useI18n();
 
 // Props
 const props = defineProps<{
@@ -347,6 +364,9 @@ async function initializeVideoSources() {
     
     // 确保所有视频元素都在播放
     await ensureAllVideosPlaying();
+    
+    // 为摄像头设备添加额外的处理，确保它们在布局预览区域中显示
+    await ensureCameraStreamsInPreview();
   } catch (error) {
     console.error('[LayoutEditorModal.vue 布局编辑器] 初始化视频源失败:', error);
   } finally {
@@ -586,11 +606,30 @@ async function previewSource(source: VideoDevice) {
  * @param deviceId 设备ID
  */
 async function activateCamera(deviceId: string) {
-  // 检查设备是否已激活
-  const isActive = videoStore.activeDevices.some(d => d.id === deviceId);
-  
-  if (!isActive) {
-    await activateDeviceAndSetStream(deviceId, VideoSourceType.CAMERA, `video-preview-${deviceId}`);
+  try {
+    // 检查设备是否已激活
+    const isActive = videoStore.activeDevices.some(d => d.id === deviceId);
+    
+    if (!isActive) {
+      // 如果设备未激活，激活设备并设置视频流
+      await activateDeviceAndSetStream(deviceId, VideoSourceType.CAMERA, `video-preview-${deviceId}`);
+    } else {
+      // 如果设备已激活，确保视频元素有正确的流
+      const activeDevice = videoStore.activeDevices.find(d => d.id === deviceId);
+      if (activeDevice && activeDevice.stream) {
+        const videoElement = document.getElementById(`video-preview-${deviceId}`) as HTMLVideoElement | null;
+        if (videoElement) {
+          // 如果视频元素存在但没有视频流或已暂停，设置流并播放
+          if (!videoElement.srcObject || videoElement.paused) {
+            videoElement.srcObject = activeDevice.stream;
+            await playVideoElement(videoElement, deviceId);
+            console.log(`[LayoutEditorModal.vue 布局编辑器] 为已激活的摄像头设置视频流: ${deviceId}`);
+          }
+        }
+      }
+    }
+  } catch (error) {
+    console.error(`[LayoutEditorModal.vue 布局编辑器] 激活摄像头失败 (ID: ${deviceId}):`, error);
   }
 }
 
@@ -833,6 +872,46 @@ async function clearMediaElement(element: MediaLayoutElement) {
   
   console.log(`[LayoutEditorModal.vue 布局编辑器] 已清除媒体元素 ${element.id}`);
 }
+
+/**
+ * 确保摄像头流在预览区域中显示
+ * 这个函数专门处理摄像头设备，确保它们在布局预览区域中正确显示
+ */
+async function ensureCameraStreamsInPreview() {
+  try {
+    // 等待DOM更新
+    await nextTick();
+    
+    // 遍历所有媒体元素，找出摄像头类型的元素
+    for (const element of mediaElements.value) {
+      if (element.sourceId && element.sourceType === VideoSourceType.CAMERA) {
+        // 获取对应的视频元素
+        const videoElement = document.getElementById(`video-preview-${element.sourceId}`) as HTMLVideoElement | null;
+        
+        // 如果视频元素存在但没有视频流
+        if (videoElement && (!videoElement.srcObject || videoElement.paused)) {
+          console.log(`[LayoutEditorModal.vue 布局编辑器] 尝试恢复摄像头流: ${element.sourceId}`);
+          
+          // 查找活跃设备中是否有对应的摄像头
+          const activeDevice = videoStore.activeDevices.find(d => d.id === element.sourceId);
+          
+          if (activeDevice && activeDevice.stream) {
+            // 如果设备已激活且有流，直接使用现有流
+            videoElement.srcObject = activeDevice.stream;
+            await playVideoElement(videoElement, element.sourceId);
+            console.log(`[LayoutEditorModal.vue 布局编辑器] 使用现有摄像头流: ${element.sourceId}`);
+          } else {
+            // 如果设备未激活或没有流，重新激活
+            await activateDeviceAndSetStream(element.sourceId, VideoSourceType.CAMERA, `video-preview-${element.sourceId}`);
+            console.log(`[LayoutEditorModal.vue 布局编辑器] 重新激活摄像头: ${element.sourceId}`);
+          }
+        }
+      }
+    }
+  } catch (error) {
+    console.error('[LayoutEditorModal.vue 布局编辑器] 确保摄像头流在预览区域显示失败:', error);
+  }
+}
 </script>
 
 <style scoped>
@@ -854,15 +933,15 @@ async function clearMediaElement(element: MediaLayoutElement) {
   left: 0;
   width: 100%;
   height: 100%;
-  background-color: rgba(0, 0, 0, 0.5);
+  background-color: var(--el-mask-color, rgba(0, 0, 0, 0.5));
 }
 
 .modal-container {
   position: relative;
   width: 90%;
   height: 90%;
-  background-color: #fff;
-  border-radius: 8px;
+  background-color: var(--el-bg-color, #fff);
+  border-radius: var(--el-border-radius-base, 8px);
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
   display: flex;
   flex-direction: column;
@@ -871,7 +950,7 @@ async function clearMediaElement(element: MediaLayoutElement) {
 
 .modal-header {
   padding: 16px;
-  border-bottom: 1px solid #eee;
+  border-bottom: 1px solid var(--el-border-color-light, #eee);
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -881,6 +960,7 @@ async function clearMediaElement(element: MediaLayoutElement) {
   margin: 0;
   font-size: 18px;
   font-weight: 600;
+  color: var(--el-text-color-primary, #303133);
 }
 
 .close-button {
@@ -888,11 +968,11 @@ async function clearMediaElement(element: MediaLayoutElement) {
   border: none;
   font-size: 24px;
   cursor: pointer;
-  color: #666;
+  color: var(--el-text-color-secondary, #666);
 }
 
 .close-button:hover {
-  color: #333;
+  color: var(--el-text-color-primary, #333);
 }
 
 .modal-content {
@@ -907,13 +987,13 @@ async function clearMediaElement(element: MediaLayoutElement) {
   display: flex;
   justify-content: center;
   align-items: center;
-  background-color: #f5f5f5;
+  background-color: var(--el-fill-color-light, #f5f5f5);
   overflow: auto;
 }
 
 .layout-preview {
   position: relative;
-  background-color: #000;
+  background-color: var(--el-fill-color-darker, #000);
   background-size: cover;
   background-position: center;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
@@ -921,8 +1001,8 @@ async function clearMediaElement(element: MediaLayoutElement) {
 
 .media-element-placeholder {
   position: absolute;
-  border: 2px dashed #aaa;
-  background-color: rgba(0, 0, 0, 0.2);
+  border: 2px dashed var(--el-border-color, #aaa);
+  background-color: var(--el-mask-color-extra-light, rgba(0, 0, 0, 0.2));
   display: flex;
   justify-content: center;
   align-items: center;
@@ -930,7 +1010,7 @@ async function clearMediaElement(element: MediaLayoutElement) {
 }
 
 .media-element-placeholder.has-source {
-  background-color: #000;
+  background-color: var(--el-fill-color-darker, #000);
   display: flex;
   justify-content: center;
   align-items: center;
@@ -942,14 +1022,14 @@ async function clearMediaElement(element: MediaLayoutElement) {
   width: 100%;
   height: 100%;
   object-fit: contain;
-  background-color: #000;
+  background-color: var(--el-fill-color-darker, #000);
 }
 
 .placeholder-hint {
   display: flex;
   flex-direction: column;
   align-items: center;
-  color: #fff;
+  color: var(--el-text-color-primary, #fff);
   text-align: center;
 }
 
@@ -967,13 +1047,13 @@ video.media-preview {
   width: 100%;
   height: 100%;
   object-fit: contain;
-  background-color: #000;
+  background-color: var(--el-fill-color-darker, #000);
   display: block; /* 确保视频元素正确显示 */
 }
 
 .media-sources-container {
   width: 320px;
-  border-left: 1px solid #eee;
+  border-left: 1px solid var(--el-border-color-light, #eee);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -981,7 +1061,7 @@ video.media-preview {
 
 .sources-header {
   padding: 16px;
-  border-bottom: 1px solid #eee;
+  border-bottom: 1px solid var(--el-border-color-light, #eee);
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -990,18 +1070,20 @@ video.media-preview {
 .sources-header h3 {
   margin: 0;
   font-size: 16px;
+  color: var(--el-text-color-primary, #303133);
 }
 
 .refresh-button {
   padding: 4px 8px;
-  background-color: #f0f0f0;
-  border: 1px solid #ddd;
-  border-radius: 4px;
+  background-color: var(--el-fill-color-light, #f0f0f0);
+  border: 1px solid var(--el-border-color, #ddd);
+  border-radius: var(--el-border-radius-small, 4px);
   cursor: pointer;
+  color: var(--el-text-color-primary, #303133);
 }
 
 .refresh-button:hover {
-  background-color: #e0e0e0;
+  background-color: var(--el-fill-color, #e0e0e0);
 }
 
 .refresh-button:disabled {
@@ -1022,7 +1104,7 @@ video.media-preview {
 .group-title {
   margin: 16px 0 8px;
   font-size: 14px;
-  color: #666;
+  color: var(--el-text-color-secondary, #666);
 }
 
 .source-list {
@@ -1032,14 +1114,14 @@ video.media-preview {
 }
 
 .source-item {
-  border: 1px solid #ddd;
-  border-radius: 4px;
+  border: 1px solid var(--el-border-color, #ddd);
+  border-radius: var(--el-border-radius-small, 4px);
   overflow: hidden;
   cursor: pointer;
   transition: transform 0.2s;
   display: flex;
   flex-direction: column;
-  background-color: #fff;
+  background-color: var(--el-bg-color, #fff);
 }
 
 .source-item:hover {
@@ -1051,7 +1133,7 @@ video.media-preview {
   width: 100%;
   height: 80px;
   object-fit: cover;
-  background-color: #000;
+  background-color: var(--el-fill-color-darker, #000);
   display: block; /* 确保视频元素正确显示 */
 }
 
@@ -1069,11 +1151,11 @@ video.source-preview {
   width: 100%;
   height: 80px;
   overflow: hidden;
-  border-radius: 4px;
+  border-radius: var(--el-border-radius-small, 4px);
   display: flex;
   justify-content: center;
   align-items: center;
-  background-color: #000;
+  background-color: var(--el-fill-color-darker, #000);
 }
 
 .source-preview-container.window-capture video,
@@ -1093,35 +1175,22 @@ video.source-preview {
   object-fit: contain;
 }
 
-.source-preview-container.window-capture {
-  background-color: #000;
-}
-
-.source-preview-container.display-capture {
-  background-color: #000;
-}
-
 .source-placeholder {
   display: flex;
   flex-direction: column;
   justify-content: center;
   align-items: center;
-  background-color: #2c3e50;
+  background-color: var(--el-color-primary-dark-2, #2c3e50);
   height: 80px;
   width: 100%;
   padding: 8px;
-  color: #fff;
-  border-radius: 4px;
-}
-
-.placeholder-icon {
-  font-size: 24px;
-  margin-bottom: 8px;
+  color: var(--el-color-white, #fff);
+  border-radius: var(--el-border-radius-small, 4px);
 }
 
 .placeholder-text {
   font-size: 12px;
-  color: #fff;
+  color: var(--el-color-white, #fff);
   text-align: center;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1136,9 +1205,9 @@ video.source-preview {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  background-color: #f9f9f9;
-  border-top: 1px solid #e0e0e0;
-  color: #333;
+  background-color: var(--el-fill-color-light, #f9f9f9);
+  border-top: 1px solid var(--el-border-color-light, #e0e0e0);
+  color: var(--el-text-color-primary, #333);
   font-weight: 500;
   text-align: center;
 }
@@ -1146,14 +1215,14 @@ video.source-preview {
 .empty-sources {
   padding: 16px;
   text-align: center;
-  color: #999;
-  background-color: #f9f9f9;
-  border-radius: 4px;
+  color: var(--el-text-color-secondary, #999);
+  background-color: var(--el-fill-color-light, #f9f9f9);
+  border-radius: var(--el-border-radius-small, 4px);
 }
 
 .modal-footer {
   padding: 16px;
-  border-top: 1px solid #eee;
+  border-top: 1px solid var(--el-border-color-light, #eee);
   display: flex;
   justify-content: flex-end;
   gap: 8px;
@@ -1161,23 +1230,24 @@ video.source-preview {
 
 .cancel-button {
   padding: 8px 16px;
-  background-color: #f0f0f0;
-  border: 1px solid #ddd;
-  border-radius: 4px;
+  background-color: var(--el-fill-color-light, #f0f0f0);
+  border: 1px solid var(--el-border-color, #ddd);
+  border-radius: var(--el-border-radius-small, 4px);
   cursor: pointer;
+  color: var(--el-text-color-primary, #303133);
 }
 
 .save-button {
   padding: 8px 16px;
-  background-color: #1976d2;
-  color: #fff;
+  background-color: var(--el-color-primary, #1976d2);
+  color: var(--el-color-white, #fff);
   border: none;
-  border-radius: 4px;
+  border-radius: var(--el-border-radius-small, 4px);
   cursor: pointer;
 }
 
 .save-button:hover {
-  background-color: #1565c0;
+  background-color: var(--el-color-primary-dark-2, #1565c0);
 }
 
 .save-options-dialog {
@@ -1198,59 +1268,143 @@ video.source-preview {
   left: 0;
   width: 100%;
   height: 100%;
-  background-color: rgba(0, 0, 0, 0.5);
+  background-color: var(--el-mask-color, rgba(0, 0, 0, 0.5));
+  backdrop-filter: blur(2px);
 }
 
 .dialog-container {
   position: relative;
-  width: 400px;
-  background-color: #fff;
-  border-radius: 8px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
-  padding: 20px;
+  width: 450px;
+  background-color: var(--el-bg-color, #fff);
+  border-radius: var(--el-border-radius-base, 12px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+  overflow: hidden;
+  animation: dialog-fade-in 0.25s ease-out;
+  transform-origin: center;
+}
+
+@keyframes dialog-fade-in {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.dialog-header {
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--el-border-color-light, #ebeef5);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 }
 
 .dialog-title {
-  margin-top: 0;
-  margin-bottom: 16px;
+  margin: 0;
   font-size: 18px;
+  font-weight: 600;
+  color: var(--el-text-color-primary, #303133);
+}
+
+.dialog-close-button {
+  background: none;
+  border: none;
+  color: var(--el-text-color-secondary, #909399);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  transition: all 0.2s;
+}
+
+.dialog-close-button:hover {
+  background-color: var(--el-fill-color-light, #f5f7fa);
+  color: var(--el-text-color-primary, #303133);
+}
+
+.dialog-content {
+  padding: 24px;
+}
+
+.save-options {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
 
 .save-option {
-  margin-bottom: 16px;
-}
-
-.save-current-button,
-.save-similar-button {
-  width: 100%;
-  padding: 12px;
-  margin-bottom: 8px;
-  border: none;
-  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  padding: 16px;
+  border-radius: 8px;
+  background-color: var(--el-fill-color-light, #f5f7fa);
   cursor: pointer;
-  font-size: 14px;
+  transition: all 0.2s;
+  border: 2px solid transparent;
 }
 
-.save-current-button {
-  background-color: #4caf50;
-  color: #fff;
+.save-option:hover {
+  background-color: var(--el-fill-color, #f0f2f5);
+  border-color: var(--el-color-primary-light-5, #a0cfff);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
 }
 
-.save-similar-button {
-  background-color: #ff9800;
-  color: #fff;
+.save-option:active {
+  transform: translateY(0);
+}
+
+.option-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  margin-right: 16px;
+  background-color: var(--el-color-primary-light-9, #ecf5ff);
+  color: var(--el-color-primary, #409eff);
+}
+
+.save-option:first-child .option-icon {
+  background-color: var(--el-color-success-light-9, #f0f9eb);
+  color: var(--el-color-success, #67c23a);
+}
+
+.save-option:last-child .option-icon {
+  background-color: var(--el-color-warning-light-9, #fdf6ec);
+  color: var(--el-color-warning, #e6a23c);
+}
+
+.option-info {
+  flex: 1;
+}
+
+.option-title {
+  margin: 0 0 4px 0;
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--el-text-color-primary, #303133);
 }
 
 .option-description {
   margin: 0;
-  font-size: 12px;
-  color: #666;
+  font-size: 13px;
+  color: var(--el-text-color-secondary, #909399);
+  line-height: 1.5;
 }
 
+/* 删除不再需要的样式 */
+.save-current-button,
+.save-similar-button,
 .dialog-footer {
-  margin-top: 16px;
-  display: flex;
-  justify-content: flex-end;
+  display: none;
 }
 
 .delete-source-button {
@@ -1259,8 +1413,8 @@ video.source-preview {
   right: 5px;
   width: 28px;
   height: 28px;
-  background-color: rgba(220, 53, 69, 0.8);
-  border-radius: 4px;
+  background-color: var(--el-color-danger, rgba(220, 53, 69, 0.8));
+  border-radius: var(--el-border-radius-small, 4px);
   display: flex;
   justify-content: center;
   align-items: center;
@@ -1271,19 +1425,7 @@ video.source-preview {
 }
 
 .delete-source-button:hover {
-  background-color: rgba(220, 53, 69, 1);
+  background-color: var(--el-color-danger-dark-2, rgba(220, 53, 69, 1));
   transform: scale(1.1);
-}
-
-.trash-icon {
-  width: 18px;
-  height: 18px;
-}
-
-.delete-icon {
-  color: white;
-  font-size: 16px;
-  font-weight: bold;
-  line-height: 1;
 }
 </style> 

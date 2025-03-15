@@ -51,15 +51,6 @@ class RouterConfig {
       }
     },
     {
-      path: '/icons',
-      name: 'IconPreview',
-      component: () => import('../components/SvgIconPreview.vue'),
-      meta: {
-        title: 'SVG图标预览',
-        requiresAuth: false
-      }
-    },
-    {
       path: '/:pathMatch(.*)*',
       name: 'NotFound',
       redirect: '/plan-selection',

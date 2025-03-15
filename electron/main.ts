@@ -55,10 +55,10 @@ class MainProcess {
    */
   createWindow() {
     this.mainWindow = new BrowserWindow({
-      width: 1600,
-      height: 1000,
-      minWidth: 1600,
-      minHeight: 1000,
+      width: 1280,
+      height: 800,
+      minWidth: 1280,
+      minHeight: 800,
       webPreferences: {
         preload: path.join(__dirname, 'preload.js'),
         nodeIntegration: false,

@@ -60,5 +60,75 @@ export default {
     unknown: 'Unknown',
     yes: 'Yes',
     no: 'No'
+  },
+  titleBar: {
+    back: 'Back',
+    notLoggedIn: 'Not Logged In'
+  },
+  themeSwitch: {
+    toDarkMode: 'Switch to Dark Mode',
+    toLightMode: 'Switch to Light Mode'
+  },
+  languageSwitch: {
+    tooltip: 'Switch Language'
+  },
+  scheduleManager: {
+    title: 'Schedule Manager',
+    noSchedules: 'No schedules in current plan branch',
+    surgeryType: 'Surgery Demo',
+    lectureType: 'Lecture',
+    unknownType: 'Unknown Type',
+    unnamedSchedule: 'Unnamed Schedule',
+    unnamedLayout: 'Unnamed Layout',
+    minutes: 'minutes',
+    unsetTime: 'Time not set'
+  },
+  layoutEditor: {
+    title: 'Layout Editor',
+    mediaSources: 'Media Sources',
+    refreshing: 'Refreshing...',
+    refresh: 'Refresh',
+    dragHint: 'Drag media source here',
+    deleteSource: 'Delete media source',
+    preview: 'Preview',
+    live: 'Live',
+    streaming: 'Streaming',
+    notStarted: 'Not Started',
+    saveOptions: 'Save Layout',
+    saveCurrentOnly: 'Save Current Layout Only',
+    saveCurrentDesc: 'Apply edits to current layout only, other layouts will not be affected',
+    saveSimilar: 'Save to Similar Layouts',
+    saveSimilarDesc: 'Apply edits to all layouts with same type and template',
+    noAvailableSources: 'No available {type}'
+  },
+  statusBar: {
+    network: 'Normal',
+    video: 'Normal',
+    audio: 'Normal',
+    stream: 'Not Started'
+  },
+  liveControlPanel: {
+    title: 'Live Control',
+    emptyText: 'Live control panel under development',
+    startLive: 'Start Live',
+    stopLive: 'Stop Live',
+    streamSettings: 'Stream Settings',
+    recordSettings: 'Record Settings',
+    streamStatus: 'Stream Status',
+    bitrate: 'Bitrate',
+    fps: 'FPS',
+    resolution: 'Resolution',
+    codec: 'Codec'
+  },
+  audioPanel: {
+    title: 'Audio Control',
+    noDevices: 'No audio devices available',
+    volume: 'Volume',
+    mute: 'Mute',
+    deviceTypes: {
+      microphone: 'Microphone',
+      systemAudio: 'System Audio',
+      unknown: 'Unknown Device'
+    }
   }
 } 
