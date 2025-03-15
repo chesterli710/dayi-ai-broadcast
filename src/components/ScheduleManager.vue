@@ -40,6 +40,11 @@
                 class="thumbnail-img"
                 @error="handleThumbnailError"
               />
+              <div class="layout-actions">
+                <button class="edit-button" @click="openLayoutEditor(schedule, layout)">
+                  编辑
+                </button>
+              </div>
             </div>
             <div class="layout-info">
               <div class="layout-description">{{ layout.description || '未命名布局' }}</div>
@@ -57,20 +62,40 @@
     <div class="empty-state" v-else>
       <p>当前计划分支没有日程</p>
     </div>
+    
+    <!-- 布局编辑器Modal -->
+    <LayoutEditorModal
+      v-if="showLayoutEditor"
+      :visible="showLayoutEditor"
+      :layout="selectedLayout"
+      :scheduleType="selectedScheduleType"
+      @close="closeLayoutEditor"
+      @save="saveLayout"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { usePlanStore } from '../stores/planStore';
 import { ScheduleType, type Schedule, type Layout } from '../types/broadcast';
 import { useI18n } from 'vue-i18n';
+import LayoutEditorModal from './LayoutEditorModal.vue';
 
 const planStore = usePlanStore();
 const { locale } = useI18n();
 
 // 获取当前分支
 const currentBranch = computed(() => planStore.currentBranch);
+
+// 布局编辑器状态
+const showLayoutEditor = ref(false);
+const selectedLayout = ref<Layout>({
+  id: 0,
+  template: '',
+});
+const selectedSchedule = ref<Schedule | null>(null);
+const selectedScheduleType = ref('');
 
 // 组件挂载时检查布局模板
 onMounted(() => {
@@ -185,6 +210,116 @@ function handleThumbnailError(event: Event): void {
   const imgElement = event.target as HTMLImageElement;
   imgElement.src = '/assets/placeholder-layout.svg';
 }
+
+/**
+ * 打开布局编辑器
+ * @param schedule 日程对象
+ * @param layout 布局对象
+ */
+function openLayoutEditor(schedule: Schedule, layout: Layout): void {
+  selectedSchedule.value = schedule;
+  selectedLayout.value = layout;
+  selectedScheduleType.value = schedule.type;
+  showLayoutEditor.value = true;
+}
+
+/**
+ * 关闭布局编辑器
+ */
+function closeLayoutEditor(): void {
+  showLayoutEditor.value = false;
+}
+
+/**
+ * 保存布局
+ * @param layout 更新后的布局
+ * @param saveAll 是否保存所有相似布局
+ */
+function saveLayout(layout: Layout, saveAll: boolean): void {
+  if (!selectedSchedule.value) return;
+  
+  if (saveAll) {
+    // 保存所有相似布局
+    saveSimilarLayouts(layout);
+  } else {
+    // 仅保存当前布局
+    saveCurrentLayout(layout);
+  }
+}
+
+/**
+ * 保存当前布局
+ * @param layout 更新后的布局
+ */
+function saveCurrentLayout(layout: Layout): void {
+  if (!selectedSchedule.value || !currentBranch.value) return;
+  
+  // 查找当前日程
+  const scheduleIndex = currentBranch.value.schedules.findIndex(s => s.id === selectedSchedule.value?.id);
+  
+  if (scheduleIndex !== -1) {
+    // 查找当前布局
+    const layoutIndex = currentBranch.value.schedules[scheduleIndex].layouts.findIndex(l => l.id === layout.id);
+    
+    if (layoutIndex !== -1) {
+      // 更新布局
+      currentBranch.value.schedules[scheduleIndex].layouts[layoutIndex] = layout;
+    }
+  }
+}
+
+/**
+ * 保存所有相似布局
+ * @param layout 更新后的布局
+ */
+function saveSimilarLayouts(layout: Layout): void {
+  if (!selectedSchedule.value || !currentBranch.value) return;
+  
+  // 遍历所有日程
+  currentBranch.value.schedules.forEach(schedule => {
+    // 如果日程类型与当前选中的日程类型相同
+    if (schedule.type === selectedSchedule.value?.type) {
+      // 遍历该日程的所有布局
+      schedule.layouts.forEach((l, index) => {
+        // 如果布局模板与当前选中的布局模板相同
+        if (l.template === layout.template) {
+          // 更新布局的媒体源信息
+          const updatedLayout = { ...l };
+          
+          // 获取布局模板
+          const template = planStore.layoutTemplates.find(t => t.template === layout.template);
+          
+          if (template && template.elements) {
+            // 遍历模板中的所有媒体元素
+            const mediaElements = template.elements.filter(element => element.type === 'media');
+            
+            // 查找布局中对应的媒体元素
+            mediaElements.forEach(element => {
+              // 如果元素有sourceId和sourceName属性，则认为它是MediaLayoutElement
+              const mediaElement = element as any;
+              if (mediaElement.sourceId && mediaElement.sourceName) {
+                // 更新布局中对应的媒体元素
+                // 注意：这里我们不能直接访问updatedLayout.elements，因为Layout类型没有定义elements属性
+                // 我们可以使用类型断言来处理这种情况
+                const updatedLayoutAny = updatedLayout as any;
+                if (updatedLayoutAny.elements) {
+                  const updatedElement = updatedLayoutAny.elements.find((e: any) => e.id === element.id && e.type === 'media');
+                  if (updatedElement) {
+                    updatedElement.sourceId = mediaElement.sourceId;
+                    updatedElement.sourceName = mediaElement.sourceName;
+                  }
+                }
+              }
+            });
+          }
+          
+          // 更新布局
+          schedule.layouts[index] = updatedLayout;
+        }
+      });
+    }
+  });
+}
 </script>
 
 <style scoped>
@@ -279,12 +414,45 @@ function handleThumbnailError(event: Event): void {
   overflow: hidden;
   background-color: #f5f5f5;
   margin-right: 8px;
+  position: relative;
 }
 
 .thumbnail-img {
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+.layout-actions {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.layout-thumbnail:hover .layout-actions {
+  opacity: 1;
+}
+
+.edit-button {
+  background-color: #1976d2;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.edit-button:hover {
+  background-color: #1565c0;
 }
 
 .layout-info {

@@ -10,6 +10,7 @@ import './styles/theme.scss'
 import './styles/disable-selection.scss'
 import './style.css'
 import 'element-plus/theme-chalk/dark/css-vars.css'
+import 'bootstrap-icons/font/bootstrap-icons.css'
 
 // 初始化 Mock 服务
 setupMock()

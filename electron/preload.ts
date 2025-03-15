@@ -60,5 +60,21 @@ contextBridge.exposeInMainWorld('electronAPI', {
    */
   getGPUInfo: () => {
     return ipcRenderer.invoke('get-gpu-info')
+  },
+
+  /**
+   * 获取系统可用窗口列表
+   * @returns Promise<Array<{id: string, name: string, appIcon: string|null, thumbnail: string}>> 窗口列表
+   */
+  getWindows: () => {
+    return ipcRenderer.invoke('get-windows')
+  },
+
+  /**
+   * 获取系统显示器列表
+   * @returns Promise<Array<{id: string, name: string, width: number, height: number, isPrimary: boolean, thumbnail: string|null}>> 显示器列表
+   */
+  getDisplays: () => {
+    return ipcRenderer.invoke('get-displays')
   }
 }) 

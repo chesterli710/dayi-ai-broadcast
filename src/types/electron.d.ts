@@ -2,6 +2,8 @@
  * Electron API类型声明
  * 为渲染进程中使用的Electron API提供类型支持
  */
+import type { WindowInfo, DisplayInfo } from './video';
+
 interface IElectronAPI {
   /**
    * 发送消息到主进程
@@ -34,10 +36,50 @@ interface IElectronAPI {
    * @returns Promise<{vendor: string, model: string}> 显卡信息
    */
   getGPUInfo: () => Promise<{vendor: string, model: string}>;
+
+  /**
+   * 获取系统可用窗口列表
+   * @returns Promise<WindowInfo[]> 窗口列表
+   */
+  getWindows: () => Promise<WindowInfo[]>;
+
+  /**
+   * 获取系统显示器列表
+   * @returns Promise<DisplayInfo[]> 显示器列表
+   */
+  getDisplays: () => Promise<DisplayInfo[]>;
+
+  // 注意：以下两个方法在当前应用中未被使用，已从main.ts和preload.ts中移除
+  /*
+  /**
+   * 捕获窗口缩略图
+   * @param windowId - 窗口ID
+   * @returns Promise<{success: boolean, dataUrl?: string, error?: string}> 捕获结果
+   */
+  /*
+  captureWindow: (windowId: string) => Promise<{
+    success: boolean;
+    dataUrl?: string;
+    error?: string;
+  }>;
+  */
+
+  /**
+   * 捕获显示器缩略图
+   * @param displayId - 显示器ID
+   * @returns Promise<{success: boolean, dataUrl?: string, error?: string}> 捕获结果
+   */
+  /*
+  captureDisplay: (displayId: string) => Promise<{
+    success: boolean;
+    dataUrl?: string;
+    error?: string;
+  }>;
+  */
 }
 
 declare global {
   interface Window {
-    electronAPI: IElectronAPI;
+    electronAPI?: IElectronAPI;
   }
 } 

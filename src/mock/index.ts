@@ -5,6 +5,7 @@
 import { setupPlanMock } from './plan'
 import { setupLayoutMock } from './layout'
 import { setupUserMock } from './user'
+import { setupSvgIconsMock } from './svg'
 
 /**
  * 初始化所有Mock数据
@@ -18,6 +19,9 @@ export function setupMock() {
   
   // 设置布局模板相关的Mock数据
   setupLayoutMock()
+  
+  // 设置SVG图标相关的Mock数据
+  setupSvgIconsMock()
   
   console.log('Mock数据初始化完成')
 } 
