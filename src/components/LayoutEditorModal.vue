@@ -247,7 +247,7 @@ const showingSaveOptions = ref(false);
 // 预览尺寸（等比缩放）
 const originalWidth = 1920;
 const originalHeight = 1080;
-const previewWidth = 900; // 预览区域宽度
+const previewWidth = 720; // 预览区域宽度
 const previewHeight = computed(() => {
   return (previewWidth * originalHeight) / originalWidth;
 });

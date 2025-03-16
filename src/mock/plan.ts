@@ -1,5 +1,6 @@
 /**
  * 计划相关 Mock 数据
+ * 注意：所有接口都需要鉴权，请求时会自动携带Authorization头
  */
 import Mock from 'mockjs'
 import type { Channel, Plan, Branch, Schedule, Layout } from '../types/broadcast'
@@ -25,6 +26,9 @@ export function setupPlanMock() {
           background: 'https://picsum.photos/id/1/1920/1080',
           labelBackground: 'https://picsum.photos/id/20/400/100',
           textColor: '#ffffff',
+          surgeonLabelDisplayName: '手术团队',
+          surgeryLabelDisplayName: '手术名称',
+          guestLabelDisplayName: '特邀嘉宾',
           branches: [
             {
               id: 'branch-1',
@@ -118,6 +122,9 @@ export function setupPlanMock() {
           plannedStartDateTime: new Date('2023-06-20T10:00:00'),
           plannedEndDateTime: new Date('2023-06-20T14:00:00'),
           cover: 'https://picsum.photos/id/239/400/225',
+          surgeonLabelDisplayName: '术者团队',
+          surgeryLabelDisplayName: '术式',
+          guestLabelDisplayName: '互动嘉宾',
           branches: [
             {
               id: 'branch-2-1',
@@ -325,6 +332,9 @@ export function setupPlanMock() {
           background: 'https://picsum.photos/id/3/1920/1080',
           labelBackground: 'https://picsum.photos/id/22/400/100',
           textColor: '#333333',
+          surgeonLabelDisplayName: '主讲专家',
+          surgeryLabelDisplayName: '讲座主题',
+          guestLabelDisplayName: '参与嘉宾',
           branches: [
             {
               id: 'branch-3-1',
@@ -585,18 +595,53 @@ export function setupPlanMock() {
     }
   ];
 
-  // 新增：一次性获取所有频道、计划和分支数据的接口
-  Mock.mock('/api/plan/all', 'get', () => {
+  /**
+   * 模拟鉴权检查函数
+   * @param options Mock请求选项
+   * @returns 是否通过鉴权
+   */
+  function checkAuth(options: any): boolean {
+    // 在mock环境中，我们假设请求头中包含Authorization字段即视为已登录
+    // 在实际项目中，这里应该检查token的有效性
+    return true; // 在mock环境中默认通过鉴权
+  }
+
+  /**
+   * 生成未授权响应
+   * @returns 401未授权响应对象
+   */
+  function generateUnauthorizedResponse() {
+    return {
+      code: 401,
+      data: null,
+      message: '未登录或token已过期'
+    };
+  }
+
+  // 新增：一次性获取当前登录用户可操作的所有频道、计划和分支数据的接口
+  Mock.mock('/api/plan/all', 'get', (options) => {
+    // 鉴权检查
+    if (!checkAuth(options)) {
+      return generateUnauthorizedResponse();
+    }
+    
+    // 在实际应用中，这里应该根据token解析出用户ID，然后只返回该用户有权限访问的数据
+    // 在mock环境中，我们假设所有已登录用户都可以访问所有数据
     return {
       code: 0,
       data: mockChannels,
       message: '获取所有数据成功'
-    }
+    };
   });
 
   // 保留原有接口，但使用统一的数据源
   // 获取频道列表接口
-  Mock.mock('/api/plan/channels', 'get', () => {
+  Mock.mock('/api/plan/channels', 'get', (options) => {
+    // 鉴权检查
+    if (!checkAuth(options)) {
+      return generateUnauthorizedResponse();
+    }
+    
     // 返回频道列表，但不包含plans字段的内容
     const channelsWithoutPlans = mockChannels.map(channel => ({
       id: channel.id,
@@ -614,6 +659,11 @@ export function setupPlanMock() {
   
   // 获取计划列表接口
   Mock.mock(new RegExp('/api/plan/plans(\\?.*)?$'), 'get', (options) => {
+    // 鉴权检查
+    if (!checkAuth(options)) {
+      return generateUnauthorizedResponse();
+    }
+    
     // 解析查询参数
     const url = options.url
     const channelId = url.match(/channelId=([^&]+)/)?.[1]
@@ -651,6 +701,11 @@ export function setupPlanMock() {
   
   // 获取计划详情接口
   Mock.mock(new RegExp('/api/plan/plans/([^/]+)$'), 'get', (options) => {
+    // 鉴权检查
+    if (!checkAuth(options)) {
+      return generateUnauthorizedResponse();
+    }
+    
     // 解析路径参数
     const planId = options.url.match(/\/api\/plan\/plans\/([^/]+)$/)?.[1]
     
@@ -689,6 +744,11 @@ export function setupPlanMock() {
   
   // 获取分支列表接口
   Mock.mock(new RegExp('/api/plan/branches(\\?.*)?$'), 'get', (options) => {
+    // 鉴权检查
+    if (!checkAuth(options)) {
+      return generateUnauthorizedResponse();
+    }
+    
     // 解析查询参数
     const url = options.url
     const planId = url.match(/planId=([^&]+)/)?.[1]
@@ -720,6 +780,11 @@ export function setupPlanMock() {
   
   // 获取分支详情接口
   Mock.mock(new RegExp('/api/plan/branches/([^/]+)$'), 'get', (options) => {
+    // 鉴权检查
+    if (!checkAuth(options)) {
+      return generateUnauthorizedResponse();
+    }
+    
     // 解析路径参数
     const branchId = options.url.match(/\/api\/plan\/branches\/([^/]+)$/)?.[1]
     
@@ -764,6 +829,11 @@ export function setupPlanMock() {
   // 保存日程（新建）
   Mock.mock(new RegExp('/api/plan/branches/([^/]+)/schedules$'), 'post', (options) => {
     try {
+      // 鉴权检查
+      if (!checkAuth(options)) {
+        return generateUnauthorizedResponse();
+      }
+      
       // 解析请求参数
       const url = options.url
       const matches = url.match(/\/api\/plan\/branches\/([^/]+)\/schedules$/)
@@ -819,6 +889,11 @@ export function setupPlanMock() {
   // 保存日程（更新）
   Mock.mock(new RegExp('/api/plan/branches/([^/]+)/schedules/([^/]+)$'), 'put', (options) => {
     try {
+      // 鉴权检查
+      if (!checkAuth(options)) {
+        return generateUnauthorizedResponse();
+      }
+      
       // 解析请求参数
       const url = options.url
       const matches = url.match(/\/api\/plan\/branches\/([^/]+)\/schedules\/([^/]+)$/)
@@ -882,6 +957,11 @@ export function setupPlanMock() {
   // 删除日程
   Mock.mock(new RegExp('/api/plan/branches/([^/]+)/schedules/([^/]+)$'), 'delete', (options) => {
     try {
+      // 鉴权检查
+      if (!checkAuth(options)) {
+        return generateUnauthorizedResponse();
+      }
+      
       // 解析请求参数
       const url = options.url
       const matches = url.match(/\/api\/plan\/branches\/([^/]+)\/schedules\/([^/]+)$/)

@@ -158,6 +158,19 @@ export const usePlanStore = defineStore('plan', () => {
       completedLayout.textColor = currentPlan.value.textColor
     }
     
+    // 如果布局没有指定术者、术式或嘉宾标签显示名称，则使用计划中的值
+    if (!completedLayout.surgeonLabelDisplayName && currentPlan.value?.surgeonLabelDisplayName) {
+      completedLayout.surgeonLabelDisplayName = currentPlan.value.surgeonLabelDisplayName
+    }
+    
+    if (!completedLayout.surgeryLabelDisplayName && currentPlan.value?.surgeryLabelDisplayName) {
+      completedLayout.surgeryLabelDisplayName = currentPlan.value.surgeryLabelDisplayName
+    }
+    
+    if (!completedLayout.guestLabelDisplayName && currentPlan.value?.guestLabelDisplayName) {
+      completedLayout.guestLabelDisplayName = currentPlan.value.guestLabelDisplayName
+    }
+    
     return completedLayout
   }
   

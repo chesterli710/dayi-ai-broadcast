@@ -114,17 +114,21 @@
 
 ## 计划相关
 
+> **重要说明：所有计划相关的接口都需要鉴权，请求时必须在请求头中包含有效的Authorization令牌**
+
 ### 获取所有数据
 
-> **✅ 推荐使用** - 一次性获取所有频道、计划和分支数据，减少请求次数，提高性能。
+> **✅ 推荐使用** - 一次性获取当前登录用户可操作的所有频道、计划和分支数据，减少请求次数，提高性能。
 
 - **URL**: `/plan/all`
 - **方法**: `GET`
-- **请求参数**: 无
+- **请求参数**: 无（自动使用当前登录用户的鉴权信息）
+- **鉴权要求**: 是（需要在请求头中包含有效的Authorization令牌）
 - **请求示例**:
 
 ```
 GET /api/plan/all
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 ```
 
 - **响应示例**:
@@ -147,6 +151,9 @@ GET /api/plan/all
           "background": "https://example.com/backgrounds/blue.jpg",
           "labelBackground": "https://example.com/backgrounds/label-blue.png",
           "textColor": "#ffffff",
+          "surgeonLabelDisplayName": "手术团队",
+          "surgeryLabelDisplayName": "手术名称",
+          "guestLabelDisplayName": "特邀嘉宾",
           "branches": [
             {
               "id": "branch-1",
@@ -229,764 +236,73 @@ GET /api/plan/all
 }
 ```
 
-### 获取频道列表
-
-> **⚠️ 不推荐使用** - 建议使用 `/plan/all` 接口替代
-
-获取当前用户可访问的频道列表。
-
-- **URL**: `/plan/channels`
-- **方法**: `GET`
-- **请求参数**:
-
-| 参数名 | 类型 | 必填 | 说明 |
-| ----- | ---- | ---- | ---- |
-| userId | string | 否 | 用户ID，不传则获取当前登录用户的频道 |
-
-- **请求示例**:
-
-```
-GET /api/plan/channels?userId=user-1
-```
-
-- **响应示例**:
-
-```json
-{
-  "code": 0,
-  "data": [
-    {
-      "id": "channel-1",
-      "name": "医学频道",
-      "url": "https://example.com/channel/1",
-      "plans": []
-    },
-    {
-      "id": "channel-2",
-      "name": "教育频道",
-      "url": "https://example.com/channel/2",
-      "plans": []
-    }
-  ],
-  "message": "获取频道列表成功"
-}
-```
-
-### 获取计划列表
-
-> **⚠️ 不推荐使用** - 建议使用 `/plan/all` 接口替代
-
-获取指定频道下的计划列表。
-
-- **URL**: `/plan/plans`
-- **方法**: `GET`
-- **请求参数**:
-
-| 参数名 | 类型 | 必填 | 说明 |
-| ----- | ---- | ---- | ---- |
-| channelId | string | 是 | 频道ID |
-| status | string | 否 | 计划状态，可选值：upcoming(即将开始)、ongoing(进行中)、completed(已完成)、all(全部)，默认为all |
-
-- **请求示例**:
-
-```
-GET /api/plan/plans?channelId=channel-1&status=upcoming
-```
-
-- **响应示例**:
-
-```json
-{
-  "code": 0,
-  "data": [
-    {
-      "id": "plan-1",
-      "name": "肝胆外科手术直播",
-      "plannedStartDateTime": "2023-06-15T09:00:00",
-      "plannedEndDateTime": "2023-06-15T12:00:00",
-      "cover": "https://example.com/covers/surgery.jpg",
-      "background": "https://example.com/backgrounds/blue.jpg",
-      "labelBackground": "https://example.com/backgrounds/label-blue.png",
-      "textColor": "#ffffff"
-    },
-    {
-      "id": "plan-2",
-      "name": "心脏外科手术直播",
-      "plannedStartDateTime": "2023-06-20T10:00:00",
-      "plannedEndDateTime": "2023-06-20T14:00:00",
-      "cover": "https://example.com/covers/heart-surgery.jpg"
-    }
-  ],
-  "message": "获取计划列表成功"
-}
-```
-
-### 获取计划详情
-
-> **⚠️ 不推荐使用** - 建议使用 `/plan/all` 接口替代
-
-获取指定计划的详细信息。
-
-- **URL**: `/plan/plans/{planId}`
-- **方法**: `GET`
-- **请求参数**: 无
-- **请求示例**:
-
-```
-GET /api/plan/plans/plan-1
-```
-
-- **响应示例**:
-
-```json
-{
-  "code": 0,
-  "data": {
-    "id": "plan-1",
-    "name": "肝胆外科手术直播",
-    "plannedStartDateTime": "2023-06-15T09:00:00",
-    "plannedEndDateTime": "2023-06-15T12:00:00",
-    "cover": "https://example.com/covers/surgery.jpg",
-    "background": "https://example.com/backgrounds/blue.jpg",
-    "labelBackground": "https://example.com/backgrounds/label-blue.png",
-    "textColor": "#ffffff",
-    "branches": [
-      {
-        "id": "branch-1",
-        "name": "主会场",
-        "schedules": [],
-        "streamConfig": {
-          "bitrate": 3000,
-          "resolution": "1920x1080",
-          "fps": 30,
-          "codec": "h264_nvenc",
-          "preset": "zerolatency",
-          "streamUrl": "rtmp://live.example.com/channel1",
-          "streamSecret": "live_secret_key_123"
-        }
-      }
-    ]
-  },
-  "message": "获取计划详情成功"
-}
-```
-
-### 获取分支列表
-
-> **⚠️ 不推荐使用** - 建议使用 `/plan/all` 接口替代
-
-获取指定计划下的分支列表。
-
-- **URL**: `/plan/branches`
-- **方法**: `GET`
-- **请求参数**:
-
-| 参数名 | 类型 | 必填 | 说明 |
-| ----- | ---- | ---- | ---- |
-| planId | string | 是 | 计划ID |
-
-- **请求示例**:
-
-```
-GET /api/plan/branches?planId=plan-1
-```
-
-- **响应示例**:
-
-```json
-{
-  "code": 0,
-  "data": [
-    {
-      "id": "branch-1",
-      "name": "主会场",
-      "schedules": [
-        {
-          "id": "schedule-1",
-          "type": "surgery",
-          "plannedStartDateTime": "2023-06-15T09:00:00",
-          "plannedDuration": 180,
-          "plannedEndDateTime": "2023-06-15T12:00:00",
-          "layouts": [
-            {
-              "id": 1,
-              "template": "surgery-single",
-              "description": "适用于单摄像头手术直播",
-              "background": "https://example.com/backgrounds/surgery-bg.jpg"
-            }
-          ],
-          "surgeryInfo": {
-            "procedure": "肝胆管结石手术",
-            "surgeons": [
-              {
-                "name": "张医生",
-                "title": "主任医师",
-                "organization": "北京协和医院"
-              }
-            ]
-          }
-        }
-      ],
-      "streamConfig": {
-        "bitrate": 3000,
-        "resolution": "1920x1080",
-        "fps": 30,
-        "codec": "h264_nvenc",
-        "preset": "zerolatency",
-        "streamUrl": "rtmp://live.example.com/channel1",
-        "streamSecret": "live_secret_key_123"
-      }
-    }
-  ],
-  "message": "获取分支列表成功"
-}
-```
-
-### 获取分支详情
-
-> **⚠️ 不推荐使用** - 建议使用 `/plan/all` 接口替代
-
-获取指定分支的详细信息。
-
-- **URL**: `/plan/branches/{branchId}`
-- **方法**: `GET`
-- **请求参数**: 无
-- **请求示例**:
-
-```
-GET /api/plan/branches/branch-1
-```
-
-- **响应示例**:
-
-```json
-{
-  "code": 0,
-  "data": {
-    "id": "branch-1",
-    "name": "主会场",
-    "schedules": [
-      {
-        "id": "schedule-1",
-        "type": "surgery",
-        "plannedStartDateTime": "2023-06-15T09:00:00",
-        "plannedDuration": 180,
-        "plannedEndDateTime": "2023-06-15T12:00:00",
-        "layouts": [
-          {
-            "id": 1,
-            "template": "surgery-single",
-            "description": "适用于单摄像头手术直播",
-            "background": "https://example.com/backgrounds/surgery-bg.jpg"
-          }
-        ],
-        "surgeryInfo": {
-          "procedure": "肝胆管结石手术",
-          "surgeons": [
-            {
-              "name": "张医生",
-              "title": "主任医师",
-              "organization": "北京协和医院"
-            }
-          ]
-        }
-      }
-    ],
-    "streamConfig": {
-      "bitrate": 3000,
-      "resolution": "1920x1080",
-      "fps": 30,
-      "codec": "h264_nvenc",
-      "preset": "zerolatency",
-      "streamUrl": "rtmp://live.example.com/channel1",
-      "streamSecret": "live_secret_key_123"
-    }
-  },
-  "message": "获取分支详情成功"
-}
-```
-
-## 布局相关
-
-### 获取布局模板列表
-
-获取所有可用的布局模板列表。
-
-- **URL**: `/layout/templates`
-- **方法**: `GET`
-- **请求参数**: 无
-- **请求示例**:
-
-```
-GET /api/layout/templates
-```
-
-- **响应示例**:
-
-```json
-{
-  "code": 0,
-  "data": [
-    {
-      "template": "1s1b",
-      "name": {
-        "zh-CN": "一小一大",
-        "en-US": "One Small One Big"
-      },
-      "thumbnail": "https://example.com/thumbnails/1s1b_200x113.png",
-      "elements": [
-        {
-          "id": 1,
-          "x": 12,
-          "y": 132,
-          "width": 402,
-          "height": 227,
-          "zIndex": 1,
-          "type": "media",
-          "transparentBackground": false
-        },
-        {
-          "id": 2,
-          "x": 424,
-          "y": 132,
-          "width": 1486,
-          "height": 836,
-          "zIndex": 2,
-          "type": "media",
-          "transparentBackground": false
-        },
-        {
-          "id": 3,
-          "x": 12,
-          "y": 370,
-          "width": 402,
-          "height": 117,
-          "zIndex": 10001,
-          "type": "host-info",
-          "fontStyle": {
-            "fontSize": 30,
-            "fontWeight": "medium",
-            "fontColor": "#FFFFFF"
-          },
-          "orientation": "vertical"
-        },
-        {
-          "id": 4,
-          "x": 12,
-          "y": 495,
-          "width": 402,
-          "height": 175,
-          "zIndex": 10002,
-          "type": "subject-info",
-          "fontStyle": {
-            "fontSize": 32,
-            "fontWeight": "bold",
-            "fontColor": "#FFFFFF"
-          },
-          "orientation": "vertical"
-        },
-        {
-          "id": 5,
-          "x": 12,
-          "y": 680,
-          "width": 402,
-          "height": 40,
-          "zIndex": 10003,
-          "type": "guest-label",
-          "fontStyle": {
-            "fontSize": 24,
-            "fontWeight": "bold",
-            "fontColor": "#FFFFFF"
-          },
-          "orientation": "vertical"
-        },
-        {
-          "id": 6,
-          "x": 12,
-          "y": 735,
-          "width": 402,
-          "height": 233,
-          "zIndex": 10004,
-          "type": "guest-info",
-          "fontStyle": {
-            "fontSize": 26,
-            "fontWeight": "regular",
-            "fontColor": "#FFFFFF"
-          },
-          "orientation": "vertical"
-        }
-      ]
-    },
-    {
-      "template": "2s1b",
-      "name": {
-        "zh-CN": "二小一大",
-        "en-US": "Two Small One Big"
-      },
-      "thumbnail": "https://example.com/thumbnails/2s1b_200x113.png",
-      "elements": [
-        {
-          "id": 1,
-          "x": 12,
-          "y": 132,
-          "width": 402,
-          "height": 227,
-          "zIndex": 1,
-          "type": "media",
-          "transparentBackground": false
-        },
-        {
-          "id": 2,
-          "x": 424,
-          "y": 132,
-          "width": 1486,
-          "height": 836,
-          "zIndex": 2,
-          "type": "media",
-          "transparentBackground": false
-        },
-        {
-          "id": 3,
-          "x": 12,
-          "y": 579,
-          "width": 402,
-          "height": 227,
-          "zIndex": 3,
-          "type": "media",
-          "transparentBackground": false
-        },
-        {
-          "id": 4,
-          "x": 12,
-          "y": 370,
-          "width": 402,
-          "height": 40,
-          "zIndex": 10003,
-          "type": "host-label",
-          "fontStyle": {
-            "fontSize": 24,
-            "fontWeight": "bold",
-            "fontColor": "#FFFFFF"
-          },
-          "orientation": "vertical"
-        },
-        {
-          "id": 5,
-          "x": 12,
-          "y": 420,
-          "width": 402,
-          "height": 117,
-          "zIndex": 10001,
-          "type": "host-info",
-          "fontStyle": {
-            "fontSize": 30,
-            "fontWeight": "medium",
-            "fontColor": "#FFFFFF"
-          },
-          "orientation": "vertical"
-        },
-        {
-          "id": 6,
-          "x": 424,
-          "y": 968,
-          "width": 1486,
-          "height": 112,
-          "zIndex": 10002,
-          "type": "subject-info",
-          "fontStyle": {
-            "fontSize": 46,
-            "fontWeight": "bold",
-            "fontColor": "#FFFFFF"
-          },
-          "orientation": "vertical"
-        }
-      ]
-    },
-    {
-      "template": "fullscreen",
-      "name": {
-        "zh-CN": "全屏",
-        "en-US": "Fullscreen"
-      },
-      "thumbnail": "https://example.com/thumbnails/fullscreen_200x113.png",
-      "elements": [
-        {
-          "id": 1,
-          "x": 0,
-          "y": 0,
-          "width": 1920,
-          "height": 1080,
-          "zIndex": 1,
-          "type": "media",
-          "transparentBackground": false
-        }
-      ]
-    },
-    {
-      "template": "2es",
-      "name": {
-        "zh-CN": "二等分",
-        "en-US": "Two Equal Split"
-      },
-      "thumbnail": "https://example.com/thumbnails/2es_200x113.png",
-      "elements": [
-        {
-          "id": 1,
-          "x": 10,
-          "y": 284,
-          "width": 945,
-          "height": 532,
-          "zIndex": 1,
-          "type": "media",
-          "transparentBackground": false
-        },
-        {
-          "id": 2,
-          "x": 967,
-          "y": 284,
-          "width": 945,
-          "height": 532,
-          "zIndex": 2,
-          "type": "media",
-          "transparentBackground": false
-        }
-      ]
-    }
-  ],
-  "message": "获取布局模板列表成功"
-}
-```
-
-### 获取布局模板最后更新时间
-
-获取布局模板的最后更新时间，用于客户端判断是否需要更新本地缓存。
-
-- **URL**: `/layout/templates/last-updated`
-- **方法**: `GET`
-- **请求参数**: 无
-- **请求示例**:
-
-```
-GET /api/layout/templates/last-updated
-```
-
-- **响应示例**:
-
-```json
-{
-  "code": 0,
-  "data": {
-    "lastUpdated": "2023-06-01T12:00:00Z"
-  },
-  "message": "获取布局模板最后更新时间成功"
-}
-```
-
-### 获取布局模板详情
-
-获取指定布局模板的详细信息。
-
-- **URL**: `/layout/templates/{templateId}`
-- **方法**: `GET`
-- **请求参数**: 无
-- **请求示例**:
-
-```
-GET /api/layout/templates/surgery-single
-```
-
-- **响应示例**:
-
-```json
-{
-  "code": 0,
-  "data": {
-    "template": "surgery-single",
-    "name": {
-      "zh-CN": "单画面手术",
-      "en-US": "Single View Surgery"
-    },
-    "thumbnail": "https://example.com/thumbnails/surgery-single_200x113.png",
-    "elements": [
-      {
-        "id": 1,
-        "x": 0,
-        "y": 0,
-        "width": 1920,
-        "height": 1080,
-        "zIndex": 1,
-        "type": "media",
-        "sourceId": "camera-1",
-        "sourceName": "主摄像头",
-        "transparentBackground": false
-      },
-      {
-        "id": 2,
-        "x": 50,
-        "y": 50,
-        "width": 200,
-        "height": 80,
-        "zIndex": 2,
-        "type": "media",
-        "sourceId": "logo",
-        "sourceName": "医院Logo",
-        "transparentBackground": true
-      },
-      {
-        "id": 3,
-        "x": 50,
-        "y": 900,
-        "width": 400,
-        "height": 50,
-        "zIndex": 3,
-        "type": "host-label",
-        "fontStyle": {
-          "fontSize": 24,
-          "fontWeight": "bold",
-          "fontColor": "#ffffff"
-        },
-        "orientation": "horizontal"
-      },
-      {
-        "id": 4,
-        "x": 50,
-        "y": 950,
-        "width": 400,
-        "height": 100,
-        "zIndex": 3,
-        "type": "host-info",
-        "fontStyle": {
-          "fontSize": 20,
-          "fontWeight": "regular",
-          "fontColor": "#ffffff"
-        },
-        "orientation": "horizontal"
-      }
-    ]
-  },
-  "message": "获取布局模板详情成功"
-}
-```
-
 ## 日程管理API
 
 ### 保存日程
 
-**请求方法**：POST（新建）/ PUT（更新）
+创建新日程或更新现有日程。
 
-**请求路径**：
-- 新建：`/plan/branches/{branchId}/schedules`
-- 更新：`/plan/branches/{branchId}/schedules/{scheduleId}`
-
-**请求参数**：
+- **URL**: `/plan/branches/{branchId}/schedules` 或 `/plan/branches/{branchId}/schedules/{scheduleId}`
+- **方法**: `POST`（创建新日程）或 `PUT`（更新现有日程）
+- **鉴权要求**: 是（需要在请求头中包含有效的Authorization令牌）
+- **请求参数**:
 
 | 参数名 | 类型 | 必填 | 说明 |
-| --- | --- | --- | --- |
-| branchId | string | 是 | 分支ID，路径参数 |
-| scheduleId | string | 更新时必填 | 日程ID，路径参数，仅更新时需要 |
-| schedule | Schedule | 是 | 日程数据，请求体 |
+| ----- | ---- | ---- | ---- |
+| branchId | string | 是 | 分支ID（URL路径参数） |
+| scheduleId | string | 更新时必填 | 日程ID（URL路径参数，仅更新时需要） |
+| schedule | object | 是 | 日程数据（请求体） |
 
-**请求体示例**：
+- **请求示例**:
 
-```json
+```
+POST /api/plan/branches/branch-1/schedules
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+Content-Type: application/json
+
 {
-  "id": "1234567890",
-  "type": "surgery",
-  "plannedStartDateTime": "2023-03-15T09:00:00Z",
+  "type": "SURGERY",
+  "plannedStartDateTime": "2023-06-15T09:00:00",
   "plannedDuration": 120,
   "layouts": [
     {
-      "id": "layout-1",
-      "template": "template-1",
-      "description": "手术全景",
-      "elements": []
+      "id": 1,
+      "template": "surgery-single",
+      "description": "适用于单摄像头手术直播"
     }
   ],
   "surgeryInfo": {
-    "procedure": "腹腔镜胆囊切除术",
+    "procedure": "肝胆管结石手术",
     "surgeons": [
       {
-        "name": "张三",
+        "name": "张医生",
         "title": "主任医师",
         "organization": "北京协和医院"
       }
-    ],
-    "guests": []
+    ]
   }
-}
-```
-
-**响应参数**：
-
-| 参数名 | 类型 | 说明 |
-| --- | --- | --- |
-| code | number | 状态码，0表示成功 |
-| data | Schedule | 保存后的日程数据 |
-| message | string | 响应消息 |
-
-**响应示例**：
-
-```json
-{
-  "code": 0,
-  "data": {
-    "id": "1234567890",
-    "type": "surgery",
-    "plannedStartDateTime": "2023-03-15T09:00:00Z",
-    "plannedDuration": 120,
-    "layouts": [
-      {
-        "id": "layout-1",
-        "template": "template-1",
-        "description": "手术全景",
-        "elements": []
-      }
-    ],
-    "surgeryInfo": {
-      "procedure": "腹腔镜胆囊切除术",
-      "surgeons": [
-        {
-          "name": "张三",
-          "title": "主任医师",
-          "organization": "北京协和医院"
-        }
-      ],
-      "guests": []
-    }
-  },
-  "message": "保存日程成功"
 }
 ```
 
 ### 删除日程
 
-**请求方法**：DELETE
+删除指定日程。
 
-**请求路径**：`/plan/branches/{branchId}/schedules/{scheduleId}`
-
-**请求参数**：
+- **URL**: `/plan/branches/{branchId}/schedules/{scheduleId}`
+- **方法**: `DELETE`
+- **鉴权要求**: 是（需要在请求头中包含有效的Authorization令牌）
+- **请求参数**:
 
 | 参数名 | 类型 | 必填 | 说明 |
-| --- | --- | --- | --- |
-| branchId | string | 是 | 分支ID，路径参数 |
-| scheduleId | string | 是 | 日程ID，路径参数 |
+| ----- | ---- | ---- | ---- |
+| branchId | string | 是 | 分支ID（URL路径参数） |
+| scheduleId | string | 是 | 日程ID（URL路径参数） |
 
-**响应参数**：
+- **请求示例**:
 
-| 参数名 | 类型 | 说明 |
-| --- | --- | --- |
-| code | number | 状态码，0表示成功 |
-| data | null | 无数据返回 |
-| message | string | 响应消息 |
-
-**响应示例**：
-
-```json
-{
-  "code": 0,
-  "data": null,
-  "message": "删除日程成功"
-}
+```
+DELETE /api/plan/branches/branch-1/schedules/schedule-1
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 ```
 
 ## 数据类型说明
@@ -1015,6 +331,9 @@ interface Plan {
   background?: string       // 计划内所有布局通用的背景图片url，除非layout单独指定该字段
   labelBackground?: string  // 计划内所有布局通用的标签背景图片url，除非layout单独指定该字段
   textColor?: string        // 计划内所有布局通用的文字颜色，除非layout单独指定该字段
+  surgeonLabelDisplayName?: string // "术者"在界面上的显示文字，有可能是"手术团队"等
+  surgeryLabelDisplayName?: string // "术式"在界面上的显示文字
+  guestLabelDisplayName?: string   // "互动嘉宾"在界面上的显示文字
 }
 ```
 
@@ -1055,6 +374,9 @@ interface Layout {
   foreground?: string             // 布局前景图url
   labelBackground?: string        // 布局的标签背景图片url
   textColor?: string              // 布局内文字颜色
+  surgeonLabelDisplayName?: string // "术者"在界面上的显示文字，有可能是"手术团队"等
+  surgeryLabelDisplayName?: string // "术式"在界面上的显示文字
+  guestLabelDisplayName?: string   // "互动嘉宾"在界面上的显示文字
 }
 ```
 
