@@ -180,18 +180,19 @@ function getScheduleTitle(schedule: Schedule): string {
     
     return surgeonsInfo ? `${procedure} - ${surgeonsInfo}` : procedure;
   } else if (schedule.type === ScheduleType.LECTURE && schedule.lectureInfo) {
-    // 讲课：讲题 - 讲者 称谓
+    // 讲课：讲题 - 讲者1 称谓 / 讲者2 称谓 / ...
     const lectureInfo = schedule.lectureInfo;
     const topic = lectureInfo.topic;
-    const speaker = lectureInfo.speaker;
     
-    // 获取讲者信息
-    let speakerInfo = '';
-    if (speaker) {
-      speakerInfo = `${speaker.name}${speaker.title ? ` ${speaker.title}` : ''}`;
+    // 获取所有讲者信息
+    let speakersInfo = '';
+    if (lectureInfo.speakers && lectureInfo.speakers.length > 0) {
+      speakersInfo = lectureInfo.speakers.map(speaker => {
+        return `${speaker.name}${speaker.title ? ` ${speaker.title}` : ''}`;
+      }).join(' / ');
     }
     
-    return speakerInfo ? `${topic} - ${speakerInfo}` : topic;
+    return speakersInfo ? `${topic} - ${speakersInfo}` : topic;
   }
   
   return t('scheduleManager.unnamedSchedule');

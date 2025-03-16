@@ -89,11 +89,14 @@ export function setupPlanMock() {
                   ],
                   lectureInfo: {
                     topic: '肝胆管结石手术后的护理',
-                    speaker: {
-                      name: '王教授',
-                      title: '教授',
-                      organization: '北京协和医院'
-                    }
+                    speakers: [
+                      {
+                        name: '王教授',
+                        title: '教授',
+                        organization: '北京协和医院'
+                      }
+                    ],
+                    guests: []
                   }
                 }
               ],
@@ -167,11 +170,14 @@ export function setupPlanMock() {
                   ],
                   lectureInfo: {
                     topic: '心脏搭桥手术技术进展',
-                    speaker: {
-                      name: '李教授',
-                      title: '教授',
-                      organization: '上海交通大学医学院附属仁济医院'
-                    }
+                    speakers: [
+                      {
+                        name: '李教授',
+                        title: '教授',
+                        organization: '上海交通大学医学院附属仁济医院'
+                      }
+                    ],
+                    guests: []
                   }
                 },
                 {
@@ -248,11 +254,14 @@ export function setupPlanMock() {
                   ],
                   lectureInfo: {
                     topic: '心脏疾病的预防与治疗',
-                    speaker: {
-                      name: '陈教授',
-                      title: '教授',
-                      organization: '上海交通大学医学院'
-                    }
+                    speakers: [
+                      {
+                        name: '陈教授',
+                        title: '教授',
+                        organization: '上海交通大学医学院'
+                      }
+                    ],
+                    guests: []
                   }
                 },
                 {
@@ -277,11 +286,14 @@ export function setupPlanMock() {
                   ],
                   lectureInfo: {
                     topic: '心脏手术后的康复指导',
-                    speaker: {
-                      name: '王教授',
-                      title: '副教授',
-                      organization: '上海交通大学医学院'
-                    }
+                    speakers: [
+                      {
+                        name: '王教授',
+                        title: '副教授',
+                        organization: '上海交通大学医学院'
+                      }
+                    ],
+                    guests: []
                   }
                 }
               ],
@@ -346,11 +358,14 @@ export function setupPlanMock() {
                   ],
                   lectureInfo: {
                     topic: '现代医学教育的发展趋势',
-                    speaker: {
-                      name: '赵教授',
-                      title: '教授',
-                      organization: '北京大学医学部'
-                    }
+                    speakers: [
+                      {
+                        name: '赵教授',
+                        title: '教授',
+                        organization: '北京大学医学部'
+                      }
+                    ],
+                    guests: []
                   }
                 },
                 {
@@ -375,11 +390,14 @@ export function setupPlanMock() {
                   ],
                   lectureInfo: {
                     topic: '医学教育改革与创新',
-                    speaker: {
-                      name: '钱教授',
-                      title: '教授',
-                      organization: '北京大学医学部'
-                    }
+                    speakers: [
+                      {
+                        name: '钱教授',
+                        title: '教授',
+                        organization: '北京大学医学部'
+                      }
+                    ],
+                    guests: []
                   }
                 }
               ],
@@ -419,11 +437,14 @@ export function setupPlanMock() {
                   ],
                   lectureInfo: {
                     topic: '临床医学教育方法创新',
-                    speaker: {
-                      name: '孙教授',
-                      title: '教授',
-                      organization: '北京协和医院'
-                    }
+                    speakers: [
+                      {
+                        name: '孙教授',
+                        title: '教授',
+                        organization: '北京协和医院'
+                      }
+                    ],
+                    guests: []
                   }
                 },
                 {
@@ -537,11 +558,14 @@ export function setupPlanMock() {
                   ],
                   lectureInfo: {
                     topic: '腹腔镜手术技术进展',
-                    speaker: {
-                      name: '吴医生',
-                      title: '主任医师',
-                      organization: '上海瑞金医院'
-                    }
+                    speakers: [
+                      {
+                        name: '吴医生',
+                        title: '主任医师',
+                        organization: '上海瑞金医院'
+                      }
+                    ],
+                    guests: []
                   }
                 }
               ],

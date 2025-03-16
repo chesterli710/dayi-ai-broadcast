@@ -21,8 +21,14 @@
             <div class="schedule-item-container">
               <!-- 日程时间信息 -->
               <div class="schedule-time-container">
-                <div class="schedule-time start-time">{{ formatDateTime(item.plannedStartDateTime, false) }}</div>
-                <div class="schedule-time end-time">{{ getEndTimeDisplay(item, false) }}</div>
+                <div class="schedule-time start-time" :class="{ 'conflict': hasTimeConflict(item, 'start') }">
+                  <span v-if="hasTimeConflict(item, 'start')" class="conflict-icon"><i class="bi bi-exclamation-circle-fill"></i></span>
+                  {{ formatDateTime(item.plannedStartDateTime, false) }}
+                </div>
+                <div class="schedule-time end-time" :class="{ 'conflict': hasTimeConflict(item, 'end') }">
+                  <span v-if="hasTimeConflict(item, 'end')" class="conflict-icon"><i class="bi bi-exclamation-circle-fill"></i></span>
+                  {{ getEndTimeDisplay(item, false) }}
+                </div>
               </div>
               
               <!-- 日程项 -->
@@ -264,24 +270,118 @@
               <el-input v-model="scheduleForm.lectureInfo.topic" />
             </el-form-item>
             
-            <h4>{{ $t('scheduleEditor.speaker') }}</h4>
-            <div class="person-inputs">
-              <el-input
-                v-model="scheduleForm.lectureInfo.speaker.name"
-                :placeholder="$t('scheduleEditor.name')"
-                class="person-name"
-              />
-              <el-input
-                v-model="scheduleForm.lectureInfo.speaker.title"
-                :placeholder="$t('scheduleEditor.title')"
-                class="person-title"
-              />
-              <el-input
-                v-model="scheduleForm.lectureInfo.speaker.organization"
-                :placeholder="$t('scheduleEditor.organization')"
-                class="person-org"
-              />
+            <h4>
+              {{ $t('scheduleEditor.speakers') }}
+              <span class="limit-text">{{ $t('scheduleEditor.speakersLimit') }}</span>
+            </h4>
+            <draggable 
+              v-model="scheduleForm.lectureInfo.speakers" 
+              item-key="index"
+              handle=".drag-handle"
+              class="draggable-list"
+            >
+              <template #item="{ element, index }">
+                <div class="person-item">
+                  <div class="drag-handle">
+                    <i class="bi bi-grip-vertical"></i>
+                  </div>
+                  <div class="person-inputs">
+                    <el-input
+                      v-model="element.name"
+                      :placeholder="$t('scheduleEditor.name')"
+                      class="person-name"
+                    />
+                    <el-input
+                      v-model="element.title"
+                      :placeholder="$t('scheduleEditor.title')"
+                      class="person-title"
+                    />
+                    <el-input
+                      v-model="element.organization"
+                      :placeholder="$t('scheduleEditor.organization')"
+                      class="person-org"
+                    />
+                  </div>
+                  <el-button
+                    type="danger"
+                    @click="removeSpeaker(index)"
+                    class="remove-button"
+                    :disabled="scheduleForm.lectureInfo.speakers.length <= 1"
+                  >
+                    <i class="bi bi-trash"></i>
+                  </el-button>
+                </div>
+              </template>
+            </draggable>
+            
+            <el-button 
+              type="primary" 
+              plain 
+              @click="addSpeaker" 
+              class="add-button"
+              :disabled="scheduleForm.lectureInfo.speakers.length >= 3"
+            >
+              <i class="bi bi-plus"></i> {{ $t('scheduleEditor.addSpeaker') }}
+            </el-button>
+            
+            <!-- 嘉宾列表 -->
+            <h4>
+              {{ $t('scheduleEditor.guests') }}
+              <span class="limit-text">{{ $t('scheduleEditor.guestsLimit') }}</span>
+            </h4>
+            <draggable 
+              v-model="scheduleForm.lectureInfo.guests" 
+              item-key="index"
+              handle=".drag-handle"
+              class="draggable-list"
+              v-if="scheduleForm.lectureInfo.guests.length > 0"
+            >
+              <template #item="{ element, index }">
+                <div class="person-item">
+                  <div class="drag-handle">
+                    <i class="bi bi-grip-vertical"></i>
+                  </div>
+                  <div class="person-inputs">
+                    <el-input
+                      v-model="element.name"
+                      :placeholder="$t('scheduleEditor.name')"
+                      class="person-name"
+                    />
+                    <el-input
+                      v-model="element.title"
+                      :placeholder="$t('scheduleEditor.title')"
+                      class="person-title"
+                    />
+                    <el-input
+                      v-model="element.organization"
+                      :placeholder="$t('scheduleEditor.organization')"
+                      class="person-org"
+                    />
+                  </div>
+                  <el-button
+                    type="danger"
+                    @click="removeLectureGuest(index)"
+                    class="remove-button"
+                  >
+                    <i class="bi bi-trash"></i>
+                  </el-button>
+                </div>
+              </template>
+            </draggable>
+            
+            <div v-if="scheduleForm.lectureInfo.guests.length === 0" class="empty-person-list">
+              {{ $t('scheduleEditor.noGuests') }}
             </div>
+            
+            <el-button 
+              type="primary" 
+              plain 
+              @click="addLectureGuest" 
+              class="add-button"
+              :disabled="scheduleForm.lectureInfo.guests.length >= 10"
+            >
+              <i class="bi bi-plus"></i> {{ $t('scheduleEditor.addGuest') }}
+            </el-button>
           </div>
           
           <!-- 布局管理 -->
@@ -430,6 +530,22 @@
         </span>
       </template>
     </el-dialog>
+    
+    <!-- 时间冲突确认对话框 -->
+    <el-dialog
+      v-model="showTimeConflictDialog"
+      :title="$t('scheduleEditor.timeConflict')"
+      width="30%"
+      append-to-body
+    >
+      <span>{{ $t('scheduleEditor.timeConflictMessage') }}</span>
+      <template #footer>
+        <span class="dialog-footer">
+          <el-button @click="cancelSave">{{ $t('common.cancel') }}</el-button>
+          <el-button type="primary" @click="confirmSaveWithConflict">{{ $t('scheduleEditor.saveAnyway') }}</el-button>
+        </span>
+      </template>
+    </el-dialog>
   </el-dialog>
 </template>
 
@@ -503,7 +619,8 @@ const scheduleForm = reactive<{
   };
   lectureInfo: {
     topic: string;
-    speaker: PersonInfo;
+    speakers: PersonInfo[];
+    guests: PersonInfo[];
   };
   layouts: any[];
 }>({
@@ -518,7 +635,8 @@ const scheduleForm = reactive<{
   },
   lectureInfo: {
     topic: '',
-    speaker: { name: '', title: '教授', organization: '' }
+    speakers: [{ name: '', title: '教授', organization: '' }],
+    guests: []
   },
   layouts: []
 });
@@ -545,6 +663,10 @@ const originalFormData = ref<any>(null);
 const showUnsavedChangesDialog = ref<boolean>(false);
 const pendingAction = ref<'new' | 'select' | 'close' | null>(null);
 const pendingSchedule = ref<Schedule | null>(null);
+
+// 时间冲突相关状态
+const showTimeConflictDialog = ref<boolean>(false);
+const conflictingSchedules = ref<Schedule[]>([]);
 
 // 在script setup部分添加一个标志变量
 const isCreatingNew = ref<boolean>(false);
@@ -690,92 +812,159 @@ async function saveChanges(): Promise<void> {
 }
 
 /**
- * 保存日程并返回保存结果
- * @returns 保存是否成功
+ * 放弃更改并继续
  */
-async function handleSaveAndReturn(): Promise<boolean> {
-  // 重置错误信息
-  validationErrors.value = [];
+function discardChanges(): void {
+  // 关闭确认对话框
+  showUnsavedChangesDialog.value = false;
   
-  // 验证表单
-  try {
-    const valid = await scheduleFormRef.value?.validate();
-    if (!valid) {
-      // 表单基本验证失败，收集错误信息
-      collectFormErrors();
-      // 显示验证错误
-      if (validationErrors.value.length > 0) {
-        ElMessage.error({
-          message: t('scheduleEditor.validationError') + ': ' + validationErrors.value.join(', '),
-          duration: 5000
-        });
-      } else {
-        ElMessage.error(t('scheduleEditor.validationError'));
-      }
-      return false;
-    }
-    
-    // 进行额外验证
-    const additionalValidation = validateAdditionalFields();
-    if (!additionalValidation) {
-      // 显示验证错误
-      if (validationErrors.value.length > 0) {
-        ElMessage.error({
-          message: t('scheduleEditor.validationError') + ': ' + validationErrors.value.join(', '),
-          duration: 5000
-        });
-      }
-      return false;
-    }
-    
-    // 构建日程对象
-    const schedule: Schedule = {
-      id: isCreatingNew.value ? '' : scheduleForm.id, // 新建时不提供ID，编辑时使用原ID
-      type: scheduleForm.type,
-      plannedStartDateTime: scheduleForm.plannedStartDateTime || undefined,
-      plannedDuration: scheduleForm.plannedDuration || undefined,
-      layouts: scheduleForm.layouts || [], // 保留原有布局
-    };
-    
-    // 根据类型添加特定信息
-    if (scheduleForm.type === ScheduleType.SURGERY) {
-      schedule.surgeryInfo = {
-        procedure: scheduleForm.surgeryInfo.procedure,
-        surgeons: scheduleForm.surgeryInfo.surgeons.filter(s => s.name.trim() !== ''),
-        guests: scheduleForm.surgeryInfo.guests.filter(g => g.name.trim() !== '')
-      };
-    } else if (scheduleForm.type === ScheduleType.LECTURE) {
-      schedule.lectureInfo = {
-        topic: scheduleForm.lectureInfo.topic,
-        speaker: scheduleForm.lectureInfo.speaker
-      };
-    }
-    
-    // 根据模式选择保存方法
-    let success = false;
-    
-    if (isCreatingNew.value) {
-      // 新建日程
-      success = await planStore.createSchedule(schedule);
-    } else {
-      // 更新日程
-      success = await planStore.updateSchedule(schedule);
-    }
-    
+  // 重置未保存更改状态
+  hasUnsavedChanges.value = false;
+  
+  // 根据待处理的操作继续执行
+  if (pendingAction.value === 'new') {
+    createNewSchedule();
+  } else if (pendingAction.value === 'select' && pendingSchedule.value) {
+    selectSchedule(pendingSchedule.value);
+  } else if (pendingAction.value === 'close') {
+    emit('close');
+  }
+  
+  // 重置待处理操作
+  pendingAction.value = null;
+  pendingSchedule.value = null;
+}
+
+/**
+ * 保存日程
+ */
+async function handleSave(): Promise<void> {
+  // 检查时间冲突
+  const conflicts = checkTimeConflicts();
+  
+  if (conflicts.length > 0) {
+    // 有时间冲突，显示确认对话框
+    conflictingSchedules.value = conflicts;
+    showTimeConflictDialog.value = true;
+  } else {
+    // 没有时间冲突，直接保存
+    const success = await handleSaveAndReturn();
     if (success) {
-      // 更新原始表单数据，重置未保存更改状态
-      originalFormData.value = cloneDeep(scheduleForm);
+      // 不关闭对话框，而是返回到初始界面
+      selectedScheduleId.value = '';
+      showForm.value = false;
+      // 重置未保存更改状态
       hasUnsavedChanges.value = false;
-      return true;
-    } else {
-      ElMessage.error(t('scheduleEditor.saveFailed'));
+    }
+  }
+}
+
+/**
+ * 取消保存
+ */
+function cancelSave(): void {
+  showTimeConflictDialog.value = false;
+}
+
+/**
+ * 确认保存（即使有时间冲突）
+ */
+async function confirmSaveWithConflict(): Promise<void> {
+  showTimeConflictDialog.value = false;
+  
+  // 继续保存
+  const success = await handleSaveAndReturn();
+  if (success) {
+    // 不关闭对话框，而是返回到初始界面
+    selectedScheduleId.value = '';
+    showForm.value = false;
+    // 重置未保存更改状态
+    hasUnsavedChanges.value = false;
+  }
+}
+
+/**
+ * 检查时间冲突
+ * @returns 与当前日程时间冲突的日程列表
+ */
+function checkTimeConflicts(): Schedule[] {
+  // 如果没有开始时间或持续时间，无法检查冲突
+  if (!scheduleForm.plannedStartDateTime || !scheduleForm.plannedDuration) {
+    return [];
+  }
+  
+  // 计算当前日程的开始和结束时间
+  const currentStartTime = new Date(scheduleForm.plannedStartDateTime).getTime();
+  const currentEndTime = currentStartTime + scheduleForm.plannedDuration * 60 * 1000;
+  
+  // 查找所有与当前日程时间冲突的日程
+  return scheduleList.value.filter(schedule => {
+    // 跳过当前正在编辑的日程
+    if (schedule.id === scheduleForm.id) {
       return false;
     }
-  } catch (error) {
-    console.error('保存日程失败:', error);
-    ElMessage.error(t('scheduleEditor.saveFailed'));
+    
+    // 如果日程没有开始时间或持续时间，无法检查冲突
+    if (!schedule.plannedStartDateTime || !schedule.plannedDuration) {
+      return false;
+    }
+    
+    // 计算日程的开始和结束时间
+    const scheduleStartTime = new Date(schedule.plannedStartDateTime).getTime();
+    const scheduleEndTime = scheduleStartTime + schedule.plannedDuration * 60 * 1000;
+    
+    // 检查是否有时间冲突
+    // 1. 当前日程的开始时间在其他日程的时间范围内
+    // 2. 当前日程的结束时间在其他日程的时间范围内
+    // 3. 当前日程的时间范围包含其他日程的开始时间
+    // 4. 当前日程的时间范围包含其他日程的结束时间
+    return (
+      (currentStartTime >= scheduleStartTime && currentStartTime < scheduleEndTime) ||
+      (currentEndTime > scheduleStartTime && currentEndTime <= scheduleEndTime) ||
+      (currentStartTime <= scheduleStartTime && currentEndTime >= scheduleEndTime)
+    );
+  });
+}
+
+/**
+ * 检查日程的特定时间点是否有冲突
+ * @param schedule 日程对象
+ * @param timePoint 时间点类型（'start' 或 'end'）
+ * @returns 是否有时间冲突
+ */
+function hasTimeConflict(schedule: Schedule, timePoint: 'start' | 'end'): boolean {
+  // 如果日程没有开始时间或持续时间，无法检查冲突
+  if (!schedule.plannedStartDateTime || !schedule.plannedDuration) {
     return false;
   }
+  
+  // 计算日程的开始和结束时间
+  const scheduleStartTime = new Date(schedule.plannedStartDateTime).getTime();
+  const scheduleEndTime = scheduleStartTime + schedule.plannedDuration * 60 * 1000;
+  
+  // 检查指定时间点是否与其他日程冲突
+  return scheduleList.value.some(otherSchedule => {
+    // 跳过自身
+    if (otherSchedule.id === schedule.id) {
+      return false;
+    }
+    
+    // 如果其他日程没有开始时间或持续时间，无法检查冲突
+    if (!otherSchedule.plannedStartDateTime || !otherSchedule.plannedDuration) {
+      return false;
+    }
+    
+    // 计算其他日程的开始和结束时间
+    const otherStartTime = new Date(otherSchedule.plannedStartDateTime).getTime();
+    const otherEndTime = otherStartTime + otherSchedule.plannedDuration * 60 * 1000;
+    
+    // 检查指定时间点是否与其他日程冲突
+    if (timePoint === 'start') {
+      return scheduleStartTime >= otherStartTime && scheduleStartTime < otherEndTime;
+    } else { // timePoint === 'end'
+      return scheduleEndTime > otherStartTime && scheduleEndTime <= otherEndTime;
+    }
+  });
 }
 
 /**
@@ -842,10 +1031,12 @@ function selectSchedule(schedule: Schedule): void {
   
   if (schedule.type === ScheduleType.LECTURE && schedule.lectureInfo) {
     scheduleForm.lectureInfo.topic = schedule.lectureInfo.topic;
-    scheduleForm.lectureInfo.speaker = { ...schedule.lectureInfo.speaker };
+    scheduleForm.lectureInfo.speakers = [...schedule.lectureInfo.speakers];
+    scheduleForm.lectureInfo.guests = schedule.lectureInfo.guests ? [...schedule.lectureInfo.guests] : [];
   } else {
     scheduleForm.lectureInfo.topic = '';
-    scheduleForm.lectureInfo.speaker = { name: '', title: '教授', organization: '' };
+    scheduleForm.lectureInfo.speakers = [{ name: '', title: '教授', organization: '' }];
+    scheduleForm.lectureInfo.guests = [];
   }
   
   // 保存原始表单数据用于比较
@@ -902,7 +1093,8 @@ function resetForm(): void {
   scheduleForm.surgeryInfo.surgeons = [{ name: '', title: '教授', organization: '' }];
   scheduleForm.surgeryInfo.guests = [];
   scheduleForm.lectureInfo.topic = '';
-  scheduleForm.lectureInfo.speaker = { name: '', title: '教授', organization: '' };
+  scheduleForm.lectureInfo.speakers = [{ name: '', title: '教授', organization: '' }];
+  scheduleForm.lectureInfo.guests = [];
   scheduleForm.layouts = [];
   
   // 重置持续时间的小时和分钟
@@ -959,41 +1151,105 @@ function removeGuest(index: number): void {
 }
 
 /**
- * 保存日程
+ * 保存日程并返回保存结果
+ * @returns 保存是否成功
  */
-async function handleSave(): Promise<void> {
-  const success = await handleSaveAndReturn();
-  if (success) {
-    // 不关闭对话框，而是返回到初始界面
-    selectedScheduleId.value = '';
-    showForm.value = false;
-    // 重置未保存更改状态
-    hasUnsavedChanges.value = false;
+async function handleSaveAndReturn(): Promise<boolean> {
+  // 重置错误信息
+  validationErrors.value = [];
+  
+  // 验证表单
+  try {
+    const valid = await scheduleFormRef.value?.validate();
+    if (!valid) {
+      // 表单基本验证失败，收集错误信息
+      collectFormErrors();
+      // 显示验证错误
+      if (validationErrors.value.length > 0) {
+        ElMessage.error({
+          message: t('scheduleEditor.validationError') + ': ' + validationErrors.value.join(', '),
+          duration: 5000
+        });
+      } else {
+        ElMessage.error(t('scheduleEditor.validationError'));
+      }
+      return false;
+    }
+    
+    // 进行额外验证
+    const additionalValidation = validateAdditionalFields();
+    if (!additionalValidation) {
+      // 显示验证错误
+      if (validationErrors.value.length > 0) {
+        ElMessage.error({
+          message: t('scheduleEditor.validationError') + ': ' + validationErrors.value.join(', '),
+          duration: 5000
+        });
+      }
+      return false;
+    }
+    
+    // 构建日程对象
+    const schedule: Schedule = {
+      id: isCreatingNew.value ? '' : scheduleForm.id, // 新建时不提供ID，编辑时使用原ID
+      type: scheduleForm.type,
+      plannedStartDateTime: scheduleForm.plannedStartDateTime || undefined,
+      plannedDuration: scheduleForm.plannedDuration || undefined,
+      layouts: scheduleForm.layouts || [], // 保留原有布局
+    };
+    
+    // 根据类型添加特定信息
+    if (scheduleForm.type === ScheduleType.SURGERY) {
+      schedule.surgeryInfo = {
+        procedure: scheduleForm.surgeryInfo.procedure,
+        surgeons: scheduleForm.surgeryInfo.surgeons.filter(s => s.name.trim() !== ''),
+        guests: scheduleForm.surgeryInfo.guests.filter(g => g.name.trim() !== '')
+      };
+    } else if (scheduleForm.type === ScheduleType.LECTURE) {
+      schedule.lectureInfo = {
+        topic: scheduleForm.lectureInfo.topic,
+        speakers: scheduleForm.lectureInfo.speakers.filter(s => s.name.trim() !== ''),
+        guests: scheduleForm.lectureInfo.guests.filter(g => g.name.trim() !== '')
+      };
+    }
+    
+    // 根据模式选择保存方法
+    let success = false;
+    
+    if (isCreatingNew.value) {
+      // 新建日程
+      success = await planStore.createSchedule(schedule);
+    } else {
+      // 更新日程
+      success = await planStore.updateSchedule(schedule);
+    }
+    
+    if (success) {
+      // 更新原始表单数据，重置未保存更改状态
+      originalFormData.value = cloneDeep(scheduleForm);
+      hasUnsavedChanges.value = false;
+      return true;
+    } else {
+      ElMessage.error(t('scheduleEditor.saveFailed'));
+      return false;
+    }
+  } catch (error) {
+    console.error('保存日程失败:', error);
+    ElMessage.error(t('scheduleEditor.saveFailed'));
+    return false;
   }
 }
 
 /**
- * 放弃更改并继续
+ * 收集表单错误信息
  */
-function discardChanges(): void {
-  // 关闭确认对话框
-  showUnsavedChangesDialog.value = false;
-  
-  // 重置未保存更改状态
-  hasUnsavedChanges.value = false;
-  
-  // 根据待处理的操作继续执行
-  if (pendingAction.value === 'new') {
-    createNewSchedule();
-  } else if (pendingAction.value === 'select' && pendingSchedule.value) {
-    selectSchedule(pendingSchedule.value);
-  } else if (pendingAction.value === 'close') {
-    emit('close');
+function collectFormErrors(): void {
+  // 检查术式/讲题
+  if (scheduleForm.type === ScheduleType.SURGERY && !scheduleForm.surgeryInfo.procedure) {
+    validationErrors.value.push(t('scheduleEditor.procedureRequired'));
+  } else if (scheduleForm.type === ScheduleType.LECTURE && !scheduleForm.lectureInfo.topic) {
+    validationErrors.value.push(t('scheduleEditor.topicRequired'));
   }
-  
-  // 重置待处理操作
-  pendingAction.value = null;
-  pendingSchedule.value = null;
 }
 
 /**
@@ -1011,8 +1267,9 @@ function validateAdditionalFields(): boolean {
       isValid = false;
     }
   } else if (scheduleForm.type === ScheduleType.LECTURE) {
-    if (!scheduleForm.lectureInfo.speaker.name.trim()) {
-      validationErrors.value.push(t('scheduleEditor.speakerRequired'));
+    const validSpeakers = scheduleForm.lectureInfo.speakers.filter(s => s.name.trim() !== '');
+    if (validSpeakers.length === 0) {
+      validationErrors.value.push(t('scheduleEditor.speakersRequired'));
       isValid = false;
     }
   }
@@ -1024,18 +1281,6 @@ function validateAdditionalFields(): boolean {
   }
   
   return isValid;
-}
-
-/**
- * 收集表单错误信息
- */
-function collectFormErrors(): void {
-  // 检查术式/讲题
-  if (scheduleForm.type === ScheduleType.SURGERY && !scheduleForm.surgeryInfo.procedure) {
-    validationErrors.value.push(t('scheduleEditor.procedureRequired'));
-  } else if (scheduleForm.type === ScheduleType.LECTURE && !scheduleForm.lectureInfo.topic) {
-    validationErrors.value.push(t('scheduleEditor.topicRequired'));
-  }
 }
 
 /**
@@ -1451,6 +1696,51 @@ function getGapWithNextSchedule(schedule: Schedule, index: number): string {
     return `${minutes}${t('scheduleEditor.minutes')}`;
   }
 }
+
+/**
+ * 添加讲者
+ */
+function addSpeaker(): void {
+  if (scheduleForm.lectureInfo.speakers.length < 3) {
+    // 获取最后一位讲者的单位信息
+    const lastSpeaker = scheduleForm.lectureInfo.speakers[scheduleForm.lectureInfo.speakers.length - 1];
+    const organization = lastSpeaker && lastSpeaker.organization ? lastSpeaker.organization : '';
+    
+    // 添加新讲者，并复制上一位讲者的单位
+    scheduleForm.lectureInfo.speakers.push({ 
+      name: '', 
+      title: '教授', 
+      organization: organization 
+    });
+  }
+}
+
+/**
+ * 移除讲者
+ * @param index 讲者索引
+ */
+function removeSpeaker(index: number): void {
+  if (scheduleForm.lectureInfo.speakers.length > 1) {
+    scheduleForm.lectureInfo.speakers.splice(index, 1);
+  }
+}
+
+/**
+ * 添加讲课嘉宾
+ */
+function addLectureGuest(): void {
+  if (scheduleForm.lectureInfo.guests.length < 10) {
+    scheduleForm.lectureInfo.guests.push({ name: '', title: '教授', organization: '' });
+  }
+}
+
+/**
+ * 移除讲课嘉宾
+ * @param index 嘉宾索引
+ */
+function removeLectureGuest(index: number): void {
+  scheduleForm.lectureInfo.guests.splice(index, 1);
+}
 </script>
 
 <style scoped>
@@ -1562,6 +1852,8 @@ function getGapWithNextSchedule(schedule: Schedule, index: number): string {
   color: #fff;
   margin-right: 10px;
   white-space: nowrap;
+  width: 60px;
+  text-align: center;
 }
 
 .schedule-type-tag.surgery {
@@ -1968,5 +2260,15 @@ h4 {
   display: flex;
   justify-content: flex-end;
   gap: 10px;
+}
+
+.schedule-time.conflict {
+  color: #f56c6c;
+  font-weight: bold;
+}
+
+.conflict-icon {
+  color: #f56c6c;
+  margin-right: 2px;
 }
 </style> 

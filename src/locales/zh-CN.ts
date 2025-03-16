@@ -108,6 +108,9 @@ export default {
     lectureInfo: '讲课信息',
     topic: '讲课主题',
     speaker: '讲者信息',
+    speakers: '讲者列表',
+    speakersLimit: '（最多3位，拖拽可排序）',
+    addSpeaker: '添加讲者',
     name: '姓名',
     title: '职称',
     organization: '单位',
@@ -125,12 +128,16 @@ export default {
     validationError: '表单验证错误',
     surgeonsRequired: '请至少添加一位术者',
     speakerRequired: '请填写讲者信息',
+    speakersRequired: '请至少添加一位讲者',
     layoutsRequired: '请至少添加一个布局',
     saveFailed: '保存日程失败，请稍后重试',
     unsavedChanges: '未保存的更改',
     unsavedChangesMessage: '您有未保存的更改，是否保存？',
     save: '保存',
-    discard: '放弃更改'
+    discard: '放弃更改',
+    timeConflict: '时间冲突',
+    timeConflictMessage: '当前日程与其他日程时间上存在冲突，不过您依然可以保存',
+    saveAnyway: '仍然保存'
   },
   layoutEditor: {
     title: '布局编辑器',

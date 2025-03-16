@@ -108,6 +108,9 @@ export default {
     lectureInfo: 'Lecture Information',
     topic: 'Lecture Topic',
     speaker: 'Speaker',
+    speakers: 'Speakers',
+    speakersLimit: '(max 3, Drag to sort)',
+    addSpeaker: 'Add Speaker',
     name: 'Name',
     title: 'Title',
     organization: 'Organization',
@@ -125,12 +128,16 @@ export default {
     validationError: 'Form Validation Error',
     surgeonsRequired: 'Please add at least one surgeon',
     speakerRequired: 'Please fill in speaker information',
+    speakersRequired: 'Please add at least one speaker',
     layoutsRequired: 'Please add at least one layout',
     saveFailed: 'Failed to save schedule, please try again later',
     unsavedChanges: 'Unsaved Changes',
     unsavedChangesMessage: 'You have unsaved changes. Do you want to save them?',
     save: 'Save',
-    discard: 'Discard'
+    discard: 'Discard',
+    timeConflict: 'Time Conflict',
+    timeConflictMessage: 'The current schedule has time conflicts with other schedules, but you can still save it',
+    saveAnyway: 'Save Anyway'
   },
   layoutEditor: {
     title: 'Layout Editor',

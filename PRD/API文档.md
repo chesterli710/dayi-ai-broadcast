@@ -193,11 +193,20 @@ GET /api/plan/all
                   ],
                   "lectureInfo": {
                     "topic": "肝胆管结石手术后的护理",
-                    "speaker": {
-                      "name": "王教授",
-                      "title": "教授",
-                      "organization": "北京协和医院"
-                    }
+                    "speakers": [
+                      {
+                        "name": "王教授",
+                        "title": "教授",
+                        "organization": "北京协和医院"
+                      }
+                    ],
+                    "guests": [
+                      {
+                        "name": "李医生",
+                        "title": "副主任医师",
+                        "organization": "北京协和医院"
+                      }
+                    ]
                   }
                 }
               ],

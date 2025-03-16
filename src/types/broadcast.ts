@@ -87,7 +87,8 @@ export interface SurgeryInfo {
  */
 export interface LectureInfo {
   topic: string                 // 讲课主题
-  speaker: PersonInfo           // 讲者
+  speakers: PersonInfo[]        // 讲者列表
+  guests?: PersonInfo[]         // 嘉宾列表
 }
 
 /**
