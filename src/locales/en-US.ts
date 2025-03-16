@@ -181,10 +181,38 @@ export default {
     noDevices: 'No audio devices available',
     volume: 'Volume',
     mute: 'Mute',
+    selectMicrophone: 'Select microphone',
+    selectSystemAudio: 'Select system audio device',
+    enable: 'Enable',
+    refreshDevices: 'Refresh devices',
+    systemAudioNotAvailable: 'System audio not available',
+    globalControls: 'Global Controls',
+    masterVolume: 'Master Volume',
+    noLevelDetected: 'No audio signal detected',
+    tryDifferentDevice: 'If you are sure audio is playing, try selecting a different system audio device',
+    deviceError: 'Current device ID cannot be used for audio capture, please select a specific system audio device',
+    deviceSelectionHint: 'System Audio Device Selection Tip',
+    preferSpecificDevice: 'Please prioritize selecting specific audio devices (like BlackHole, Stereo Mix, etc.) rather than the generic "System Audio" option',
     deviceTypes: {
       microphone: 'Microphone',
       systemAudio: 'System Audio',
       unknown: 'Unknown Device'
+    },
+    macOSGuide: {
+      title: 'You need to install BlackHole virtual audio driver to capture system audio:',
+      step1: 'Visit https://github.com/ExistentialAudio/BlackHole',
+      step2: 'Download and install the latest version',
+      step3: 'Configure BlackHole as output device in System Preferences',
+      step4: 'Restart the application'
+    },
+    windowsGuide: {
+      title: 'You need to enable Stereo Mix to capture system audio:',
+      step1: 'Right-click on the volume icon in the system tray',
+      step2: 'Select "Open Sound settings"',
+      step3: 'Click "Sound Control Panel"',
+      step4: 'In the "Recording" tab, right-click on empty space',
+      step5: 'Select "Show Disabled Devices"',
+      step6: 'Right-click on "Stereo Mix" and select "Enable"'
     }
   }
 } 

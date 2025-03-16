@@ -181,10 +181,38 @@ export default {
     noDevices: '没有可用的音频设备',
     volume: '音量',
     mute: '静音',
+    selectMicrophone: '请选择麦克风',
+    selectSystemAudio: '请选择系统音频设备',
+    enable: '启用',
+    refreshDevices: '刷新设备',
+    systemAudioNotAvailable: '系统音频不可用',
+    globalControls: '全局控制',
+    masterVolume: '主音量',
+    noLevelDetected: '未检测到音频信号',
+    tryDifferentDevice: '如果您确定有音频在播放，请尝试选择其他系统音频设备',
+    deviceError: '当前设备ID无法用于音频捕获，请选择一个具体的系统音频设备',
+    deviceSelectionHint: '系统音频设备选择提示',
+    preferSpecificDevice: '请优先选择具体的音频设备（如BlackHole、立体声混音等），而不是通用的"系统音频"选项',
     deviceTypes: {
       microphone: '麦克风',
       systemAudio: '系统音频',
       unknown: '未知设备'
+    },
+    macOSGuide: {
+      title: '您需要安装BlackHole虚拟音频驱动来捕获系统音频：',
+      step1: '访问 https://github.com/ExistentialAudio/BlackHole',
+      step2: '下载并安装最新版本',
+      step3: '在系统偏好设置中配置BlackHole作为输出设备',
+      step4: '重启应用程序'
+    },
+    windowsGuide: {
+      title: '您需要启用立体声混音来捕获系统音频：',
+      step1: '右键点击系统托盘中的音量图标',
+      step2: '选择"打开声音设置"',
+      step3: '点击"声音控制面板"',
+      step4: '在"录制"选项卡中，右键点击空白处',
+      step5: '选择"显示禁用的设备"',
+      step6: '右键点击"立体声混音"，选择"启用"'
     }
   }
 } 

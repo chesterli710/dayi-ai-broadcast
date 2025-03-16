@@ -19,6 +19,8 @@ export interface AudioDevice {
   type: AudioSourceType; // 设备类型
   isDefault: boolean;   // 是否为默认设备
   isActive: boolean;    // 是否激活
+  volume: number;       // 设备音量 (0-100)
+  level: number;        // 当前音频电平 (0-100)
 }
 
 /**
