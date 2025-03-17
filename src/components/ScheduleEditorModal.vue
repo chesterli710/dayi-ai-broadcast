@@ -12,7 +12,7 @@
       <div class="schedule-list-panel">
         <div class="panel-header">
           <h3>{{ $t('scheduleManager.title') }}</h3>
-          <el-button type="primary" size="small" @click="handleCreateNewSchedule">
+          <el-button type="primary" size="small" @click="handleCreateNewSchedule" style="padding: 4px 12px; line-height: 1.5;">
             <i class="bi bi-plus"></i> {{ $t('common.add') }}
           </el-button>
         </div>

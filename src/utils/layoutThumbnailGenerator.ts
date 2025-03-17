@@ -73,14 +73,19 @@ class LayoutThumbnailGenerator {
     
     // 生成新的缩略图
     console.log(`[layoutThumbnailGenerator.ts 缩略图] 生成新的缩略图: ${template.template}`);
-    const thumbnail = await this.generateThumbnail(template);
-    
-    // 保存到本地存储
-    if (thumbnail) {
-      this.saveToLocalStorage(storageKey, thumbnail);
+    try {
+      const thumbnail = await this.generateThumbnail(template);
+      
+      // 保存到本地存储
+      if (thumbnail) {
+        this.saveToLocalStorage(storageKey, thumbnail);
+        return thumbnail;
+      }
+    } catch (error) {
+      console.error(`[layoutThumbnailGenerator.ts 缩略图] 生成缩略图失败: ${template.template}`, error);
     }
     
-    return thumbnail || '/assets/placeholder-layout.svg';
+    return '/assets/placeholder-layout.svg';
   }
   
   /**

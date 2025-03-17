@@ -214,10 +214,22 @@ function getLayoutThumbnail(layout: Layout): string {
   
   // 如果找到模板并且有缩略图，则返回缩略图URL
   if (template && template.thumbnail) {
+    // 判断缩略图类型
+    const isDataUrl = template.thumbnail.startsWith('data:');
+    const isRemoteUrl = template.thumbnail.startsWith('http');
+    
+    // 记录缩略图URL，便于调试
+    console.log(
+      `[ScheduleManager.vue 日程管理] 布局缩略图: ${template.template} -> ${
+        template.thumbnail.substring(0, 30)
+      }... (${isDataUrl ? '本地生成' : isRemoteUrl ? '远程URL' : '其他来源'})`
+    );
+    
     return template.thumbnail;
   }
   
   // 否则返回默认缩略图
+  console.warn(`[ScheduleManager.vue 日程管理] 布局 ${layout.template} 没有缩略图，使用占位图`);
   return '/assets/placeholder-layout.svg';
 }
 
@@ -420,6 +432,14 @@ function saveSchedule(schedule: Schedule): void {
 function previewLayout(schedule: Schedule, layout: Layout): void {
   // 设置正在预览的日程和布局
   planStore.setPreviewingScheduleAndLayout(schedule, layout);
+  
+  // 打印日志以便调试
+  console.log('[ScheduleManager.vue 日程管理] 预览布局:', {
+    scheduleId: schedule.id,
+    layoutId: layout.id,
+    layoutTemplate: layout.template,
+    planBackground: planStore.currentPlan?.background
+  });
 }
 
 /**
@@ -469,7 +489,7 @@ function isPreviewing(scheduleId: string, layoutId: number): boolean {
   display: flex;
   align-items: center;
   gap: 5px;
-  padding: 6px 12px;
+  padding: 4px 12px;
   border-radius: var(--el-border-radius-base);
   background-color: var(--el-color-primary);
   color: #fff;
@@ -477,6 +497,7 @@ function isPreviewing(scheduleId: string, layoutId: number): boolean {
   font-size: var(--el-font-size-small);
   cursor: pointer;
   transition: background-color 0.3s;
+  line-height: 1.5;
 }
 
 .edit-schedule-button:hover {

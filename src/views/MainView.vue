@@ -35,7 +35,7 @@
  * 主界面视图
  * 包含标题栏、预览和直播画布、控制面板等组件
  */
-import { onMounted } from 'vue';
+import { onMounted, ref } from 'vue';
 import { usePlanStore } from '../stores/planStore';
 import { useRouter } from 'vue-router';
 import TitleBar from '../components/TitleBar.vue';
@@ -46,41 +46,71 @@ import LiveControlPanel from '../components/LiveControlPanel.vue';
 import AudioPanel from '../components/AudioPanel.vue';
 import StatusBar from '../components/StatusBar.vue';
 import layoutApi from '../api/layout';
+import { preloadPlanImages, getCacheStatus } from '../utils/imagePreloader';
+import { ElMessage } from 'element-plus';
 
 const planStore = usePlanStore();
 const router = useRouter();
 
-/**
- * 加载布局模板
- * 从服务器或本地存储加载布局模板数据
- */
-async function loadLayoutTemplates() {
-  try {
-    // 从API获取布局模板数据
-    const templates = await layoutApi.loadAllLayoutTemplates();
-    
-    // 检查模板数据结构
-    if (Array.isArray(templates)) {
-      // 更新planStore中的布局模板
-      planStore.setLayoutTemplates(templates);
-    } else {
-      console.error('[MainView.vue 主界面] API返回的布局模板数据格式不正确');
-    }
-  } catch (error) {
-    console.error('[MainView.vue 主界面] 加载布局模板失败:', error);
-  }
-}
+// 图片预加载状态
+const isPreloading = ref(false);
+const preloadProgress = ref(0);
 
-onMounted(async () => {
-  // 确保已经选择了计划分支
-  if (!planStore.currentBranch) {
-    // 重定向到计划选择页面
-    router.push('/plan-selection');
+/**
+ * 预加载计划中的所有图片资源
+ */
+async function preloadAllImages() {
+  if (!planStore.currentPlan) {
+    console.warn('[MainView.vue 主界面] 当前没有选中计划，无法预加载图片');
     return;
   }
   
-  // 加载布局模板
-  await loadLayoutTemplates();
+  try {
+    isPreloading.value = true;
+    console.log('[MainView.vue 主界面] 开始预加载计划图片资源');
+    
+    // 预加载计划中的所有图片
+    await preloadPlanImages(planStore.currentPlan);
+    
+    // 获取缓存状态
+    const status = getCacheStatus();
+    console.log('[MainView.vue 主界面] 图片预加载完成', status);
+    
+    // 显示预加载成功消息
+    ElMessage.success(`图片资源预加载完成，共加载 ${status.cached} 张图片`);
+  } catch (error) {
+    console.error('[MainView.vue 主界面] 图片预加载失败:', error);
+    ElMessage.warning('部分图片资源预加载失败，可能会影响显示效果');
+  } finally {
+    isPreloading.value = false;
+    preloadProgress.value = 100;
+  }
+}
+
+// 组件挂载时加载布局模板并预加载图片
+onMounted(async () => {
+  // 如果没有布局模板或需要更新，则从API获取
+  if (planStore.needsLayoutTemplateUpdate) {
+    try {
+      const templates = await layoutApi.getLayoutTemplates();
+      planStore.setLayoutTemplates(templates);
+    } catch (error) {
+      console.error('获取布局模板失败:', error);
+      
+      // 尝试从本地存储加载
+      const loaded = planStore.loadLayoutTemplatesFromLocalStorage();
+      if (!loaded) {
+        console.error('无法加载布局模板，将跳转到计划选择页面');
+        router.push('/plan-selection');
+        return;
+      }
+    }
+  }
+  
+  // 预加载所有图片资源
+  if (planStore.currentPlan) {
+    preloadAllImages();
+  }
 });
 </script>
 
@@ -112,10 +142,12 @@ onMounted(async () => {
   padding: 10px;
   box-sizing: border-box;
   width: 100%;
+  height: calc(100% - 50px - 30px); /* 减去标题栏和状态栏的高度 */
 }
 
 .canvas-area {
   width: 100%;
+  height: 100%; /* 确保填充父容器高度 */
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -126,14 +158,15 @@ onMounted(async () => {
 .canvas-row {
   display: flex;
   gap: 10px;
-  height: 40%;
-  min-height: 300px;
+  min-height: 394px; /* 设置最小高度为394px */
+  height: 45%; /* 设置为容器高度的45% */
 }
 
 .preview-canvas,
 .live-canvas {
   flex: 1;
   min-width: 0; /* 防止flex子项溢出 */
+  height: 100%; /* 确保高度填满父容器 */
 }
 
 .control-panel {
@@ -141,6 +174,7 @@ onMounted(async () => {
   display: flex;
   gap: 10px;
   overflow: auto;
+  height: calc(55% - 10px); /* 设置为容器高度的55%减去间距 */
 }
 
 .live-control-panel {
@@ -169,15 +203,19 @@ onMounted(async () => {
   .canvas-row {
     flex-direction: column;
     height: auto;
+    min-height: 788px; /* 两个画布的最小高度总和 */
   }
   
   .preview-canvas,
   .live-canvas {
-    height: 300px;
+    height: 450px; /* 固定高度 */
+    min-height: 394px;
   }
   
   .control-panel {
     flex-direction: column;
+    height: auto;
+    min-height: 600px; /* 控制面板最小高度 */
   }
   
   .live-control-panel,
@@ -185,6 +223,7 @@ onMounted(async () => {
   .audio-panel {
     flex: none;
     height: 300px;
+    min-height: 200px;
   }
 }
 </style> 

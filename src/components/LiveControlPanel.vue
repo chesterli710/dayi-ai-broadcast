@@ -23,13 +23,21 @@ const { t } = useI18n();
 const planStore = usePlanStore();
 
 // 当前直播状态
-const isLive = ref(false);
+const isStreaming = computed(() => planStore.isStreaming);
 
 /**
- * 切换直播状态
+ * 开始直播
  */
-function toggleLiveStatus() {
-  isLive.value = !isLive.value;
+function startStreaming() {
+  planStore.startStreaming();
+  // 这里将来会添加实际的直播控制逻辑
+}
+
+/**
+ * 停止直播
+ */
+function stopStreaming() {
+  planStore.stopStreaming();
   // 这里将来会添加实际的直播控制逻辑
 }
 </script>

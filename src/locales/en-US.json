@@ -1,0 +1,7 @@
+{
+  "layoutEditor": {
+    "switchToLive": "Switch to Live",
+    "useWebGL": "Use WebGL Renderer",
+    "useCanvas": "Use Canvas 2D Renderer"
+  }
+} 

@@ -28,7 +28,25 @@ class LayoutApi {
       
       // 正确处理响应数据结构
       if (response && response.data && response.data.data && Array.isArray(response.data.data)) {
-        return response.data.data;
+        const templates = response.data.data;
+        
+        // 处理每个模板的缩略图URL
+        for (const template of templates) {
+          // 如果服务器返回了缩略图URL，确保它是完整的URL
+          if (template.thumbnail && typeof template.thumbnail === 'string') {
+            // 如果是相对路径，转换为绝对路径
+            if (!template.thumbnail.startsWith('http') && !template.thumbnail.startsWith('data:') && !template.thumbnail.startsWith('/assets/')) {
+              // 假设API基础URL与当前应用相同
+              const baseUrl = window.location.origin;
+              template.thumbnail = `${baseUrl}${template.thumbnail.startsWith('/') ? '' : '/'}${template.thumbnail}`;
+            }
+            console.log(`[layout.ts API] 布局模板 ${template.template} 使用远程缩略图: ${template.thumbnail}`);
+          } else {
+            console.log(`[layout.ts API] 布局模板 ${template.template} 没有远程缩略图，将使用本地生成`);
+          }
+        }
+        
+        return templates;
       } else {
         console.error('布局模板数据格式不正确');
         return [];
@@ -120,9 +138,19 @@ class LayoutApi {
           
           // 为每个模板生成本地缩略图
           for (const template of templates) {
-            // 生成并替换缩略图URL
-            const thumbnailUrl = await layoutThumbnailGenerator.getThumbnail(template)
-            template.thumbnail = thumbnailUrl
+            try {
+              // 检查是否已有缩略图，如果是远程URL则不替换
+              if (!template.thumbnail || template.thumbnail.startsWith('data:') || template.thumbnail === '/assets/placeholder-layout.svg') {
+                // 生成并替换缩略图URL
+                const thumbnailUrl = await layoutThumbnailGenerator.getThumbnail(template)
+                template.thumbnail = thumbnailUrl
+                console.log(`[layout.ts API] 布局模板 ${template.template} 缩略图已生成: ${thumbnailUrl.substring(0, 30)}...`)
+              } else {
+                console.log(`[layout.ts API] 布局模板 ${template.template} 使用远程缩略图: ${template.thumbnail}`)
+              }
+            } catch (error) {
+              console.error(`[layout.ts API] 生成布局模板 ${template.template} 缩略图失败:`, error)
+            }
           }
           
           return templates
@@ -145,9 +173,19 @@ class LayoutApi {
           template.name['en-US'] = template.name['en-US'] || template.template
         }
         
-        // 生成并替换缩略图URL - 强制更新缩略图
-        const thumbnailUrl = await layoutThumbnailGenerator.getThumbnail(template, true)
-        template.thumbnail = thumbnailUrl
+        try {
+          // 检查是否已有缩略图，如果是远程URL则保留
+          if (!template.thumbnail || template.thumbnail.startsWith('data:') || template.thumbnail === '/assets/placeholder-layout.svg') {
+            // 生成并替换缩略图URL - 强制更新缩略图
+            const thumbnailUrl = await layoutThumbnailGenerator.getThumbnail(template, true)
+            template.thumbnail = thumbnailUrl
+            console.log(`[layout.ts API] 布局模板 ${template.template} 缩略图已更新: ${thumbnailUrl.substring(0, 30)}...`)
+          } else {
+            console.log(`[layout.ts API] 布局模板 ${template.template} 保留远程缩略图: ${template.thumbnail}`)
+          }
+        } catch (error) {
+          console.error(`[layout.ts API] 更新布局模板 ${template.template} 缩略图失败:`, error)
+        }
       }
       
       // 保存到本地存储
@@ -165,16 +203,25 @@ class LayoutApi {
         
         // 为每个模板生成本地缩略图 - 强制更新缩略图
         for (const template of templates) {
-          // 生成并替换缩略图URL
-          const thumbnailUrl = await layoutThumbnailGenerator.getThumbnail(template, true)
-          template.thumbnail = thumbnailUrl
+          try {
+            // 检查是否已有缩略图，如果是远程URL则保留
+            if (!template.thumbnail || template.thumbnail.startsWith('data:') || template.thumbnail === '/assets/placeholder-layout.svg') {
+              // 生成并替换缩略图URL
+              const thumbnailUrl = await layoutThumbnailGenerator.getThumbnail(template, true)
+              template.thumbnail = thumbnailUrl
+              console.log(`[layout.ts API] 布局模板 ${template.template} 缩略图已重新生成: ${thumbnailUrl.substring(0, 30)}...`)
+            } else {
+              console.log(`[layout.ts API] 布局模板 ${template.template} 保留远程缩略图: ${template.thumbnail}`)
+            }
+          } catch (error) {
+            console.error(`[layout.ts API] 重新生成布局模板 ${template.template} 缩略图失败:`, error)
+          }
         }
         
         return templates
       }
       
-      // 否则返回空数组
-      return []
+      throw error
     }
   }
 }

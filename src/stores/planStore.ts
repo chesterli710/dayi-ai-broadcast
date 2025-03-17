@@ -8,6 +8,7 @@ import type { Channel, Plan, Branch, Layout, LayoutTemplate, Schedule } from '..
 import { initializeApp } from '../utils/initializeApp'
 import planApi from '../api/plan'
 import { ElMessage } from 'element-plus'
+import { preloadPlanImages } from '../utils/imagePreloader'
 
 /**
  * 计划存储
@@ -50,6 +51,21 @@ export const usePlanStore = defineStore('plan', () => {
   const previewingLayout = ref<Layout | null>(null)
   
   /**
+   * 正在直播的日程
+   */
+  const liveSchedule = ref<Schedule | null>(null)
+  
+  /**
+   * 正在直播的布局
+   */
+  const liveLayout = ref<Layout | null>(null)
+  
+  /**
+   * 是否正在直播
+   */
+  const isStreaming = ref<boolean>(false)
+  
+  /**
    * 设置当前频道
    * @param channel - 频道数据
    */
@@ -63,6 +79,16 @@ export const usePlanStore = defineStore('plan', () => {
    */
   function setCurrentPlan(plan: Plan) {
     currentPlan.value = plan
+    
+    // 预加载计划中的所有图片资源
+    console.log('[planStore.ts 计划存储] 开始预加载计划图片资源')
+    preloadPlanImages(plan)
+      .then(images => {
+        console.log(`[planStore.ts 计划存储] 图片预加载完成，共加载 ${images.length} 张图片`)
+      })
+      .catch(error => {
+        console.error('[planStore.ts 计划存储] 图片预加载失败:', error)
+      })
   }
   
   /**
@@ -89,14 +115,29 @@ export const usePlanStore = defineStore('plan', () => {
   
   /**
    * 设置布局模板列表
-   * @param templates - 布局模板列表
+   * @param templates 布局模板列表
    */
-  function setLayoutTemplates(templates: LayoutTemplate[]) {
-    layoutTemplates.value = templates
-    layoutTemplatesLastUpdated.value = new Date()
+  function setLayoutTemplates(templates: LayoutTemplate[]): void {
+    layoutTemplates.value = templates;
+    layoutTemplatesLastUpdated.value = new Date();
     
     // 保存到本地存储
-    saveLayoutTemplatesToLocalStorage()
+    try {
+      localStorage.setItem('layoutTemplates', JSON.stringify(templates));
+      localStorage.setItem('layoutTemplatesLastUpdated', new Date().toISOString());
+      console.log('[planStore.ts 计划存储] 布局模板已保存到本地存储', {
+        count: templates.length,
+        templates: templates.map(t => ({
+          template: t.template,
+          hasThumbnail: !!t.thumbnail,
+          thumbnailType: t.thumbnail ? 
+            (t.thumbnail.startsWith('data:') ? '本地生成' : 
+             t.thumbnail.startsWith('http') ? '远程URL' : '其他') : '无'
+        }))
+      });
+    } catch (error) {
+      console.error('[planStore.ts 计划存储] 保存布局模板到本地存储失败:', error);
+    }
   }
   
   /**
@@ -331,8 +372,9 @@ export const usePlanStore = defineStore('plan', () => {
    * @param layout - 布局数据
    */
   function setPreviewingScheduleAndLayout(schedule: Schedule, layout: Layout) {
-    previewingSchedule.value = schedule
-    previewingLayout.value = layout
+    previewingSchedule.value = schedule;
+    // 使用completeLayoutInfo方法补全布局信息，确保从Plan继承background等属性
+    previewingLayout.value = completeLayoutInfo(layout);
   }
   
   /**
@@ -356,6 +398,64 @@ export const usePlanStore = defineStore('plan', () => {
     )
   }
   
+  /**
+   * 设置正在直播的日程和布局
+   * @param schedule - 日程数据
+   * @param layout - 布局数据
+   */
+  function setLiveScheduleAndLayout(schedule: Schedule, layout: Layout) {
+    liveSchedule.value = schedule;
+    // 使用completeLayoutInfo方法补全布局信息，确保从Plan继承background等属性
+    liveLayout.value = completeLayoutInfo(layout);
+  }
+  
+  /**
+   * 清除正在直播的日程和布局
+   */
+  function clearLiveScheduleAndLayout() {
+    liveSchedule.value = null
+    liveLayout.value = null
+  }
+  
+  /**
+   * 检查指定的日程和布局是否正在直播
+   * @param scheduleId - 日程ID
+   * @param layoutId - 布局ID
+   * @returns 是否正在直播
+   */
+  function isLiveScheduleAndLayout(scheduleId: string, layoutId: number): boolean {
+    return (
+      liveSchedule.value?.id === scheduleId && 
+      liveLayout.value?.id === layoutId
+    )
+  }
+  
+  /**
+   * 将预览切换到直播
+   * 将当前预览的日程和布局设置为直播的日程和布局
+   */
+  function switchPreviewToLive() {
+    if (previewingSchedule.value && previewingLayout.value) {
+      setLiveScheduleAndLayout(previewingSchedule.value, previewingLayout.value)
+    }
+  }
+  
+  /**
+   * 开始直播
+   */
+  function startStreaming() {
+    // 这里将来会添加实际的推流逻辑
+    isStreaming.value = true
+  }
+  
+  /**
+   * 停止直播
+   */
+  function stopStreaming() {
+    // 这里将来会添加实际的停止推流逻辑
+    isStreaming.value = false
+  }
+  
   return {
     currentChannel,
     currentPlan,
@@ -366,6 +466,9 @@ export const usePlanStore = defineStore('plan', () => {
     needsLayoutTemplateUpdate,
     previewingSchedule,
     previewingLayout,
+    liveSchedule,
+    liveLayout,
+    isStreaming,
     setCurrentChannel,
     setCurrentPlan,
     setCurrentBranch,
@@ -379,6 +482,12 @@ export const usePlanStore = defineStore('plan', () => {
     updateSchedule,
     setPreviewingScheduleAndLayout,
     clearPreviewingScheduleAndLayout,
-    isPreviewingScheduleAndLayout
+    isPreviewingScheduleAndLayout,
+    setLiveScheduleAndLayout,
+    clearLiveScheduleAndLayout,
+    isLiveScheduleAndLayout,
+    switchPreviewToLive,
+    startStreaming,
+    stopStreaming
   }
 }) 
