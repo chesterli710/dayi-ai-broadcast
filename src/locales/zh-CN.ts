@@ -210,5 +210,20 @@ export default {
       step5: '选择"显示禁用的设备"',
       step6: '右键点击"立体声混音"，选择"启用"'
     }
+  },
+  audio: {
+    title: '音频设置',
+    microphone: '麦克风',
+    systemAudio: '系统音频',
+    selectMicrophone: '选择麦克风',
+    volume: '音量',
+    mute: '静音',
+    globalVolume: '全局音量',
+    globalSettings: '全局设置',
+    enableSystemAudio: '启用系统音频',
+    systemAudioNotAvailable: '系统音频不可用',
+    systemAudioGuide: '请检查系统音频设置，确保已安装并启用相关驱动程序。',
+    noSignalDetected: '未检测到音频信号',
+    refreshDevices: '刷新设备'
   }
 } 

@@ -1,203 +1,210 @@
 <template>
   <div class="audio-panel">
     <div class="panel-header">
-      <h3>{{ $t('audioPanel.title') }}</h3>
+      <h3>{{ $t('audio.title') }}</h3>
     </div>
     <div class="panel-content">
-      <!-- 麦克风设备选择 -->
+      <!-- 麦克风部分 -->
       <div class="microphone-section">
-        <div class="section-title">{{ $t('audioPanel.deviceTypes.microphone') }}</div>
-        <el-select 
-          v-model="selectedMicrophone" 
-          :placeholder="$t('audioPanel.selectMicrophone')"
+        <div class="section-title">
+          <el-icon><Microphone /></el-icon>
+          <span class="ml-1">{{ $t('audio.microphone') }}</span>
+          <!-- 无音频信号提示 - 移到标题旁边 -->
+          <div v-if="activeMicrophone && activeMicrophone.level === 0" class="inline-signal-alert">
+            <el-icon class="signal-icon"><InfoFilled /></el-icon>
+            <span class="signal-text">{{ $t('audio.noSignalDetected') }}</span>
+            <el-button
+              type="primary"
+              size="small"
+              class="signal-button"
+              @click="refreshAudioDevices"
+            >
+              {{ $t('audio.refreshDevices') }}
+            </el-button>
+          </div>
+        </div>
+        
+        <!-- 麦克风选择 -->
+        <el-select
+          v-model="selectedMicrophone"
+          :placeholder="$t('audio.selectMicrophone')"
           class="mic-select"
+          size="small"
           @change="handleMicrophoneChange"
         >
-          <el-option 
-            v-for="mic in microphoneDevices" 
-            :key="mic.id" 
-            :label="mic.name" 
-            :value="mic.id" 
+          <el-option
+            v-for="device in microphoneDevices"
+            :key="device.id"
+            :label="device.name"
+            :value="device.id"
           />
         </el-select>
         
-        <!-- 麦克风电平和音量控制 -->
+        <!-- 麦克风控制 -->
         <div v-if="activeMicrophone" class="device-controls">
+          <!-- 电平指示器 -->
           <div class="level-meter-container">
             <div class="level-meter">
-              <div 
-                class="level-meter-fill" 
-                :style="{ width: `${activeMicrophone.level}%` }"
-                :class="{ 
-                  'level-low': activeMicrophone.level < 30, 
+              <div
+                class="level-meter-fill"
+                :class="{
+                  'level-low': activeMicrophone.level < 30,
                   'level-medium': activeMicrophone.level >= 30 && activeMicrophone.level < 70,
-                  'level-high': activeMicrophone.level >= 70 
+                  'level-high': activeMicrophone.level >= 70
                 }"
+                :style="{ width: `${activeMicrophone.level}%` }"
               ></div>
             </div>
-            <span class="level-value">{{ activeMicrophone.level }}%</span>
+            <div class="level-value">{{ Math.round(activeMicrophone.level) }}%</div>
           </div>
+          
+          <!-- 音量控制 -->
           <div class="volume-control">
-            <span class="volume-label">{{ $t('audioPanel.volume') }}</span>
+            <div class="volume-label">{{ $t('audio.volume') }}</div>
             <div class="volume-slider-container">
-              <i class="bi bi-volume-down"></i>
+              <el-icon><Mute /></el-icon>
               <el-slider
                 v-model="microphoneVolume"
-                :min="0"
                 :max="100"
-                :disabled="isMuted"
-                @input="setMicrophoneVolume"
-                :class="{ 'volume-changed': microphoneVolumeChanged }"
+                :min="0"
+                :step="1"
+                :show-tooltip="false"
                 class="volume-slider"
+                :class="{ 'volume-changed': microphoneVolumeChanged }"
+                @input="setMicrophoneVolume"
               />
-              <i class="bi bi-volume-up"></i>
+              <el-icon><Plus /></el-icon>
             </div>
           </div>
         </div>
       </div>
       
-      <!-- 系统音频设备 -->
+      <!-- 系统音频部分 -->
       <div class="system-audio-section">
-        <div class="section-title">{{ $t('audioPanel.deviceTypes.systemAudio') }}</div>
-        
-        <!-- 系统音频设备控制 -->
-        <div v-if="systemAudioDevices.length > 0" class="system-audio-selection">
-          <div class="device-activation">
-            <span>{{ $t('audioPanel.enable') }}</span>
-            <el-switch
-              v-model="isSystemAudioActive"
-              @change="toggleSystemAudio"
-            />
-            <el-button 
-              type="primary" 
-              size="small" 
-              class="refresh-button ml-2"
+        <div class="section-title">
+          <el-icon><Headset /></el-icon>
+          <span class="ml-1">{{ $t('audio.systemAudio') }}</span>
+          <!-- 无系统音频信号提示 - 移到标题旁边 -->
+          <div v-if="isSystemAudioActive && activeSystemAudio && activeSystemAudio.level === 0" class="inline-signal-alert">
+            <el-icon class="signal-icon"><InfoFilled /></el-icon>
+            <span class="signal-text">{{ $t('audio.noSignalDetected') }}</span>
+            <el-button
+              type="primary"
+              size="small"
+              class="signal-button"
               @click="refreshAudioDevices"
-              :title="$t('audioPanel.refreshDevices')"
             >
-              <i class="bi bi-arrow-clockwise"></i>
+              {{ $t('audio.refreshDevices') }}
             </el-button>
           </div>
+        </div>
+        
+        <!-- 系统音频开关 -->
+        <div class="device-activation">
+          <span>{{ $t('audio.enableSystemAudio') }}</span>
+          <el-switch
+            v-model="isSystemAudioActive"
+            @change="toggleSystemAudio"
+          />
+        </div>
+        
+        <!-- 系统音频控制 -->
+        <div v-if="isSystemAudioActive && activeSystemAudio" class="device-controls">
+          <!-- 电平指示器 -->
+          <div class="level-meter-container">
+            <div class="level-meter">
+              <div
+                class="level-meter-fill"
+                :class="{
+                  'level-low': activeSystemAudio.level < 30,
+                  'level-medium': activeSystemAudio.level >= 30 && activeSystemAudio.level < 70,
+                  'level-high': activeSystemAudio.level >= 70
+                }"
+                :style="{ width: `${activeSystemAudio.level}%` }"
+              ></div>
+            </div>
+            <div class="level-value">{{ Math.round(activeSystemAudio.level) }}%</div>
+          </div>
           
-          <!-- 系统音频电平和音量控制 -->
-          <div v-if="activeSystemAudio" class="device-controls">
-            <div class="level-meter-container">
-              <div class="level-meter">
-                <div 
-                  class="level-meter-fill" 
-                  :style="{ width: `${activeSystemAudio.level}%` }"
-                  :class="{ 
-                    'level-low': activeSystemAudio.level < 30, 
-                    'level-medium': activeSystemAudio.level >= 30 && activeSystemAudio.level < 70,
-                    'level-high': activeSystemAudio.level >= 70 
-                  }"
-                ></div>
-              </div>
-              <span class="level-value">{{ activeSystemAudio.level }}%</span>
-            </div>
-            
-            <!-- 电平检测提示 -->
-            <div v-if="activeSystemAudio.level === 0" class="level-warning">
-              <div class="signal-alert">
-                <i class="el-icon-info signal-icon"><el-icon><info-filled /></el-icon></i>
-                <span class="signal-text">{{ $t('audioPanel.noLevelDetected') }}</span>
-                <el-button 
-                  type="primary" 
-                  size="small" 
-                  @click="refreshAudioDevices"
-                  class="signal-button"
-                >
-                  {{ $t('audioPanel.refreshDevices') }}
-                </el-button>
-              </div>
-            </div>
-            
-            <div class="volume-control">
-              <span class="volume-label">{{ $t('audioPanel.volume') }}</span>
-              <div class="volume-slider-container">
-                <i class="bi bi-volume-down"></i>
-                <el-slider
-                  v-model="systemAudioVolume"
-                  :min="0"
-                  :max="100"
-                  :disabled="isMuted"
-                  @input="setSystemAudioVolume"
-                  :class="{ 'volume-changed': systemAudioVolumeChanged }"
-                  class="volume-slider"
-                />
-                <i class="bi bi-volume-up"></i>
-              </div>
+          <!-- 音量控制 -->
+          <div class="volume-control">
+            <div class="volume-label">{{ $t('audio.volume') }}</div>
+            <div class="volume-slider-container">
+              <el-icon><Mute /></el-icon>
+              <el-slider
+                v-model="systemAudioVolume"
+                :max="100"
+                :min="0"
+                :step="1"
+                :show-tooltip="false"
+                class="volume-slider"
+                :class="{ 'volume-changed': systemAudioVolumeChanged }"
+                @input="setSystemAudioVolume"
+              />
+              <el-icon><Plus /></el-icon>
             </div>
           </div>
         </div>
         
-        <!-- 系统音频检测失败提示 -->
-        <div v-else class="system-audio-guide">
+        <!-- 无系统音频设备提示 -->
+        <div v-if="systemAudioDevices.length === 0" class="system-audio-guide">
           <el-alert
-            type="warning"
+            :title="$t('audio.systemAudioNotAvailable')"
+            type="info"
             :closable="false"
             show-icon
           >
-            <template #title>
-              {{ $t('audioPanel.systemAudioNotAvailable') }}
-            </template>
             <div class="guide-content">
-              <template v-if="isMacOSPlatform">
-                <p>{{ $t('audioPanel.macOSGuide.title') }}</p>
-                <ol>
-                  <li>{{ $t('audioPanel.macOSGuide.step1') }}</li>
-                  <li>{{ $t('audioPanel.macOSGuide.step2') }}</li>
-                  <li>{{ $t('audioPanel.macOSGuide.step3') }}</li>
-                  <li>{{ $t('audioPanel.macOSGuide.step4') }}</li>
-                </ol>
-              </template>
-              <template v-else-if="isWindowsPlatform">
-                <p>{{ $t('audioPanel.windowsGuide.title') }}</p>
-                <ol>
-                  <li>{{ $t('audioPanel.windowsGuide.step1') }}</li>
-                  <li>{{ $t('audioPanel.windowsGuide.step2') }}</li>
-                  <li>{{ $t('audioPanel.windowsGuide.step3') }}</li>
-                  <li>{{ $t('audioPanel.windowsGuide.step4') }}</li>
-                  <li>{{ $t('audioPanel.windowsGuide.step5') }}</li>
-                  <li>{{ $t('audioPanel.windowsGuide.step6') }}</li>
-                </ol>
-              </template>
+              <p>{{ $t('audio.systemAudioGuide') }}</p>
             </div>
-            <el-button 
-              type="primary" 
-              size="small" 
-              class="refresh-button"
-              @click="refreshAudioDevices"
-            >
-              {{ $t('audioPanel.refreshDevices') }}
-            </el-button>
           </el-alert>
         </div>
       </div>
       
       <!-- 全局音频控制 -->
       <div class="global-audio-controls">
-        <div class="section-title">{{ $t('audioPanel.globalControls') }}</div>
+        <div class="section-title">
+          <el-icon><Setting /></el-icon>
+          <span class="ml-1">{{ $t('audio.globalSettings') }}</span>
+        </div>
+        
+        <!-- 静音控制 -->
+        <div class="mute-control">
+          <span>{{ $t('audio.mute') }}</span>
+          <el-switch
+            v-model="audioStore.isMuted"
+            @change="toggleMute"
+          />
+        </div>
+        
+        <!-- 全局音量控制 -->
         <div class="global-volume-control">
-          <span class="volume-label">{{ $t('audioPanel.masterVolume') }}</span>
+          <div class="volume-label">{{ $t('audio.globalVolume') }}</div>
           <div class="volume-slider-container">
-            <i class="bi bi-volume-down"></i>
+            <el-icon><Mute /></el-icon>
             <el-slider
-              v-model="volume"
-              :min="0"
+              v-model="audioStore.volume"
               :max="100"
-              :disabled="isMuted"
-              @input="setVolume"
+              :min="0"
+              :step="1"
+              :show-tooltip="false"
               class="volume-slider"
+              @input="setVolume"
             />
-            <i class="bi bi-volume-up"></i>
+            <el-icon><Plus /></el-icon>
           </div>
         </div>
-        <div class="mute-control">
-          <span>{{ $t('audioPanel.mute') }}</span>
-          <el-switch v-model="isMuted" @change="toggleMute" />
-        </div>
       </div>
+      
+      <!-- 刷新设备按钮 -->
+      <el-button
+        type="primary"
+        class="refresh-button"
+        @click="refreshAudioDevices"
+      >
+        <el-icon><Refresh /></el-icon>
+        {{ $t('audio.refreshDevices') }}
+      </el-button>
     </div>
   </div>
 </template>
@@ -212,7 +219,15 @@ import { useI18n } from 'vue-i18n';
 import { useAudioStore } from '../stores/audioStore';
 import { AudioSourceType } from '../types/audio';
 import { isMacOS, isWindows } from '../utils/platformUtils';
-import { InfoFilled } from '@element-plus/icons-vue';
+import { 
+  InfoFilled, 
+  Microphone, 
+  Headset, 
+  Setting, 
+  Refresh,
+  Mute,
+  Plus
+} from '@element-plus/icons-vue';
 
 // 添加防抖函数
 function debounce(fn: Function, delay: number) {
@@ -288,21 +303,29 @@ const activeSystemAudio = computed(() => {
  * @param deviceId - 设备ID
  */
 function handleMicrophoneChange(deviceId: string) {
+  console.log(`切换麦克风到: ${deviceId}`);
+  
   // 先停用所有麦克风
   microphoneDevices.value.forEach(mic => {
     if (mic.isActive && mic.id !== deviceId) {
+      console.log(`停用麦克风: ${mic.id}`);
       audioStore.deactivateDevice(mic.id);
     }
   });
   
   // 激活选中的麦克风
+  console.log(`激活麦克风: ${deviceId}`);
   audioStore.activateDevice(deviceId);
   
   // 更新麦克风音量
   const selectedDevice = audioStore.devices.find(device => device.id === deviceId);
   if (selectedDevice) {
     microphoneVolume.value = selectedDevice.volume;
+    console.log(`设置麦克风音量: ${selectedDevice.volume}`);
   }
+  
+  // 强制更新选中状态
+  selectedMicrophone.value = deviceId;
 }
 
 /**
@@ -401,13 +424,18 @@ function updateSelectedDevices() {
   );
   
   if (activeMic) {
-    selectedMicrophone.value = activeMic.id;
+    // 只有当selectedMicrophone为空或者与当前激活的麦克风不同时才更新
+    if (!selectedMicrophone.value || !microphoneDevices.value.some(mic => mic.id === selectedMicrophone.value)) {
+      selectedMicrophone.value = activeMic.id;
+      console.log(`更新选中麦克风: ${activeMic.id}`);
+    }
     microphoneVolume.value = activeMic.volume;
   } else if (microphoneDevices.value.length > 0) {
     // 如果没有激活的麦克风，默认选择第一个
     selectedMicrophone.value = microphoneDevices.value[0].id;
     microphoneVolume.value = microphoneDevices.value[0].volume;
     audioStore.activateDevice(selectedMicrophone.value);
+    console.log(`默认选择第一个麦克风: ${selectedMicrophone.value}`);
   }
   
   // 更新系统音频
@@ -459,40 +487,50 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.05);
 }
 
 .panel-header {
-  padding: 10px 15px;
+  padding: 8px 15px;
   border-bottom: 1px solid var(--el-border-color);
   background-color: var(--el-fill-color-light);
 }
 
 .panel-header h3 {
   margin: 0;
-  font-size: 16px;
-  font-weight: bold;
+  font-size: 15px;
+  font-weight: 600;
   color: var(--el-text-color-primary);
 }
 
 .panel-content {
   flex: 1;
-  padding: 15px;
+  padding: 12px;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 16px;
 }
 
 .section-title {
-  font-weight: bold;
-  margin-bottom: 10px;
+  font-weight: 600;
+  font-size: 14px;
+  margin-bottom: 8px;
   color: var(--el-text-color-primary);
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .microphone-section, .system-audio-section, .global-audio-controls {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
+  background-color: var(--el-fill-color-blank);
+  border-radius: 6px;
+  padding: 10px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
 
 .mic-select {
@@ -502,66 +540,34 @@ onUnmounted(() => {
 .system-audio-selection {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-}
-
-.device-select-container {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-}
-
-.device-select {
-  flex: 1;
-  width: auto;
+  gap: 8px;
 }
 
 .device-activation {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-top: 5px;
-}
-
-.audio-device-item {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 10px;
-  border: 1px solid var(--el-border-color-light);
-  border-radius: var(--el-border-radius-base);
-  background-color: var(--el-fill-color-blank);
-}
-
-.device-info {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.device-name {
-  font-weight: bold;
-  color: var(--el-text-color-primary);
+  margin-top: 2px;
 }
 
 .device-controls {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  margin-top: 5px;
+  gap: 8px;
+  margin-top: 4px;
 }
 
 .level-meter-container {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
 }
 
 .level-meter {
   flex: 1;
-  height: 10px;
+  height: 8px;
   background-color: var(--el-fill-color-darker);
-  border-radius: 5px;
+  border-radius: 4px;
   overflow: hidden;
 }
 
@@ -583,20 +589,20 @@ onUnmounted(() => {
 }
 
 .level-value {
-  min-width: 40px;
+  min-width: 36px;
   text-align: right;
-  font-size: 12px;
+  font-size: 11px;
   color: var(--el-text-color-secondary);
 }
 
 .volume-control {
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 4px;
 }
 
 .volume-label {
-  font-size: 13px;
+  font-size: 12px;
   color: var(--el-text-color-secondary);
 }
 
@@ -607,7 +613,7 @@ onUnmounted(() => {
 }
 
 .volume-slider-container i {
-  font-size: 14px;
+  font-size: 13px;
   color: var(--el-text-color-secondary);
 }
 
@@ -617,90 +623,44 @@ onUnmounted(() => {
 }
 
 .system-audio-guide {
-  margin-top: 5px;
+  margin-top: 4px;
 }
 
 .guide-content {
-  margin: 10px 0;
-  font-size: 13px;
+  margin: 8px 0;
+  font-size: 12px;
 }
 
 .guide-content ol {
-  padding-left: 20px;
-  margin: 5px 0;
+  padding-left: 18px;
+  margin: 4px 0;
 }
 
 .refresh-button {
-  margin-top: 10px;
+  margin-top: 8px;
 }
 
 .global-audio-controls {
-  margin-top: 10px;
-  padding-top: 15px;
+  margin-top: 8px;
+  padding-top: 12px;
   border-top: 1px solid var(--el-border-color-light);
 }
 
 .global-volume-control {
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 4px;
 }
 
 .mute-control {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-top: 5px;
+  margin-top: 4px;
 }
 
 .level-warning {
-  margin-top: 5px;
-}
-
-.error-hint {
-  color: #f56c6c;
-  font-size: 12px;
-  margin-top: 5px;
-}
-
-.device-actions {
-  margin-top: 10px;
-  display: flex;
-  justify-content: center;
-}
-
-.device-selection-hint {
-  margin-top: 5px;
-}
-
-.hint-title {
-  font-weight: bold;
-  color: var(--el-text-color-primary);
-}
-
-.compact-alert {
-  display: flex;
-  align-items: center;
-}
-
-.compact-alert .el-alert__content {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  width: 100%;
-  padding: 0;
-}
-
-.compact-alert .el-alert__title {
-  margin: 0;
-  font-size: 13px;
-}
-
-.compact-button {
-  margin: 0 0 0 10px !important;
-  padding: 5px 10px;
-  height: auto;
-  line-height: 1.5;
+  margin-top: 4px;
 }
 
 .signal-alert {
@@ -751,8 +711,8 @@ onUnmounted(() => {
 }
 
 .volume-slider :deep(.el-slider__button) {
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
   border: 2px solid var(--el-color-primary);
   background-color: #fff;
   transition: transform 0.1s;
@@ -766,5 +726,76 @@ onUnmounted(() => {
 .volume-slider :deep(.el-slider__bar) {
   background-color: var(--el-color-primary);
   transition: width 0.1s;
+}
+
+/* 优化下拉选择框样式 */
+.mic-select :deep(.el-input__wrapper) {
+  padding: 0 8px;
+}
+
+.mic-select :deep(.el-input__inner) {
+  height: 32px;
+}
+
+/* 优化系统音频指南样式 */
+.system-audio-guide :deep(.el-alert) {
+  padding: 8px 12px;
+}
+
+.system-audio-guide :deep(.el-alert__content) {
+  padding: 0 8px;
+}
+
+.system-audio-guide :deep(.el-alert__title) {
+  font-size: 13px;
+}
+
+/* 添加过渡动画 */
+.device-controls {
+  transition: all 0.3s ease;
+}
+
+/* 内联信号提示样式 */
+.inline-signal-alert {
+  display: flex;
+  align-items: center;
+  margin-left: auto;
+  background-color: var(--el-color-info-light-9);
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-size: 12px;
+}
+
+.inline-signal-alert .signal-icon {
+  color: var(--el-color-info);
+  margin-right: 4px;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+}
+
+.inline-signal-alert .signal-text {
+  color: var(--el-color-info-dark-2);
+  margin-right: 4px;
+}
+
+.inline-signal-alert .signal-button {
+  margin: 0 !important;
+  padding: 1px 6px;
+  height: 20px;
+  font-size: 11px;
+  line-height: 1;
+}
+
+/* 响应式调整 */
+@media (max-width: 768px) {
+  .panel-content {
+    padding: 10px;
+    gap: 12px;
+  }
+  
+  .microphone-section, .system-audio-section, .global-audio-controls {
+    padding: 8px;
+  }
 }
 </style> 

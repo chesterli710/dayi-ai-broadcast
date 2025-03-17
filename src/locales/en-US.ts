@@ -210,5 +210,20 @@ export default {
       step5: 'Select "Show Disabled Devices"',
       step6: 'Right-click on "Stereo Mix" and select "Enable"'
     }
+  },
+  audio: {
+    title: 'Audio Settings',
+    microphone: 'Microphone',
+    systemAudio: 'System Audio',
+    selectMicrophone: 'Select Microphone',
+    volume: 'Volume',
+    mute: 'Mute',
+    globalVolume: 'Global Volume',
+    globalSettings: 'Global Settings',
+    enableSystemAudio: 'Enable System Audio',
+    systemAudioNotAvailable: 'System Audio Not Available',
+    systemAudioGuide: 'Please check your system audio settings and ensure the required drivers are installed and enabled.',
+    noSignalDetected: 'No audio signal detected',
+    refreshDevices: 'Refresh Devices'
   }
 } 

@@ -121,15 +121,40 @@ export const useAudioStore = defineStore('audio', () => {
    */
   function activateDevice(deviceId: string) {
     const device = devices.value.find(d => d.id === deviceId)
-    if (!device) return
+    if (!device) {
+      console.error(`找不到设备: ${deviceId}`)
+      return
+    }
     
     // 如果设备已经激活，则不做任何操作
-    if (activeDevices.value.some(d => d.id === deviceId)) return
+    if (activeDevices.value.some(d => d.id === deviceId)) {
+      console.log(`设备已经激活: ${deviceId}`)
+      return
+    }
+    
+    console.log(`激活设备: ${deviceId}, 类型: ${device.type}`)
+    
+    // 如果是麦克风，先停用其他麦克风
+    if (device.type === AudioSourceType.MICROPHONE) {
+      const activeMics = activeDevices.value.filter(d => d.type === AudioSourceType.MICROPHONE)
+      for (const mic of activeMics) {
+        console.log(`停用其他麦克风: ${mic.id}`)
+        deactivateDevice(mic.id)
+      }
+    }
     
     // 添加到激活设备列表
     activeDevices.value.push({
       ...device,
       isActive: true
+    })
+    
+    // 更新设备列表中的激活状态
+    devices.value = devices.value.map(d => {
+      if (d.id === deviceId) {
+        return { ...d, isActive: true }
+      }
+      return d
     })
   }
   
@@ -138,7 +163,18 @@ export const useAudioStore = defineStore('audio', () => {
    * @param deviceId - 设备ID
    */
   function deactivateDevice(deviceId: string) {
+    console.log(`停用设备: ${deviceId}`)
+    
+    // 从激活设备列表中移除
     activeDevices.value = activeDevices.value.filter(d => d.id !== deviceId)
+    
+    // 更新设备列表中的激活状态
+    devices.value = devices.value.map(d => {
+      if (d.id === deviceId) {
+        return { ...d, isActive: false }
+      }
+      return d
+    })
   }
   
   /**
