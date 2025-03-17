@@ -157,6 +157,83 @@ export class CanvasRenderer {
       this.textLayerNeedsRedraw = true;
       
       console.log(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 布局已变更，标记所有图层需要重绘`);
+    } else if (layout && this.currentLayout) {
+      // 检查布局内容是否发生变化
+      const oldElements = this.currentLayout.elements || [];
+      const newElements = layout.elements || [];
+      
+      // 检查元素数量是否变化
+      if (oldElements.length !== newElements.length) {
+        this.backgroundNeedsRedraw = true;
+        this.foregroundNeedsRedraw = true;
+        this.textLayerNeedsRedraw = true;
+        console.log(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 布局元素数量变化，标记所有图层需要重绘`);
+      } else {
+        // 检查元素内容是否变化
+        let elementsChanged = false;
+        
+        for (let i = 0; i < newElements.length; i++) {
+          const oldElement = oldElements[i];
+          const newElement = newElements[i];
+          
+          // 检查元素类型是否变化
+          if (oldElement.type !== newElement.type) {
+            elementsChanged = true;
+            break;
+          }
+          
+          // 检查媒体元素的sourceId/sourceName/sourceType是否变化
+          if (newElement.type === LayoutElementType.MEDIA) {
+            const oldMedia = oldElement as MediaLayoutElement;
+            const newMedia = newElement as MediaLayoutElement;
+            
+            if (
+              oldMedia.sourceId !== newMedia.sourceId ||
+              oldMedia.sourceName !== newMedia.sourceName ||
+              oldMedia.sourceType !== newMedia.sourceType
+            ) {
+              console.log(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 媒体元素源信息变化:`, {
+                id: newMedia.id,
+                oldSourceId: oldMedia.sourceId,
+                newSourceId: newMedia.sourceId,
+                oldSourceName: oldMedia.sourceName,
+                newSourceName: newMedia.sourceName
+              });
+              elementsChanged = true;
+              break;
+            }
+          }
+          
+          // 检查文本元素的内容是否变化
+          if (newElement.type && 
+              (newElement.type === LayoutElementType.HOST_LABEL || 
+               newElement.type === LayoutElementType.HOST_INFO || 
+               newElement.type === LayoutElementType.SUBJECT_LABEL || 
+               newElement.type === LayoutElementType.SUBJECT_INFO || 
+               newElement.type === LayoutElementType.GUEST_LABEL || 
+               newElement.type === LayoutElementType.GUEST_INFO)) {
+            const oldText = oldElement as TextLayoutElement;
+            const newText = newElement as TextLayoutElement;
+            
+            if (
+              oldText.fontStyle?.fontSize !== newText.fontStyle?.fontSize ||
+              oldText.fontStyle?.fontWeight !== newText.fontStyle?.fontWeight ||
+              oldText.fontStyle?.fontColor !== newText.fontStyle?.fontColor ||
+              oldText.orientation !== newText.orientation
+            ) {
+              elementsChanged = true;
+              break;
+            }
+          }
+        }
+        
+        if (elementsChanged) {
+          this.backgroundNeedsRedraw = true;
+          this.foregroundNeedsRedraw = true;
+          this.textLayerNeedsRedraw = true;
+          console.log(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 布局元素内容变化，标记所有图层需要重绘`);
+        }
+      }
     }
     
     // 保存旧布局的引用，用于比较
@@ -860,28 +937,104 @@ export class CanvasRenderer {
   
   /**
    * 更新布局元素
-   * @param elements 布局元素数组
+   * 用于在布局元素属性变化时更新渲染，而不需要重新设置整个布局
+   * 特别适用于媒体元素的sourceId/sourceName/sourceType变化
+   * @param elements 更新后的布局元素数组
    */
   public updateLayoutElements(elements: LayoutElement[]): void {
-    console.log(`[canvasRenderer.ts ${this.rendererType === 'preview' ? '预览' : '直播'}画布渲染器] 更新布局元素`, {
-      elementsCount: elements.length
-    });
-    
     if (!this.currentLayout) {
-      console.warn(`[canvasRenderer.ts ${this.rendererType === 'preview' ? '预览' : '直播'}画布渲染器] 无法更新布局元素，当前没有布局`);
+      console.warn(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 无法更新布局元素：当前没有布局`);
       return;
     }
     
-    // 更新当前布局的元素
-    this.currentLayout = {
-      ...this.currentLayout,
-      elements: elements
-    };
+    console.log(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 更新布局元素:`, {
+      layoutId: this.currentLayout.id,
+      elementsCount: elements.length
+    });
     
-    // 标记文字图层和视频图层需要重绘
-    this.textLayerNeedsRedraw = true;
+    // 检查元素是否发生变化
+    const oldElements = this.currentLayout.elements || [];
+    let elementsChanged = false;
     
-    // 不需要重新启动渲染循环，因为它应该已经在运行
+    // 检查元素数量是否变化
+    if (oldElements.length !== elements.length) {
+      elementsChanged = true;
+    } else {
+      // 检查元素内容是否变化
+      for (let i = 0; i < elements.length; i++) {
+        const oldElement = oldElements[i];
+        const newElement = elements[i];
+        
+        // 检查元素ID是否匹配
+        if (oldElement.id !== newElement.id) {
+          elementsChanged = true;
+          break;
+        }
+        
+        // 检查媒体元素的sourceId/sourceName/sourceType是否变化
+        if (newElement.type === LayoutElementType.MEDIA) {
+          const oldMedia = oldElement as MediaLayoutElement;
+          const newMedia = newElement as MediaLayoutElement;
+          
+          if (
+            oldMedia.sourceId !== newMedia.sourceId ||
+            oldMedia.sourceName !== newMedia.sourceName ||
+            oldMedia.sourceType !== newMedia.sourceType
+          ) {
+            console.log(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 媒体元素源信息变化:`, {
+              id: newMedia.id,
+              oldSourceId: oldMedia.sourceId,
+              newSourceId: newMedia.sourceId,
+              oldSourceName: oldMedia.sourceName,
+              newSourceName: newMedia.sourceName
+            });
+            elementsChanged = true;
+            break;
+          }
+        }
+        
+        // 检查文本元素的内容是否变化
+        if (newElement.type && 
+            (newElement.type === LayoutElementType.HOST_LABEL || 
+             newElement.type === LayoutElementType.HOST_INFO || 
+             newElement.type === LayoutElementType.SUBJECT_LABEL || 
+             newElement.type === LayoutElementType.SUBJECT_INFO || 
+             newElement.type === LayoutElementType.GUEST_LABEL || 
+             newElement.type === LayoutElementType.GUEST_INFO)) {
+          const oldText = oldElement as TextLayoutElement;
+          const newText = newElement as TextLayoutElement;
+          
+          if (
+            oldText.fontStyle?.fontSize !== newText.fontStyle?.fontSize ||
+            oldText.fontStyle?.fontWeight !== newText.fontStyle?.fontWeight ||
+            oldText.fontStyle?.fontColor !== newText.fontStyle?.fontColor ||
+            oldText.orientation !== newText.orientation
+          ) {
+            elementsChanged = true;
+            break;
+          }
+        }
+      }
+    }
+    
+    if (elementsChanged) {
+      // 更新布局元素
+      this.currentLayout.elements = [...elements];
+      
+      // 标记所有图层需要重绘
+      this.backgroundNeedsRedraw = true;
+      this.foregroundNeedsRedraw = true;
+      this.textLayerNeedsRedraw = true;
+      
+      console.log(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 布局元素已更新，标记所有图层需要重绘`);
+    } else {
+      console.log(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 布局元素未发生变化，不需要重绘`);
+    }
+    
+    // 确保渲染循环正在运行
+    if (!this.animationFrameId) {
+      this.startRenderLoop();
+    }
   }
 
   /**

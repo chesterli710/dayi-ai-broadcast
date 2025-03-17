@@ -199,7 +199,13 @@ watch(liveLayout, (newLayout, oldLayout) => {
       JSON.stringify(oldLayout) !== JSON.stringify(newLayout);
     
     if (isLayoutChanged) {
-      console.log('[LiveCanvas.vue 直播画布] 布局发生变化，重新设置布局');
+      console.log('[LiveCanvas.vue 直播画布] 布局发生变化，重新设置布局', {
+        oldLayoutId: oldLayout?.id,
+        newLayoutId: newLayout?.id,
+        hasElements: !!(newLayout as any)?.elements,
+        elementsCount: (newLayout as any)?.elements?.length || 0
+      });
+      
       // 设置布局，如果布局为null则传递null
       renderer.value.setLayout(newLayout || null);
       
@@ -212,7 +218,53 @@ watch(liveLayout, (newLayout, oldLayout) => {
         console.log('[LiveCanvas.vue 直播画布] 图片缓存状态:', status);
       }
     } else {
-      console.log('[LiveCanvas.vue 直播画布] 布局引用变化但内容相同，不重新设置布局');
+      // 即使布局引用没有变化，也检查元素的sourceId/sourceName/sourceType是否变化
+      if (newLayout && oldLayout && newLayout.elements && oldLayout.elements) {
+        let mediaElementsChanged = false;
+        
+        // 检查媒体元素的sourceId/sourceName/sourceType是否变化
+        for (let i = 0; i < newLayout.elements.length; i++) {
+          const newElement = newLayout.elements[i];
+          const oldElement = oldLayout.elements[i];
+          
+          if (newElement.type === 'media' && oldElement.type === 'media') {
+            const newMedia = newElement as any;
+            const oldMedia = oldElement as any;
+            
+            if (
+              newMedia.sourceId !== oldMedia.sourceId ||
+              newMedia.sourceName !== oldMedia.sourceName ||
+              newMedia.sourceType !== oldMedia.sourceType
+            ) {
+              mediaElementsChanged = true;
+              console.log('[LiveCanvas.vue 直播画布] 媒体元素源信息变化:', {
+                elementId: newMedia.id,
+                oldSourceId: oldMedia.sourceId,
+                newSourceId: newMedia.sourceId,
+                oldSourceName: oldMedia.sourceName,
+                newSourceName: newMedia.sourceName
+              });
+              break;
+            }
+          }
+        }
+        
+        if (mediaElementsChanged) {
+          console.log('[LiveCanvas.vue 直播画布] 媒体元素源信息变化，更新布局元素');
+          
+          // 如果渲染器支持updateLayoutElements方法，直接更新元素
+          if (typeof (renderer.value as any).updateLayoutElements === 'function') {
+            console.log('[LiveCanvas.vue 直播画布] 使用updateLayoutElements方法更新布局元素');
+            (renderer.value as any).updateLayoutElements(newLayout.elements);
+          } else {
+            // 如果渲染器没有updateLayoutElements方法，则重新设置布局
+            console.log('[LiveCanvas.vue 直播画布] 重新设置布局');
+            renderer.value.setLayout(newLayout);
+          }
+        } else {
+          console.log('[LiveCanvas.vue 直播画布] 布局引用变化但内容相同，不重新设置布局');
+        }
+      }
     }
   }
 }, { deep: true });

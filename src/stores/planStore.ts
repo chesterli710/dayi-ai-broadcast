@@ -586,9 +586,36 @@ export const usePlanStore = defineStore('plan', () => {
   /**
    * 通知预览布局已编辑
    * 用于在布局编辑器中保存布局后通知预览画布更新
+   * @param updatedLayout 可选的更新后的布局数据，如果提供则会更新当前预览的布局
    */
-  function notifyPreviewLayoutEdited() {
+  function notifyPreviewLayoutEdited(updatedLayout?: Layout) {
     console.log('[planStore.ts 计划存储] 通知预览布局已编辑')
+    
+    // 如果提供了更新后的布局数据，则更新当前预览的布局
+    if (updatedLayout && previewingLayout.value && updatedLayout.id === previewingLayout.value.id) {
+      console.log('[planStore.ts 计划存储] 更新预览布局数据', {
+        layoutId: updatedLayout.id,
+        elementsCount: updatedLayout.elements?.length || 0
+      })
+      
+      // 创建深拷贝以确保触发响应式更新
+      const layoutCopy = JSON.parse(JSON.stringify(updatedLayout))
+      
+      // 先设置为 null 再设置新值，确保触发监听器
+      const oldLayout = previewingLayout.value
+      previewingLayout.value = null
+      
+      // 使用 nextTick 确保视图更新后再设置新布局
+      setTimeout(() => {
+        previewingLayout.value = layoutCopy
+        console.log('[planStore.ts 计划存储] 预览布局已更新', {
+          layoutId: layoutCopy.id,
+          elementsCount: layoutCopy.elements?.length || 0
+        })
+      }, 10)
+    }
+    
+    // 触发事件通知
     previewLayoutEditedEvent.value = Date.now()
     layoutEditedEvent.value = Date.now()
   }
@@ -596,9 +623,36 @@ export const usePlanStore = defineStore('plan', () => {
   /**
    * 通知直播布局已编辑
    * 用于在布局编辑器中保存布局后通知直播画布更新
+   * @param updatedLayout 可选的更新后的布局数据，如果提供则会更新当前直播的布局
    */
-  function notifyLiveLayoutEdited() {
+  function notifyLiveLayoutEdited(updatedLayout?: Layout) {
     console.log('[planStore.ts 计划存储] 通知直播布局已编辑')
+    
+    // 如果提供了更新后的布局数据，则更新当前直播的布局
+    if (updatedLayout && liveLayout.value && updatedLayout.id === liveLayout.value.id) {
+      console.log('[planStore.ts 计划存储] 更新直播布局数据', {
+        layoutId: updatedLayout.id,
+        elementsCount: updatedLayout.elements?.length || 0
+      })
+      
+      // 创建深拷贝以确保触发响应式更新
+      const layoutCopy = JSON.parse(JSON.stringify(updatedLayout))
+      
+      // 先设置为 null 再设置新值，确保触发监听器
+      const oldLayout = liveLayout.value
+      liveLayout.value = null
+      
+      // 使用 setTimeout 确保视图更新后再设置新布局
+      setTimeout(() => {
+        liveLayout.value = layoutCopy
+        console.log('[planStore.ts 计划存储] 直播布局已更新', {
+          layoutId: layoutCopy.id,
+          elementsCount: layoutCopy.elements?.length || 0
+        })
+      }, 10)
+    }
+    
+    // 触发事件通知
     liveLayoutEditedEvent.value = Date.now()
     layoutEditedEvent.value = Date.now()
   }
@@ -636,6 +690,18 @@ export const usePlanStore = defineStore('plan', () => {
     
     // 更新布局
     schedule.layouts[layoutIndex] = JSON.parse(JSON.stringify(updatedLayout));
+    
+    // 如果更新的是当前正在预览的布局，同时更新预览布局
+    if (previewingSchedule.value?.id === scheduleId && 
+        previewingLayout.value?.id === updatedLayout.id) {
+      notifyPreviewLayoutEdited(updatedLayout);
+    }
+    
+    // 如果更新的是当前正在直播的布局，同时更新直播布局
+    if (liveSchedule.value?.id === scheduleId && 
+        liveLayout.value?.id === updatedLayout.id) {
+      notifyLiveLayoutEdited(updatedLayout);
+    }
     
     console.log(`[planStore.ts 计划存储] 已更新日程 ${scheduleId} 中的布局 ${updatedLayout.id}`);
     return true;
