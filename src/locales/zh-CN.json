@@ -1,7 +1,0 @@
-{
-  "layoutEditor": {
-    "switchToLive": "切换到直播",
-    "useWebGL": "使用WebGL渲染",
-    "useCanvas": "使用Canvas 2D渲染"
-  }
-} 

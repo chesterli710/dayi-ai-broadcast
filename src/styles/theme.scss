@@ -130,6 +130,15 @@ html.dark {
   font-weight: 500;
 }
 
+/* 禁用所有按钮的focus边框 */
+button:focus,
+button:focus-visible,
+.el-button:focus,
+.el-button:focus-visible {
+  outline: 0 !important;
+  box-shadow: none !important;
+}
+
 .el-card {
   border-radius: 8px;
   overflow: hidden;

@@ -15,7 +15,7 @@
           <div 
             class="layout-preview" 
             :style="{ 
-              backgroundImage: layoutCopy.background ? `url(${layoutCopy.background})` : 'none',
+              backgroundImage: getBackgroundImageUrl(layoutCopy.background),
               width: `${previewWidth}px`,
               height: `${previewHeight}px`
             }"
@@ -217,6 +217,7 @@ import { LayoutElementType } from '../types/broadcast';
 import type { VideoDevice } from '../types/video';
 import { VideoSourceType } from '../types/video';
 import videoDeviceManager from '../utils/videoDeviceManager';
+import { getCachedImage } from '../utils/imagePreloader';
 
 const { t } = useI18n();
 
@@ -1424,6 +1425,25 @@ async function ensureCameraStreamsInPreview() {
   } catch (error) {
     console.error('[LayoutEditorModal.vue 布局编辑器] 确保摄像头流在预览区域显示失败:', error);
   }
+}
+
+/**
+ * 获取背景图片URL，优先使用缓存的图片
+ * @param backgroundUrl 背景图片URL
+ * @returns 背景图片样式
+ */
+function getBackgroundImageUrl(backgroundUrl: string | undefined): string {
+  if (!backgroundUrl) return 'none';
+  
+  // 尝试从缓存中获取图片
+  const cachedImage = getCachedImage(backgroundUrl);
+  if (cachedImage && cachedImage.complete && cachedImage.naturalWidth > 0) {
+    console.log(`[LayoutEditorModal.vue 布局编辑器] 使用缓存的背景图片: ${backgroundUrl}`);
+    return `url(${backgroundUrl})`;
+  }
+  
+  // 如果没有缓存或图片未加载完成，直接使用URL
+  return `url(${backgroundUrl})`;
 }
 </script>
 

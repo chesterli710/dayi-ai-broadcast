@@ -25,10 +25,14 @@ export async function initializeEncoder(streamConfig: StreamConfig) {
   try {
     // 获取推荐的编码器
     const recommendedEncoder = await gpuDetector.getRecommendedEncoder()
+    console.log('[initializeApp.ts 初始化编码器] 推荐的编码器:', recommendedEncoder)
     
     // 更新流配置中的编码器
     if (!streamConfig.codec) {
+      console.log('[initializeApp.ts 初始化编码器] 设置默认编码器:', recommendedEncoder)
       streamConfig.codec = recommendedEncoder
+    } else {
+      console.log('[initializeApp.ts 初始化编码器] 保留现有编码器设置:', streamConfig.codec)
     }
     
     // 设置默认的流配置参数（如果未指定）

@@ -357,8 +357,10 @@ onUnmounted(() => {
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
-.canvas-header {
+/* 移除重复的样式，使用全局样式 */
+/* .canvas-header {
   padding: 10px 15px;
+  height:45px;
   background-color: var(--el-bg-color-overlay);
   border-bottom: 1px solid var(--el-border-color);
   display: flex;
@@ -371,7 +373,7 @@ onUnmounted(() => {
   font-size: var(--el-font-size-medium);
   font-weight: 500;
   color: var(--el-text-color-primary);
-}
+} */
 
 .header-actions {
   display: flex;
@@ -379,7 +381,7 @@ onUnmounted(() => {
 }
 
 .switch-button {
-  padding: 4px 12px;
+  padding: 0px 12px;
   background-color: var(--el-color-primary);
   color: #fff;
   border: none;

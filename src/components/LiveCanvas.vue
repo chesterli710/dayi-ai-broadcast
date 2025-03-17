@@ -344,6 +344,7 @@ onUnmounted(() => {
 
 .canvas-header {
   padding: 10px 15px;
+  height:45px;
   background-color: var(--el-bg-color-overlay);
   border-bottom: 1px solid var(--el-border-color);
   display: flex;

@@ -92,12 +92,14 @@ class GPUDetector {
       const vendor = gl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL);
       const renderer = gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL);
       
+      console.log('[gpuDetector.ts GPU检测器] WebGL获取到的GPU信息:', { vendor, renderer });
+      
       return this.parseGPUInfo({
         vendor,
         model: renderer
       });
     } catch (error) {
-      console.error('从WebGL获取GPU信息失败:', error);
+      console.error('[gpuDetector.ts GPU检测器] 从WebGL获取GPU信息失败:', error);
       return {
         vendor: GPUVendor.UNKNOWN,
         model: 'Unknown'
@@ -114,6 +116,8 @@ class GPUDetector {
     const vendorLower = info.vendor.toLowerCase();
     const modelLower = info.model.toLowerCase();
     
+    console.log('[gpuDetector.ts GPU检测器] 原始GPU信息:', { vendor: vendorLower, model: modelLower });
+    
     let vendor = GPUVendor.UNKNOWN;
     
     if (vendorLower.includes('nvidia') || modelLower.includes('nvidia')) {
@@ -122,9 +126,18 @@ class GPUDetector {
       vendor = GPUVendor.AMD;
     } else if (vendorLower.includes('intel') || modelLower.includes('intel')) {
       vendor = GPUVendor.INTEL;
-    } else if (vendorLower.includes('apple') || modelLower.includes('apple') || modelLower.includes('m1') || modelLower.includes('m2')) {
+    } else if (
+      vendorLower.includes('apple') || 
+      modelLower.includes('apple') || 
+      modelLower.includes('m1') || 
+      modelLower.includes('m2') || 
+      modelLower.includes('m3') ||
+      modelLower.includes('apple gpu')
+    ) {
       vendor = GPUVendor.APPLE;
     }
+    
+    console.log('[gpuDetector.ts GPU检测器] 解析后的GPU信息:', { vendor, model: info.model });
     
     return {
       vendor,
@@ -139,18 +152,33 @@ class GPUDetector {
   async getRecommendedEncoder(): Promise<EncoderType> {
     const gpuInfo = await this.getGPUInfo();
     
+    let encoder: EncoderType;
+    
     switch (gpuInfo.vendor) {
       case GPUVendor.APPLE:
-        return EncoderType.H264_VIDEOTOOLBOX;
+        encoder = EncoderType.H264_VIDEOTOOLBOX;
+        break;
       case GPUVendor.NVIDIA:
-        return EncoderType.H264_NVENC;
+        encoder = EncoderType.H264_NVENC;
+        break;
       case GPUVendor.AMD:
-        return EncoderType.H264_AMF;
+        encoder = EncoderType.H264_AMF;
+        break;
       case GPUVendor.INTEL:
-        return EncoderType.H264_QSV;
+        encoder = EncoderType.H264_QSV;
+        break;
       default:
-        return EncoderType.H264_SOFTWARE;
+        encoder = EncoderType.H264_SOFTWARE;
+        break;
     }
+    
+    console.log('[gpuDetector.ts GPU检测器] 推荐的编码器:', { 
+      gpuVendor: gpuInfo.vendor, 
+      gpuModel: gpuInfo.model, 
+      encoder 
+    });
+    
+    return encoder;
   }
 }
 

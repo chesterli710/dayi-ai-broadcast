@@ -67,7 +67,7 @@ button:hover {
 }
 button:focus,
 button:focus-visible {
-  outline: 4px auto -webkit-focus-ring-color;
+  outline: 0;
 }
 
 .card {
@@ -94,4 +94,25 @@ button:focus-visible {
 .panel-header .el-button--small {
   padding: 4px 12px !important;
   line-height: 1.5 !important;
+}
+
+/* 统一所有面板头部样式 */
+.panel-header,
+.canvas-header {
+  padding: 0 15px !important;
+  height: 45px !important;
+  background-color: var(--el-bg-color-overlay) !important;
+  border-bottom: 1px solid var(--el-border-color) !important;
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+}
+
+/* 统一面板头部标题样式 */
+.panel-header h3,
+.canvas-header h3 {
+  margin: 0 !important;
+  font-size: var(--el-font-size-medium) !important;
+  font-weight: 500 !important;
+  color: var(--el-text-color-primary) !important;
 }

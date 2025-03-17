@@ -369,9 +369,9 @@ export class CanvasRenderer {
     // 如果已经有渲染循环在运行，则不重复启动
     if (this.animationFrameId !== null) {
       console.log(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 渲染循环已在运行中，不重复启动`);
-      return;
-    }
-    
+        return;
+      }
+      
     console.log(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 启动渲染循环`);
     
     // 记录启动时间
@@ -383,9 +383,9 @@ export class CanvasRenderer {
     
     const renderFrame = () => {
       try {
-        // 执行渲染
-        this.render();
-        
+      // 执行渲染
+      this.render();
+      
         // 重置连续错误计数
         if (consecutiveErrors > 0) {
           consecutiveErrors = 0;
@@ -398,7 +398,7 @@ export class CanvasRenderer {
         const now = Date.now();
         if (now - lastFpsUpdate >= 1000) {
           const fps = Math.round(frameCount * 1000 / (now - lastFpsUpdate));
-          console.log(`[canvasRenderer.ts ${this.rendererType}画布渲染器] FPS: ${fps}`);
+          // console.log(`[canvasRenderer.ts ${this.rendererType}画布渲染器] FPS: ${fps}`);
           
           // 如果FPS过低，记录警告
           if (fps < 30) {
@@ -410,7 +410,7 @@ export class CanvasRenderer {
         }
         
         // 请求下一帧
-        this.animationFrameId = requestAnimationFrame(renderFrame);
+      this.animationFrameId = requestAnimationFrame(renderFrame);
       } catch (error) {
         console.error(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 渲染帧时发生错误:`, error);
         
@@ -1036,7 +1036,7 @@ export class CanvasRenderer {
       this.startRenderLoop();
     }
   }
-
+  
   /**
    * 渲染空状态
    */
