@@ -40,7 +40,12 @@
               v-for="(layout, index) in schedule.layouts" 
               :key="layout.id" 
               class="layout-item"
-              :class="{ 'layout-item-odd': index % 2 === 0, 'layout-item-even': index % 2 === 1 }"
+              :class="{ 
+                'layout-item-odd': index % 2 === 0, 
+                'layout-item-even': index % 2 === 1,
+                'layout-item-previewing': isPreviewing(schedule.id, layout.id)
+              }"
+              @click="previewLayout(schedule, layout)"
             >
               <div class="layout-thumbnail">
                 <img 
@@ -50,7 +55,7 @@
                   @error="handleThumbnailError"
                 />
                 <div class="layout-actions">
-                  <button class="edit-button" @click="openLayoutEditor(schedule, layout)">
+                  <button class="edit-button" @click.stop="openLayoutEditor(schedule, layout)">
                     {{ $t('common.edit') }}
                   </button>
                 </div>
@@ -406,6 +411,26 @@ function saveSchedule(schedule: Schedule): void {
     currentBranch.value.schedules.push(schedule);
   }
 }
+
+/**
+ * 预览布局
+ * @param schedule 日程对象
+ * @param layout 布局对象
+ */
+function previewLayout(schedule: Schedule, layout: Layout): void {
+  // 设置正在预览的日程和布局
+  planStore.setPreviewingScheduleAndLayout(schedule, layout);
+}
+
+/**
+ * 检查指定的日程和布局是否正在预览
+ * @param scheduleId 日程ID
+ * @param layoutId 布局ID
+ * @returns 是否正在预览
+ */
+function isPreviewing(scheduleId: string, layoutId: number): boolean {
+  return planStore.isPreviewingScheduleAndLayout(scheduleId, layoutId);
+}
 </script>
 
 <style scoped>
@@ -551,6 +576,27 @@ function saveSchedule(schedule: Schedule): void {
   box-sizing: border-box;
   display: flex;
   align-items: center;
+  cursor: pointer;
+  border-radius: var(--el-border-radius-small);
+  transition: background-color 0.2s;
+}
+
+.layout-item:hover {
+  background-color: var(--el-fill-color-light);
+}
+
+:root.dark .layout-item:hover {
+  background-color: var(--el-fill-color-dark);
+}
+
+.layout-item-previewing {
+  background-color: var(--el-fill-color-light);
+  border: 2px solid var(--el-color-primary);
+}
+
+:root.dark .layout-item-previewing {
+  background-color: var(--el-fill-color-dark);
+  border: 2px solid var(--el-color-primary);
 }
 
 .layout-thumbnail {

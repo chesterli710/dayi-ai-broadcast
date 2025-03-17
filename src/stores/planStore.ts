@@ -40,6 +40,16 @@ export const usePlanStore = defineStore('plan', () => {
   const layoutTemplatesLastUpdated = ref<Date | null>(null)
   
   /**
+   * 正在预览的日程
+   */
+  const previewingSchedule = ref<Schedule | null>(null)
+  
+  /**
+   * 正在预览的布局
+   */
+  const previewingLayout = ref<Layout | null>(null)
+  
+  /**
    * 设置当前频道
    * @param channel - 频道数据
    */
@@ -315,6 +325,37 @@ export const usePlanStore = defineStore('plan', () => {
     }
   }
   
+  /**
+   * 设置正在预览的日程和布局
+   * @param schedule - 日程数据
+   * @param layout - 布局数据
+   */
+  function setPreviewingScheduleAndLayout(schedule: Schedule, layout: Layout) {
+    previewingSchedule.value = schedule
+    previewingLayout.value = layout
+  }
+  
+  /**
+   * 清除正在预览的日程和布局
+   */
+  function clearPreviewingScheduleAndLayout() {
+    previewingSchedule.value = null
+    previewingLayout.value = null
+  }
+  
+  /**
+   * 检查指定的日程和布局是否正在预览
+   * @param scheduleId - 日程ID
+   * @param layoutId - 布局ID
+   * @returns 是否正在预览
+   */
+  function isPreviewingScheduleAndLayout(scheduleId: string, layoutId: number): boolean {
+    return (
+      previewingSchedule.value?.id === scheduleId && 
+      previewingLayout.value?.id === layoutId
+    )
+  }
+  
   return {
     currentChannel,
     currentPlan,
@@ -323,6 +364,8 @@ export const usePlanStore = defineStore('plan', () => {
     layoutTemplatesLastUpdated,
     allLayouts,
     needsLayoutTemplateUpdate,
+    previewingSchedule,
+    previewingLayout,
     setCurrentChannel,
     setCurrentPlan,
     setCurrentBranch,
@@ -333,6 +376,9 @@ export const usePlanStore = defineStore('plan', () => {
     saveSchedule,
     deleteSchedule,
     createSchedule,
-    updateSchedule
+    updateSchedule,
+    setPreviewingScheduleAndLayout,
+    clearPreviewingScheduleAndLayout,
+    isPreviewingScheduleAndLayout
   }
 }) 
