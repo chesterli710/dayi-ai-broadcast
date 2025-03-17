@@ -2,6 +2,7 @@
  * Canvas渲染器工具类
  * 用于高性能绘制预览和直播画面
  */
+import { ref, computed, onMounted, onUnmounted } from 'vue';
 import type { Layout, LayoutElement, MediaLayoutElement, TextLayoutElement, LayoutElementType } from '../types/broadcast';
 import { useVideoStore } from '../stores/videoStore';
 import { usePlanStore } from '../stores/planStore';
@@ -99,6 +100,15 @@ class ImageCache {
 }
 
 /**
+ * 画布渲染器选项接口
+ */
+interface CanvasRendererOptions {
+  planStore?: ReturnType<typeof usePlanStore>;
+  videoStore?: ReturnType<typeof useVideoStore>;
+  isPreviewCanvas?: boolean;
+}
+
+/**
  * 画布渲染器类
  * 负责高性能绘制预览和直播画面
  */
@@ -134,10 +144,10 @@ export class CanvasRenderer {
   private needsTextRedraw: boolean = true;
   
   // 视频存储
-  private videoStore = useVideoStore();
+  private videoStore?: ReturnType<typeof useVideoStore>;
   
   // 计划存储
-  private planStore = usePlanStore();
+  private planStore?: ReturnType<typeof usePlanStore>;
   
   // 动画帧请求ID
   private animationFrameId: number | null = null;
@@ -157,18 +167,108 @@ export class CanvasRenderer {
   // 布局更新时间戳
   private layoutUpdateTime: number = 0;
   
+  // 是否为预览画布
+  private isPreviewCanvas: boolean = false;
+  
+  // 固定的逻辑坐标系尺寸
+  private logicalWidth: number;
+  private logicalHeight: number;
+  
+  // 是否正在渲染
+  private isRendering: boolean = false;
+  
+  // 视频元素数组
+  private videoElements: HTMLVideoElement[] = [];
+  
+  // 图像缓存
+  private imageCache: Map<string, HTMLImageElement> = new Map();
+  
+  // 布局
+  private layout: Layout | null = null;
+  private currentLayoutId: string | null = null;
+  
+  // 选项
+  private options: CanvasRendererOptions;
+  
+  // 文字图像缓存
+  private textImage: HTMLImageElement | null = null;
+  
   /**
    * 构造函数
    * @param canvas 画布元素
+   * @param options 选项
    */
-  constructor(canvas: HTMLCanvasElement) {
+  constructor(canvas: HTMLCanvasElement, options: CanvasRendererOptions = {}) {
     this.canvas = canvas;
-    console.log('[canvasRenderer.ts 画布渲染器] 初始化渲染器', {
-      canvasElement: canvas,
-      width: canvas.width,
-      height: canvas.height
+    this.ctx = canvas.getContext('2d');
+    this.options = options;
+    
+    // 从选项中获取存储和预览状态
+    this.planStore = options.planStore;
+    this.videoStore = options.videoStore;
+    this.isPreviewCanvas = options.isPreviewCanvas || false;
+    
+    // 设置固定的逻辑坐标系尺寸为1920x1080
+    this.logicalWidth = 1920;
+    this.logicalHeight = 1080;
+    
+    // 设置画布的绘图表面尺寸为固定的1920x1080
+    this.canvas.width = this.logicalWidth;
+    this.canvas.height = this.logicalHeight;
+    
+    // 获取父容器尺寸，用于计算CSS尺寸
+    const parentWidth = canvas.parentElement?.clientWidth || this.logicalWidth;
+    const parentHeight = canvas.parentElement?.clientHeight || this.logicalHeight;
+    
+    // 保持16:9比例计算CSS尺寸
+    let cssWidth = parentWidth;
+    let cssHeight = parentHeight;
+    const aspectRatio = 16 / 9;
+    
+    if (cssWidth / cssHeight > aspectRatio) {
+      // 宽度过大，以高度为基准
+      cssWidth = cssHeight * aspectRatio;
+    } else {
+      // 高度过大，以宽度为基准
+      cssHeight = cssWidth / aspectRatio;
+    }
+    
+    // 确保CSS尺寸至少为1px，避免画布不可见
+    cssWidth = Math.max(cssWidth, 1);
+    cssHeight = Math.max(cssHeight, 1);
+    
+    // 设置CSS尺寸
+    this.width = cssWidth;
+    this.height = cssHeight;
+    this.canvas.style.width = `${cssWidth}px`;
+    this.canvas.style.height = `${cssHeight}px`;
+    
+    console.log('[canvasRenderer.ts 画布渲染器] 初始化画布尺寸', {
+      logicalWidth: this.logicalWidth,
+      logicalHeight: this.logicalHeight,
+      cssWidth: cssWidth,
+      cssHeight: cssHeight,
+      canvasWidth: this.canvas.width,
+      canvasHeight: this.canvas.height
     });
-    this.initCanvas();
+    
+    // 创建离屏画布
+    this.createOffscreenCanvases();
+    
+    // 初始化其他属性
+    this.isRendering = false;
+    this.needsBackgroundRedraw = true;
+    this.needsForegroundRedraw = true;
+    this.needsTextRedraw = true;
+    this.videoElements = [];
+    this.imageCache = new Map();
+    
+    // 初始化布局
+    this.layout = null;
+    this.currentLayoutId = null;
+    
+    // 初始化渲染循环
+    this.startRenderLoop();
   }
   
   /**
@@ -243,12 +343,16 @@ export class CanvasRenderer {
    */
   public setLayout(layout: Layout | null): void {
     console.log('[canvasRenderer.ts 画布渲染器] 设置布局', {
-      layout,
+      layoutId: layout?.id,
+      layoutTemplate: layout?.template,
       canvasWidth: this.canvas.width,
       canvasHeight: this.canvas.height,
       styleWidth: this.canvas.style.width,
       styleHeight: this.canvas.style.height
     });
+    
+    // 清理所有画布，确保没有残留内容
+    this.clearAllCanvases();
     
     // 如果布局发生变化，标记所有层需要重绘
     if (this.currentLayout !== layout) {
@@ -265,7 +369,20 @@ export class CanvasRenderer {
       
       // 如果有新布局，自动激活所需的视频设备
       if (layout) {
+        // 检查布局是否有元素数据
+        const layoutWithElements = layout as any;
+        const hasElements = layoutWithElements.elements && layoutWithElements.elements.length > 0;
+        
+        console.log(`[canvasRenderer.ts 画布渲染器] 新布局${hasElements ? '有' : '没有'}元素数据`, {
+          layoutId: layout.id,
+          elementsCount: hasElements ? layoutWithElements.elements.length : 0
+        });
+        
+        // 激活所需的视频设备
         this.activateRequiredVideoDevices(layout);
+      } else {
+        // 如果布局为空，清理视频元素
+        this.cleanupVideoElements();
       }
     }
     
@@ -280,6 +397,59 @@ export class CanvasRenderer {
     
     // 启动渲染循环
     this.startRenderLoop();
+    
+    // 强制立即渲染一帧
+    this.render();
+  }
+  
+  /**
+   * 清理所有画布
+   * 确保在切换布局时不会有残留内容
+   */
+  private clearAllCanvases(): void {
+    // 清理主画布
+    if (this.ctx) {
+      this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+    }
+    
+    // 清理背景画布
+    if (this.backgroundCtx && this.backgroundCanvas) {
+      this.backgroundCtx.clearRect(0, 0, this.backgroundCanvas.width, this.backgroundCanvas.height);
+    }
+    
+    // 清理前景画布
+    if (this.foregroundCtx && this.foregroundCanvas) {
+      this.foregroundCtx.clearRect(0, 0, this.foregroundCanvas.width, this.foregroundCanvas.height);
+    }
+    
+    // 清理文字画布
+    if (this.textCtx && this.textCanvas) {
+      this.textCtx.clearRect(0, 0, this.textCanvas.width, this.textCanvas.height);
+    }
+    
+    console.log('[canvasRenderer.ts 画布渲染器] 已清理所有画布');
+  }
+  
+  /**
+   * 清理视频元素
+   */
+  private cleanupVideoElements(): void {
+    console.log('[canvasRenderer.ts 画布渲染器] 清理视频元素');
+    
+    // 移除所有视频元素
+    document.querySelectorAll('[id^="video-"]').forEach((element) => {
+      const videoElement = element as HTMLVideoElement;
+      if (videoElement.srcObject) {
+        const stream = videoElement.srcObject as MediaStream;
+        const tracks = stream.getTracks();
+        tracks.forEach(track => {
+          // 不停止轨道，只分离视频元素
+          // track.stop();
+        });
+        videoElement.srcObject = null;
+      }
+      videoElement.remove();
+    });
   }
   
   /**
@@ -287,20 +457,19 @@ export class CanvasRenderer {
    * @param layout 布局对象
    */
   private async activateRequiredVideoDevices(layout: Layout): Promise<void> {
-    // 获取布局模板
-    const template = this.planStore.layoutTemplates.find(
-      t => t.template === layout.template
-    );
+    // 获取布局中的元素
+    const layoutWithElements = layout as any;
+    const layoutElements = layoutWithElements.elements || [];
     
-    if (!template || !template.elements) {
-      console.log('[canvasRenderer.ts 画布渲染器] 无法激活视频设备：未找到布局模板或元素');
+    if (layoutElements.length === 0) {
+      console.log('[canvasRenderer.ts 画布渲染器] 布局中没有元素数据，无需激活视频设备');
       return;
     }
     
     // 筛选媒体元素
-    const mediaElements = template.elements.filter(
-      element => element.type === 'media'
-    ) as MediaLayoutElement[];
+    const mediaElements = layoutElements.filter(
+      (element: any) => element.type === 'media' && element.sourceId
+    );
     
     if (mediaElements.length === 0) {
       console.log('[canvasRenderer.ts 画布渲染器] 布局中没有媒体元素，无需激活视频设备');
@@ -310,9 +479,7 @@ export class CanvasRenderer {
     console.log(`[canvasRenderer.ts 画布渲染器] 布局中包含 ${mediaElements.length} 个媒体元素，准备激活视频设备`);
     
     // 获取所有需要激活的设备ID
-    const deviceIds = mediaElements
-      .filter(element => element.sourceId)
-      .map(element => element.sourceId!);
+    const deviceIds: string[] = mediaElements.map((element: any) => String(element.sourceId));
     
     // 去重
     const uniqueDeviceIds = [...new Set(deviceIds)];
@@ -320,7 +487,7 @@ export class CanvasRenderer {
     // 激活每个设备
     for (const deviceId of uniqueDeviceIds) {
       // 检查设备是否已激活
-      const isActive = this.videoStore.activeDevices.some(d => d.id === deviceId);
+      const isActive = this.videoStore?.activeDevices.some(d => d.id === deviceId);
       if (isActive) {
         console.log(`[canvasRenderer.ts 画布渲染器] 设备 ${deviceId} 已激活，无需重复激活`);
         continue;
@@ -330,19 +497,19 @@ export class CanvasRenderer {
       let deviceType: VideoSourceType | null = null;
       
       // 检查摄像头设备
-      const cameraDevice = this.videoStore.cameraDevices.find(d => d.id === deviceId);
+      const cameraDevice = this.videoStore?.cameraDevices.find(d => d.id === deviceId);
       if (cameraDevice) {
         deviceType = VideoSourceType.CAMERA;
       }
       
       // 检查窗口设备
-      const windowDevice = this.videoStore.windowDevices.find(d => d.id === deviceId);
+      const windowDevice = this.videoStore?.windowDevices.find(d => d.id === deviceId);
       if (windowDevice) {
         deviceType = VideoSourceType.WINDOW;
       }
       
       // 检查显示器设备
-      const displayDevice = this.videoStore.displayDevices.find(d => d.id === deviceId);
+      const displayDevice = this.videoStore?.displayDevices.find(d => d.id === deviceId);
       if (displayDevice) {
         deviceType = VideoSourceType.DISPLAY;
       }
@@ -355,7 +522,7 @@ export class CanvasRenderer {
       // 激活设备
       console.log(`[canvasRenderer.ts 画布渲染器] 激活设备 ${deviceId} (类型: ${deviceType})`);
       try {
-        await this.videoStore.activateDevice(deviceId, deviceType);
+        await this.videoStore?.activateDevice(deviceId, deviceType);
       } catch (error) {
         console.error(`[canvasRenderer.ts 画布渲染器] 激活设备 ${deviceId} 失败:`, error);
       }
@@ -418,34 +585,45 @@ export class CanvasRenderer {
    * 渲染画面
    */
   private render(): void {
-    if (!this.ctx || !this.currentLayout) return;
+    // 如果没有布局，则清空画布并返回
+    if (!this.currentLayout) {
+      this.ctx?.clearRect(0, 0, this.canvas.width, this.canvas.height);
+      return;
+    }
     
-    // 清空主画布
-    this.ctx.clearRect(0, 0, this.width, this.height);
+    // 保存当前上下文状态
+    this.ctx?.save();
     
-    // 记录渲染开始时间
-    const renderStartTime = performance.now();
-    
-    // 按正确的层级顺序渲染各层
-    // 1. 首先渲染背景层（最底层）
-    this.renderBackgroundLayer();
-    
-    // 2. 然后渲染视频层
-    this.renderVideoLayers();
-    
-    // 3. 接着渲染前景层
-    this.renderForegroundLayer();
-    
-    // 4. 最后渲染文字层（最上层）
-    this.renderTextLayer();
-    
-    // 记录渲染结束时间和耗时
-    const renderEndTime = performance.now();
-    const renderTime = renderEndTime - renderStartTime;
-    
-    // 如果渲染时间超过帧率限制的80%，输出警告
-    if (renderTime > this.frameRateLimit * 0.8) {
-      console.warn(`[canvasRenderer.ts 画布渲染器] 渲染耗时较长: ${renderTime.toFixed(2)}ms，接近帧率限制 ${this.frameRateLimit}ms`);
+    try {
+      // 清空主画布
+      this.ctx?.clearRect(0, 0, this.canvas.width, this.canvas.height);
+      
+      // 计算缩放比例 - 从逻辑坐标系(1920x1080)到当前画布尺寸
+      const scaleX = this.canvas.width / this.logicalWidth;
+      const scaleY = this.canvas.height / this.logicalHeight;
+      
+      console.log('[canvasRenderer.ts 画布渲染器] 渲染帧', {
+        canvasWidth: this.canvas.width,
+        canvasHeight: this.canvas.height,
+        logicalWidth: this.logicalWidth,
+        logicalHeight: this.logicalHeight,
+        scaleX: scaleX,
+        scaleY: scaleY
+      });
+      
+      // 应用缩放
+      this.ctx?.scale(scaleX, scaleY);
+      
+      // 按顺序渲染各层
+      this.renderBackgroundLayer();
+      this.renderVideoLayer();
+      this.renderForegroundLayer();
+      this.renderTextLayer();
+    } catch (error) {
+      console.error('[canvasRenderer.ts 画布渲染器] 渲染时出错:', error);
+    } finally {
+      // 恢复上下文状态
+      this.ctx?.restore();
     }
   }
   
@@ -510,23 +688,23 @@ export class CanvasRenderer {
     // 如果不需要重绘背景，直接使用缓存
     if (!this.needsBackgroundRedraw && this.backgroundImage) {
       if (this.ctx) {
-        this.ctx.drawImage(this.backgroundImage, 0, 0);
+        this.ctx.drawImage(this.backgroundImage, 0, 0, 1920, 1080);
       }
       return;
     }
     
     // 清空背景画布
-    this.backgroundCtx.clearRect(0, 0, this.width, this.height);
+    this.backgroundCtx.clearRect(0, 0, this.backgroundCanvas!.width, this.backgroundCanvas!.height);
     
     // 如果有背景图片，加载并绘制
     if (this.currentLayout.background) {
       // 绘制一个临时背景色，确保在图片加载前有内容
       this.backgroundCtx.fillStyle = '#333333';
-      this.backgroundCtx.fillRect(0, 0, this.width, this.height);
+      this.backgroundCtx.fillRect(0, 0, this.backgroundCanvas!.width, this.backgroundCanvas!.height);
       
       // 将临时背景绘制到主画布
       if (this.backgroundCanvas && this.ctx) {
-        this.ctx.drawImage(this.backgroundCanvas, 0, 0);
+        this.ctx.drawImage(this.backgroundCanvas, 0, 0, 1920, 1080);
       }
       
       // 使用图像缓存加载背景图片
@@ -534,9 +712,23 @@ export class CanvasRenderer {
         this.currentLayout.background,
         '[canvasRenderer.ts 画布渲染器]'
       ).then(img => {
-        // 绘制背景图片
+        // 绘制背景图片 - 始终使用1920x1080的尺寸
         if (this.backgroundCtx) {
-          this.backgroundCtx.drawImage(img, 0, 0, this.width, this.height);
+          // 记录背景图像的原始尺寸，用于调试
+          console.log(`[canvasRenderer.ts 画布渲染器] 背景图像尺寸:`, {
+            imgWidth: img.width,
+            imgHeight: img.height,
+            canvasWidth: this.backgroundCanvas!.width,
+            canvasHeight: this.backgroundCanvas!.height,
+            targetWidth: 1920,
+            targetHeight: 1080
+          });
+          
+          // 清空背景画布
+          this.backgroundCtx.clearRect(0, 0, this.backgroundCanvas!.width, this.backgroundCanvas!.height);
+          
+          // 绘制背景图片 - 始终使用1920x1080的尺寸，无论画布实际大小如何
+          this.backgroundCtx.drawImage(img, 0, 0, 1920, 1080);
           
           // 标记背景已绘制
           this.needsBackgroundRedraw = false;
@@ -548,16 +740,16 @@ export class CanvasRenderer {
               .then(image => {
                 this.backgroundImage = image;
                 
-                // 绘制到主画布
+                // 绘制到主画布 - 使用1920x1080的尺寸
                 if (this.ctx && this.backgroundCanvas) {
-                  this.ctx.drawImage(this.backgroundCanvas, 0, 0);
+                  this.ctx.drawImage(this.backgroundCanvas, 0, 0, 1920, 1080);
                 }
               })
               .catch(error => {
                 console.error('[canvasRenderer.ts 画布渲染器] 背景图像缓存创建失败:', error);
                 // 直接绘制背景，不使用缓存
                 if (this.ctx && this.backgroundCanvas) {
-                  this.ctx.drawImage(this.backgroundCanvas, 0, 0);
+                  this.ctx.drawImage(this.backgroundCanvas, 0, 0, 1920, 1080);
                 }
               });
           }
@@ -568,11 +760,11 @@ export class CanvasRenderer {
     } else {
       // 绘制默认背景色
       this.backgroundCtx.fillStyle = '#222222';
-      this.backgroundCtx.fillRect(0, 0, this.width, this.height);
+      this.backgroundCtx.fillRect(0, 0, this.backgroundCanvas!.width, this.backgroundCanvas!.height);
       
       // 将默认背景绘制到主画布
       if (this.backgroundCanvas && this.ctx) {
-        this.ctx.drawImage(this.backgroundCanvas, 0, 0);
+        this.ctx.drawImage(this.backgroundCanvas, 0, 0, 1920, 1080);
       }
       
       // 标记背景已绘制
@@ -588,12 +780,12 @@ export class CanvasRenderer {
     
     // 如果不需要重绘前景，直接使用缓存
     if (!this.needsForegroundRedraw && this.foregroundImage) {
-      this.ctx?.drawImage(this.foregroundImage, 0, 0);
+      this.ctx?.drawImage(this.foregroundImage, 0, 0, 1920, 1080);
       return;
     }
     
     // 清空前景画布
-    this.foregroundCtx.clearRect(0, 0, this.width, this.height);
+    this.foregroundCtx.clearRect(0, 0, this.foregroundCanvas!.width, this.foregroundCanvas!.height);
     
     // 如果有前景图片，加载并绘制
     if (this.currentLayout.foreground) {
@@ -602,9 +794,23 @@ export class CanvasRenderer {
         this.currentLayout.foreground,
         '[canvasRenderer.ts 画布渲染器]'
       ).then(img => {
-        // 绘制前景图片
+        // 绘制前景图片 - 始终使用1920x1080的尺寸
         if (this.foregroundCtx) {
-          this.foregroundCtx.drawImage(img, 0, 0, this.width, this.height);
+          // 记录前景图像的原始尺寸，用于调试
+          console.log(`[canvasRenderer.ts 画布渲染器] 前景图像尺寸:`, {
+            imgWidth: img.width,
+            imgHeight: img.height,
+            canvasWidth: this.foregroundCanvas!.width,
+            canvasHeight: this.foregroundCanvas!.height,
+            targetWidth: 1920,
+            targetHeight: 1080
+          });
+          
+          // 清空前景画布
+          this.foregroundCtx.clearRect(0, 0, this.foregroundCanvas!.width, this.foregroundCanvas!.height);
+          
+          // 绘制前景图片 - 始终使用1920x1080的尺寸
+          this.foregroundCtx.drawImage(img, 0, 0, 1920, 1080);
           
           // 标记前景已绘制
           this.needsForegroundRedraw = false;
@@ -616,16 +822,16 @@ export class CanvasRenderer {
               .then(image => {
                 this.foregroundImage = image;
                 
-                // 绘制到主画布
+                // 绘制到主画布 - 使用1920x1080的尺寸
                 if (this.ctx && this.foregroundCanvas) {
-                  this.ctx.drawImage(this.foregroundCanvas, 0, 0);
+                  this.ctx.drawImage(this.foregroundCanvas, 0, 0, 1920, 1080);
                 }
               })
               .catch(error => {
                 console.error('[canvasRenderer.ts 画布渲染器] 前景图像缓存创建失败:', error);
                 // 直接绘制前景，不使用缓存
                 if (this.ctx && this.foregroundCanvas) {
-                  this.ctx.drawImage(this.foregroundCanvas, 0, 0);
+                  this.ctx.drawImage(this.foregroundCanvas, 0, 0, 1920, 1080);
                 }
               });
           }
@@ -639,27 +845,142 @@ export class CanvasRenderer {
   /**
    * 渲染视频层
    */
-  private renderVideoLayers(): void {
+  private renderVideoLayer(): void {
     if (!this.ctx || !this.currentLayout) return;
     
-    // 获取布局模板
-    const template = this.planStore.layoutTemplates.find(
-      t => t.template === this.currentLayout?.template
-    );
+    // 获取当前布局的日程类型（如果可用）
+    let scheduleType = '未知';
+    if (this.isPreviewCanvas && this.planStore?.previewingSchedule) {
+      scheduleType = this.planStore.previewingSchedule.type;
+    } else if (!this.isPreviewCanvas && this.planStore?.liveSchedule) {
+      scheduleType = this.planStore.liveSchedule.type;
+    }
     
-    if (!template || !template.elements) return;
+    // 获取当前布局的媒体元素
+    const layoutWithElements = this.currentLayout as any;
+    const layoutElements = layoutWithElements.elements || [];
+    
+    console.log(`[canvasRenderer.ts 画布渲染器] 渲染视频层:`, {
+      layoutId: this.currentLayout.id,
+      layoutTemplate: this.currentLayout.template,
+      scheduleType: scheduleType,
+      hasLayoutElements: layoutElements.length > 0,
+      layoutElementsCount: layoutElements.length
+    });
+    
+    // 如果布局中没有元素数据，则不渲染任何媒体元素
+    if (layoutElements.length === 0) {
+      console.log(`[canvasRenderer.ts 画布渲染器] 布局中没有元素数据，不渲染媒体元素`);
+      return;
+    }
+    
+    // 使用布局中的元素数据进行渲染
+    console.log(`[canvasRenderer.ts 画布渲染器] 使用布局中的元素数据进行渲染`);
+    
+    // 先确保所有需要的视频设备都已激活
+    const mediaElements = layoutElements.filter((element: any) => element.type === 'media' && element.sourceId);
+    
+    // 检查并激活所有需要的视频设备
+    if (mediaElements.length > 0) {
+      console.log(`[canvasRenderer.ts 画布渲染器] 布局中有 ${mediaElements.length} 个媒体元素需要激活`);
+      
+      // 异步激活设备，但不等待完成
+      this.ensureMediaElementsActive(mediaElements);
+    }
     
     // 按zIndex排序元素
-    const sortedElements = [...template.elements].sort((a, b) => {
+    const sortedElements = [...layoutElements].sort((a: any, b: any) => {
       return (a.zIndex || 0) - (b.zIndex || 0);
     });
     
     // 筛选媒体元素
-    const mediaElements = sortedElements.filter(element => element.type === 'media');
+    const mediaElementsToRender = sortedElements.filter((element: any) => element.type === 'media');
+    
+    console.log(`[canvasRenderer.ts 画布渲染器] 布局中的媒体元素:`, 
+      mediaElementsToRender.map((e: any) => ({
+        id: e.id,
+        sourceId: e.sourceId,
+        sourceName: e.sourceName,
+        sourceType: e.sourceType
+      }))
+    );
     
     // 绘制媒体元素
+    for (const element of mediaElementsToRender) {
+      this.renderMediaElement(element);
+    }
+  }
+  
+  /**
+   * 确保媒体元素的视频设备已激活
+   * @param mediaElements 媒体元素列表
+   */
+  private async ensureMediaElementsActive(mediaElements: any[]): Promise<void> {
+    // 获取所有需要激活的设备ID和类型
+    const deviceActivations: {deviceId: string, sourceType: string}[] = [];
+    
     for (const element of mediaElements) {
-      this.renderMediaElement(element as MediaLayoutElement);
+      if (element.sourceId && element.sourceType) {
+        // 检查设备是否已激活
+        const isActive = this.videoStore?.activeDevices.some(d => d.id === element.sourceId);
+        if (!isActive) {
+          deviceActivations.push({
+            deviceId: element.sourceId,
+            sourceType: element.sourceType
+          });
+        }
+      }
+    }
+    
+    if (deviceActivations.length === 0) {
+      console.log(`[canvasRenderer.ts 画布渲染器] 所有媒体设备已激活，无需额外激活`);
+      return;
+    }
+    
+    console.log(`[canvasRenderer.ts 画布渲染器] 需要激活 ${deviceActivations.length} 个媒体设备`);
+    
+    // 激活每个设备
+    for (const activation of deviceActivations) {
+      try {
+        let sourceType;
+        switch (activation.sourceType) {
+          case 'camera':
+            sourceType = VideoSourceType.CAMERA;
+            // 检查摄像头设备是否存在
+            const cameraExists = this.videoStore?.cameraDevices.some(d => d.id === activation.deviceId);
+            if (!cameraExists) {
+              console.warn(`[canvasRenderer.ts 画布渲染器] 摄像头设备不存在: ${activation.deviceId}`);
+              continue;
+            }
+            break;
+          case 'window':
+            sourceType = VideoSourceType.WINDOW;
+            // 检查窗口设备是否存在
+            const windowExists = this.videoStore?.windowDevices.some(d => d.id === activation.deviceId);
+            if (!windowExists) {
+              console.warn(`[canvasRenderer.ts 画布渲染器] 窗口设备不存在: ${activation.deviceId}`);
+              continue;
+            }
+            break;
+          case 'display':
+            sourceType = VideoSourceType.DISPLAY;
+            // 检查显示器设备是否存在
+            const displayExists = this.videoStore?.displayDevices.some(d => d.id === activation.deviceId);
+            if (!displayExists) {
+              console.warn(`[canvasRenderer.ts 画布渲染器] 显示器设备不存在: ${activation.deviceId}`);
+              continue;
+            }
+            break;
+          default:
+            console.warn(`[canvasRenderer.ts 画布渲染器] 未知的媒体源类型: ${activation.sourceType}`);
+            continue;
+        }
+        
+        console.log(`[canvasRenderer.ts 画布渲染器] 激活设备: ${activation.deviceId}, 类型: ${activation.sourceType}`);
+        await this.videoStore?.activateDevice(activation.deviceId, sourceType);
+      } catch (error) {
+        console.error(`[canvasRenderer.ts 画布渲染器] 激活设备失败: ${activation.deviceId}`, error);
+      }
     }
   }
   
@@ -677,16 +998,54 @@ export class CanvasRenderer {
     }
     
     // 获取视频设备
-    const device = this.videoStore.activeDevices.find(d => d.id === element.sourceId);
+    const device = this.videoStore?.activeDevices.find(d => d.id === element.sourceId);
     
     // 如果没有找到设备或设备没有流，不绘制任何内容
     if (!device) {
-      console.log(`[canvasRenderer.ts 画布渲染器] 未找到设备: ${element.sourceId}`);
+      console.log(`[canvasRenderer.ts 画布渲染器] 未找到设备: ${element.sourceId}，尝试重新激活`);
+      
+      // 尝试查找设备类型并重新激活
+      let deviceType: VideoSourceType | null = null;
+      
+      // 检查摄像头设备
+      const cameraDevice = this.videoStore?.cameraDevices.find(d => d.id === element.sourceId);
+      if (cameraDevice) {
+        deviceType = VideoSourceType.CAMERA;
+      }
+      
+      // 检查窗口设备
+      const windowDevice = this.videoStore?.windowDevices.find(d => d.id === element.sourceId);
+      if (windowDevice) {
+        deviceType = VideoSourceType.WINDOW;
+      }
+      
+      // 检查显示器设备
+      const displayDevice = this.videoStore?.displayDevices.find(d => d.id === element.sourceId);
+      if (displayDevice) {
+        deviceType = VideoSourceType.DISPLAY;
+      }
+      
+      if (deviceType !== null) {
+        console.log(`[canvasRenderer.ts 画布渲染器] 尝试激活设备: ${element.sourceId} (类型: ${deviceType})`);
+        this.videoStore?.activateDevice(element.sourceId, deviceType).catch(error => {
+          console.error(`[canvasRenderer.ts 画布渲染器] 激活设备失败: ${element.sourceId}`, error);
+        });
+      }
+      
       return;
     }
     
     if (!device.stream) {
-      console.log(`[canvasRenderer.ts 画布渲染器] 设备没有视频流: ${element.sourceId}`);
+      console.log(`[canvasRenderer.ts 画布渲染器] 设备没有视频流: ${element.sourceId}，尝试重新激活`);
+      
+      // 尝试重新激活设备
+      if (device.type) {
+        console.log(`[canvasRenderer.ts 画布渲染器] 尝试重新激活设备: ${element.sourceId} (类型: ${device.type})`);
+        this.videoStore?.activateDevice(element.sourceId, device.type).catch(error => {
+          console.error(`[canvasRenderer.ts 画布渲染器] 重新激活设备失败: ${element.sourceId}`, error);
+        });
+      }
+      
       return;
     }
     
@@ -713,6 +1072,11 @@ export class CanvasRenderer {
         videoElement.play().catch(error => {
           console.error(`[canvasRenderer.ts 画布渲染器] 视频播放失败: ${videoId}`, error);
         });
+      };
+      
+      // 添加错误处理
+      videoElement.onerror = (event) => {
+        console.error(`[canvasRenderer.ts 画布渲染器] 视频元素错误: ${videoId}`, event);
       };
     } else if (videoElement.srcObject !== device.stream) {
       // 如果视频元素存在但流不匹配，更新流
@@ -751,15 +1115,44 @@ export class CanvasRenderer {
           drawWidth,
           drawHeight
         );
+        
+        // 绘制边框（调试用）
+        if (this.isPreviewCanvas) {
+          this.ctx.strokeStyle = 'rgba(0, 255, 0, 0.5)';
+          this.ctx.lineWidth = 2;
+          this.ctx.strokeRect(element.x, element.y, element.width, element.height);
+        }
       } catch (error) {
         console.error(`[canvasRenderer.ts 画布渲染器] 绘制视频失败:`, error);
       }
     } else if (videoElement.paused && videoElement.readyState >= 1) {
       // 尝试播放视频
-      console.log(`[canvasRenderer.ts 画布渲染器] 尝试播放视频: ${videoId}`);
+      console.log(`[canvasRenderer.ts 画布渲染器] 尝试播放视频: ${videoId} (readyState: ${videoElement.readyState})`);
       videoElement.play().catch(error => {
         console.error(`[canvasRenderer.ts 画布渲染器] 无法播放视频:`, error);
       });
+    } else {
+      console.log(`[canvasRenderer.ts 画布渲染器] 视频元素未准备好: ${videoId} (readyState: ${videoElement.readyState}, paused: ${videoElement.paused})`);
+      
+      // 绘制占位符
+      if (this.isPreviewCanvas) {
+        this.ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+        this.ctx.fillRect(element.x, element.y, element.width, element.height);
+        this.ctx.strokeStyle = 'rgba(255, 0, 0, 0.8)';
+        this.ctx.lineWidth = 2;
+        this.ctx.strokeRect(element.x, element.y, element.width, element.height);
+        
+        // 绘制文字
+        this.ctx.fillStyle = 'white';
+        this.ctx.font = '14px Arial';
+        this.ctx.textAlign = 'center';
+        this.ctx.textBaseline = 'middle';
+        this.ctx.fillText(
+          `等待视频源: ${element.sourceId}`,
+          element.x + element.width / 2,
+          element.y + element.height / 2
+        );
+      }
     }
   }
   
@@ -767,46 +1160,75 @@ export class CanvasRenderer {
    * 渲染文字层
    */
   private renderTextLayer(): void {
-    if (!this.textCtx || !this.currentLayout || !this.ctx) return;
+    if (!this.textCtx || !this.currentLayout) return;
     
     // 如果不需要重绘文字层，直接使用缓存
-    if (!this.needsTextRedraw) {
-      this.ctx.drawImage(this.textCanvas!, 0, 0);
+    if (!this.needsTextRedraw && this.textImage) {
+      this.ctx?.drawImage(this.textImage, 0, 0, 1920, 1080);
       return;
     }
     
     // 清空文字画布
-    this.textCtx.clearRect(0, 0, this.width, this.height);
+    this.textCtx.clearRect(0, 0, this.textCanvas!.width, this.textCanvas!.height);
     
-    // 获取布局模板
-    const template = this.planStore.layoutTemplates.find(
-      t => t.template === this.currentLayout?.template
-    );
-    
-    if (!template || !template.elements) return;
+    // 获取布局中的文字元素
+    const layoutWithElements = this.currentLayout as any;
+    if (!layoutWithElements.elements) return;
     
     // 获取当前日程
-    const schedule = this.planStore.previewingSchedule;
+    const schedule = this.isPreviewCanvas ? this.planStore?.previewingSchedule : this.planStore?.liveSchedule;
     
-    if (!schedule) return;
-    
-    // 按zIndex排序元素
-    const sortedElements = [...template.elements].sort((a, b) => {
-      return (a.zIndex || 0) - (b.zIndex || 0);
-    });
-    
-    // 绘制文字元素
-    for (const element of sortedElements) {
-      if (element.type !== 'media') {
-        this.renderTextElement(element as TextLayoutElement, schedule);
-      }
+    if (!schedule) {
+      console.log('[canvasRenderer.ts 画布渲染器] 无法渲染文字元素：未找到当前日程');
+      return;
     }
     
-    // 标记文字层已绘制
+    // 过滤出文字类型的元素
+    const textElements = layoutWithElements.elements.filter((element: any) => 
+      element.type === 'host-label' || 
+      element.type === 'host-info' || 
+      element.type === 'subject-label' || 
+      element.type === 'subject-info' || 
+      element.type === 'guest-label' || 
+      element.type === 'guest-info'
+    );
+    
+    if (textElements.length === 0) {
+      // 如果没有文字元素，标记文字层已重绘
+      this.needsTextRedraw = false;
+      return;
+    }
+    
+    console.log(`[canvasRenderer.ts 画布渲染器] 渲染 ${textElements.length} 个文字元素`);
+    
+    // 渲染文字元素
+    for (const element of textElements) {
+      this.renderTextElement(element, schedule);
+    }
+    
+    // 标记文字层已重绘
     this.needsTextRedraw = false;
     
     // 将文字画布内容绘制到主画布
-    this.ctx.drawImage(this.textCanvas!, 0, 0);
+    if (this.textCanvas && this.ctx) {
+      // 保存当前文字图像作为缓存
+      this.convertOffscreenCanvasToImage(this.textCanvas)
+        .then(image => {
+          this.textImage = image;
+          
+          // 绘制到主画布 - 使用1920x1080的尺寸
+          if (this.ctx && this.textCanvas) {
+            this.ctx.drawImage(this.textCanvas, 0, 0, 1920, 1080);
+          }
+        })
+        .catch(error => {
+          console.error('[canvasRenderer.ts 画布渲染器] 文字图像缓存创建失败:', error);
+          // 直接绘制文字层，不使用缓存
+          if (this.ctx && this.textCanvas) {
+            this.ctx.drawImage(this.textCanvas, 0, 0, 1920, 1080);
+          }
+        });
+    }
   }
   
   /**
@@ -815,15 +1237,21 @@ export class CanvasRenderer {
    * @param schedule 日程
    */
   private renderTextElement(element: TextLayoutElement, schedule: any): void {
-    if (!this.textCtx) return;
+    if (!this.textCtx || !this.currentLayout) return;
     
-    // 根据元素类型获取文本内容
+    // 设置文字样式
+    this.textCtx.font = `${element.fontStyle.fontWeight} ${element.fontStyle.fontSize}px Arial`;
+    this.textCtx.fillStyle = element.fontStyle.fontColor || this.currentLayout.textColor || '#ffffff';
+    this.textCtx.textAlign = 'center';
+    this.textCtx.textBaseline = 'middle';
+    
+    // 获取文字内容
     let text = '';
-    let labelBackground = this.currentLayout?.labelBackground || '';
+    let labelBackground = this.currentLayout.labelBackground || '';
     
     switch (element.type) {
       case 'host-label':
-        text = this.currentLayout?.surgeonLabelDisplayName || '术者';
+        text = this.currentLayout.surgeonLabelDisplayName || '术者';
         break;
       case 'host-info':
         if (schedule.type === 'surgery' && schedule.surgeryInfo) {
@@ -837,7 +1265,7 @@ export class CanvasRenderer {
         }
         break;
       case 'subject-label':
-        text = this.currentLayout?.surgeryLabelDisplayName || '术式';
+        text = this.currentLayout.surgeryLabelDisplayName || '术式';
         break;
       case 'subject-info':
         if (schedule.type === 'surgery' && schedule.surgeryInfo) {
@@ -847,7 +1275,7 @@ export class CanvasRenderer {
         }
         break;
       case 'guest-label':
-        text = this.currentLayout?.guestLabelDisplayName || '互动嘉宾';
+        text = this.currentLayout.guestLabelDisplayName || '互动嘉宾';
         break;
       case 'guest-info':
         if (schedule.surgeryInfo?.guests || schedule.lectureInfo?.guests) {
@@ -878,13 +1306,6 @@ export class CanvasRenderer {
       );
     }
     
-    // 设置文字样式
-    this.textCtx.save();
-    this.textCtx.font = `${element.fontStyle.fontWeight} ${element.fontStyle.fontSize}px Arial`;
-    this.textCtx.fillStyle = element.fontStyle.fontColor || this.currentLayout?.textColor || '#ffffff';
-    this.textCtx.textAlign = 'center';
-    this.textCtx.textBaseline = 'middle';
-    
     // 绘制文字
     if (element.orientation === 'vertical') {
       // 垂直文字
@@ -903,8 +1324,6 @@ export class CanvasRenderer {
         element.y + element.height / 2
       );
     }
-    
-    this.textCtx.restore();
   }
   
   /**
@@ -974,33 +1393,22 @@ export class CanvasRenderer {
    * @param height 高度
    */
   public resize(width: number, height: number): void {
+    // 确保宽高至少为1像素
+    width = Math.max(1, width);
+    height = Math.max(1, height);
+    
     console.log('[canvasRenderer.ts 画布渲染器] 调整画布大小', {
-      originalWidth: width,
-      originalHeight: height,
-      canvasElement: this.canvas
+      originalWidth: this.canvas.width,
+      originalHeight: this.canvas.height,
+      newWidth: width,
+      newHeight: height
     });
+
+    // 保存原始尺寸用于计算缩放比例
+    this.width = width;
+    this.height = height;
     
-    // 保持16:9比例
-    const aspectRatio = 16 / 9;
-    
-    if (width / height > aspectRatio) {
-      // 宽度过大，以高度为基准
-      width = height * aspectRatio;
-    } else {
-      // 高度过大，以宽度为基准
-      height = width / aspectRatio;
-    }
-    
-    // 确保宽高至少为1px，避免画布不可见
-    width = Math.max(width, 1);
-    height = Math.max(height, 1);
-    
-    console.log('[canvasRenderer.ts 画布渲染器] 调整后的画布大小', {
-      width,
-      height
-    });
-    
-    // 更新画布尺寸样式
+    // 仅更新CSS尺寸，保持绘图表面尺寸为1920x1080
     this.canvas.style.width = `${width}px`;
     this.canvas.style.height = `${height}px`;
     
@@ -1008,6 +1416,16 @@ export class CanvasRenderer {
     this.needsBackgroundRedraw = true;
     this.needsForegroundRedraw = true;
     this.needsTextRedraw = true;
+    
+    // 强制立即渲染
+    this.render();
+    
+    console.log('[canvasRenderer.ts 画布渲染器] 画布大小已调整', {
+      cssWidth: this.canvas.style.width,
+      cssHeight: this.canvas.style.height,
+      canvasWidth: this.canvas.width,
+      canvasHeight: this.canvas.height
+    });
   }
   
   /**
@@ -1034,6 +1452,11 @@ export class CanvasRenderer {
    * 当布局编辑器修改布局时调用此方法
    */
   public onLayoutEdited(): void {
+    console.log('[canvasRenderer.ts 画布渲染器] 布局已编辑，重新渲染');
+    
+    // 清理所有画布，确保没有残留内容
+    this.clearAllCanvases();
+    
     // 标记所有层需要重绘
     this.needsBackgroundRedraw = true;
     this.needsForegroundRedraw = true;
@@ -1042,9 +1465,115 @@ export class CanvasRenderer {
     // 清除之前的图像缓存
     this.backgroundImage = null;
     this.foregroundImage = null;
+    this.textImage = null;
     
     // 更新布局更新时间戳
     this.layoutUpdateTime = performance.now();
+    
+    // 清除可能存在的视频元素缓存
+    if (this.currentLayout) {
+      const layoutWithElements = this.currentLayout as any;
+      const mediaElements = (layoutWithElements.elements || [])
+        .filter((element: any) => element.type === 'media' && element.sourceId);
+      
+      // 移除并重新创建视频元素
+      for (const element of mediaElements) {
+        const videoId = `video-${element.sourceId}`;
+        const videoElement = document.getElementById(videoId) as HTMLVideoElement;
+        if (videoElement) {
+          console.log(`[canvasRenderer.ts 画布渲染器] 重置视频元素: ${videoId}`);
+          // 停止视频播放
+          if (videoElement.srcObject) {
+            const stream = videoElement.srcObject as MediaStream;
+            const tracks = stream.getTracks();
+            tracks.forEach(track => {
+              // 不停止轨道，只分离视频元素
+              // track.stop();
+            });
+          }
+          videoElement.srcObject = null;
+          videoElement.remove();
+        }
+      }
+      
+      // 重新激活所需的视频设备
+      this.activateRequiredVideoDevices(this.currentLayout);
+    }
+    
+    // 强制立即渲染一帧
+    this.render();
+  }
+
+  /**
+   * 创建离屏画布
+   */
+  private createOffscreenCanvases(): void {
+    console.log('[canvasRenderer.ts 画布渲染器] 创建离屏画布');
+    
+    try {
+      // 创建离屏画布 - 背景层 (始终使用1920x1080的尺寸)
+      this.backgroundCanvas = new OffscreenCanvas(1920, 1080);
+      this.backgroundCtx = this.backgroundCanvas.getContext('2d');
+      
+      // 创建离屏画布 - 前景层 (始终使用1920x1080的尺寸)
+      this.foregroundCanvas = new OffscreenCanvas(1920, 1080);
+      this.foregroundCtx = this.foregroundCanvas.getContext('2d');
+      
+      // 创建离屏画布 - 文字层 (始终使用1920x1080的尺寸)
+      this.textCanvas = new OffscreenCanvas(1920, 1080);
+      this.textCtx = this.textCanvas.getContext('2d');
+      
+      console.log('[canvasRenderer.ts 画布渲染器] 离屏画布已创建', {
+        width: 1920,
+        height: 1080,
+        canvasWidth: this.canvas.width,
+        canvasHeight: this.canvas.height
+      });
+    } catch (error) {
+      console.error('[canvasRenderer.ts 画布渲染器] 创建离屏画布时出错:', error);
+    }
+  }
+
+  /**
+   * 更新布局元素
+   * 允许外部直接更新布局的元素数据，特别是媒体元素的sourceId
+   * @param layoutElements 布局元素数组
+   */
+  public updateLayoutElements(layoutElements: any[]): void {
+    if (!this.currentLayout) {
+      console.warn('[canvasRenderer.ts 画布渲染器] 无法更新布局元素：当前没有活动布局');
+      return;
+    }
+    
+    console.log('[canvasRenderer.ts 画布渲染器] 更新布局元素:', {
+      layoutId: this.currentLayout.id,
+      elementsCount: layoutElements.length,
+      mediaElementsCount: layoutElements.filter(e => e.type === 'media').length
+    });
+    
+    // 更新当前布局的元素
+    (this.currentLayout as any).elements = JSON.parse(JSON.stringify(layoutElements));
+    
+    // 标记所有层需要重绘
+    this.needsBackgroundRedraw = true;
+    this.needsForegroundRedraw = true;
+    this.needsTextRedraw = true;
+    
+    // 更新布局更新时间戳
+    this.layoutUpdateTime = performance.now();
+    
+    // 筛选媒体元素
+    const mediaElements = layoutElements.filter(element => element.type === 'media' && element.sourceId);
+    
+    if (mediaElements.length > 0) {
+      console.log(`[canvasRenderer.ts 画布渲染器] 布局中有 ${mediaElements.length} 个媒体元素需要激活`);
+      
+      // 清理现有的视频元素
+      this.cleanupVideoElements();
+      
+      // 激活所需的视频设备
+      this.ensureMediaElementsActive(mediaElements);
+    }
     
     // 强制立即渲染一帧
     this.render();
@@ -1052,10 +1581,42 @@ export class CanvasRenderer {
 }
 
 /**
- * 创建Canvas渲染器
+ * 创建预览画布渲染器
  * @param canvas 画布元素
- * @returns Canvas渲染器实例
+ * @returns 画布渲染器实例
+ */
+export function createPreviewCanvasRenderer(canvas: HTMLCanvasElement): CanvasRenderer {
+  return new CanvasRenderer(canvas, {
+    planStore: usePlanStore(),
+    videoStore: useVideoStore(),
+    isPreviewCanvas: true
+  });
+}
+
+/**
+ * 创建直播画布渲染器
+ * @param canvas 画布元素
+ * @returns 画布渲染器实例
+ */
+export function createLiveCanvasRenderer(canvas: HTMLCanvasElement): CanvasRenderer {
+  return new CanvasRenderer(canvas, {
+    planStore: usePlanStore(),
+    videoStore: useVideoStore(),
+    isPreviewCanvas: false
+  });
+}
+
+/**
+ * 创建Canvas渲染器（向后兼容）
+ * @param canvas 画布元素
+ * @returns 画布渲染器实例
+ * @deprecated 使用createPreviewCanvasRenderer或createLiveCanvasRenderer替代
  */
 export function createCanvasRenderer(canvas: HTMLCanvasElement): CanvasRenderer {
-  return new CanvasRenderer(canvas);
+  console.warn('[canvasRenderer.ts 画布渲染器] createCanvasRenderer已废弃，请使用createPreviewCanvasRenderer或createLiveCanvasRenderer替代');
+  return new CanvasRenderer(canvas, {
+    planStore: usePlanStore(),
+    videoStore: useVideoStore(),
+    isPreviewCanvas: false
+  });
 } 

@@ -552,7 +552,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, reactive, onMounted, nextTick } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { ScheduleType, type Schedule, type PersonInfo, type Layout } from '../types/broadcast';
+import { ScheduleType, type Schedule, type PersonInfo, type Layout, type LayoutElement } from '../types/broadcast';
 import { usePlanStore } from '../stores/planStore';
 import type { FormInstance, FormRules } from 'element-plus';
 import { ElMessage } from 'element-plus';
@@ -1195,8 +1195,33 @@ async function handleSaveAndReturn(): Promise<boolean> {
       type: scheduleForm.type,
       plannedStartDateTime: scheduleForm.plannedStartDateTime || undefined,
       plannedDuration: scheduleForm.plannedDuration || undefined,
-      layouts: scheduleForm.layouts || [], // 保留原有布局
+      layouts: [], // 先创建空数组，后面会填充完整的布局
     };
+    
+    // 确保每个布局都有完整的树状结构
+    if (scheduleForm.layouts && scheduleForm.layouts.length > 0) {
+      schedule.layouts = scheduleForm.layouts.map(layout => {
+        // 确保每个布局都有elements属性
+        if (!layout.elements) {
+          // 查找对应的模板
+          const template = planStore.layoutTemplates.find(t => t.template === layout.template);
+          if (template && template.elements) {
+            // 从模板复制元素
+            layout.elements = JSON.parse(JSON.stringify(template.elements));
+          } else {
+            // 如果没有找到模板或模板没有元素，创建空数组
+            layout.elements = [];
+          }
+        }
+        return layout;
+      });
+      
+      console.log(`[ScheduleEditorModal.vue 日程编辑器] 保存日程，布局数量: ${schedule.layouts.length}`);
+      schedule.layouts.forEach((layout, index) => {
+        const elementsCount = layout.elements ? layout.elements.length : 0;
+        console.log(`[ScheduleEditorModal.vue 日程编辑器] 布局 ${index+1}: ID=${layout.id}, 模板=${layout.template}, 元素数量=${elementsCount}`);
+      });
+    }
     
     // 根据类型添加特定信息
     if (scheduleForm.type === ScheduleType.SURGERY) {
@@ -1494,13 +1519,26 @@ function handleTemplateSelection(templateId: string): void {
  * @param templateId 模板ID
  */
 function addNewLayout(templateId: string): void {
-  // 创建新布局
-  const newLayout = {
-    id: Date.now().toString(), // 生成临时ID
+  // 获取对应的布局模板
+  const template = planStore.layoutTemplates.find(t => t.template === templateId);
+  
+  if (!template) {
+    console.error(`[ScheduleEditorModal.vue 日程编辑器] 未找到模板: ${templateId}`);
+    return;
+  }
+  
+  // 创建新布局，确保包含完整的树状结构
+  const newLayout: Layout = {
+    id: Date.now(), // 生成临时ID
     template: templateId,
     description: '',
-    elements: []
+    // 从模板中复制元素，确保elements属性存在
+    elements: template.elements ? JSON.parse(JSON.stringify(template.elements)) : []
   };
+  
+  // 确保elements属性存在后再访问其length属性
+  const elementsCount = newLayout.elements ? newLayout.elements.length : 0;
+  console.log(`[ScheduleEditorModal.vue 日程编辑器] 添加新布局: ${newLayout.id}, 模板: ${templateId}, 元素数量: ${elementsCount}`);
   
   // 添加到布局列表
   scheduleForm.layouts.push(newLayout);
@@ -1522,17 +1560,53 @@ function addNewLayout(templateId: string): void {
 function changeLayoutTemplate(templateId: string): void {
   const index = currentEditingLayoutIndex.value;
   if (index >= 0 && index < scheduleForm.layouts.length) {
-    // 保存原有的描述信息和媒体源信息
-    const description = scheduleForm.layouts[index].description;
-    const elements = scheduleForm.layouts[index].elements || [];
+    // 获取对应的布局模板
+    const template = planStore.layoutTemplates.find(t => t.template === templateId);
     
-    // 更新模板但保留媒体源信息
+    if (!template) {
+      console.error(`[ScheduleEditorModal.vue 日程编辑器] 未找到模板: ${templateId}`);
+      return;
+    }
+    
+    // 保存原有的描述信息
+    const description = scheduleForm.layouts[index].description;
+    // 保存原有的ID
+    const layoutId = scheduleForm.layouts[index].id;
+    
+    // 获取原有的媒体元素信息（如果有）
+    const originalElements = scheduleForm.layouts[index].elements || [];
+    const mediaElements = originalElements.filter((e: LayoutElement) => e.type === 'media');
+    
+    // 从模板创建新的元素列表
+    const newElements = template.elements ? JSON.parse(JSON.stringify(template.elements)) : [];
+    
+    // 如果原布局有媒体元素，尝试将其合并到新布局中
+    if (mediaElements.length > 0) {
+      // 遍历新元素，查找媒体类型的元素
+      for (const newElement of newElements) {
+        if (newElement.type === 'media') {
+          // 查找原布局中相同ID的媒体元素
+          const originalMediaElement = mediaElements.find((e: LayoutElement) => e.id === newElement.id);
+          if (originalMediaElement) {
+            // 复制媒体源信息
+            newElement.sourceId = originalMediaElement.sourceId;
+            newElement.sourceName = originalMediaElement.sourceName;
+            newElement.sourceType = originalMediaElement.sourceType;
+          }
+        }
+      }
+    }
+    
+    // 更新布局
     scheduleForm.layouts[index] = {
-      id: scheduleForm.layouts[index].id,
+      id: layoutId,
       template: templateId,
       description: description,
-      elements: elements // 保留原有的媒体源信息
+      elements: newElements
     };
+    
+    const elementsCount = newElements ? newElements.length : 0;
+    console.log(`[ScheduleEditorModal.vue 日程编辑器] 更改布局模板: ${layoutId}, 新模板: ${templateId}, 元素数量: ${elementsCount}`);
   }
   
   // 关闭对话框

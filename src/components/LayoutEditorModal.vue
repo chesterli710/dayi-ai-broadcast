@@ -186,6 +186,7 @@
                 <div class="option-info">
                   <h4 class="option-title">{{ $t('layoutEditor.saveCurrentOnly') }}</h4>
                   <p class="option-description">{{ $t('layoutEditor.saveCurrentDesc') }}</p>
+                  <p class="option-note">仅保存当前日程中的当前布局，不影响其他日程</p>
                 </div>
               </div>
               <div class="save-option" @click="saveSimilarLayouts">
@@ -195,6 +196,7 @@
                 <div class="option-info">
                   <h4 class="option-title">{{ $t('layoutEditor.saveSimilar') }}</h4>
                   <p class="option-description">{{ $t('layoutEditor.saveSimilarDesc') }}</p>
+                  <p class="option-note">将更新所有相同类型日程中使用相同模板的布局</p>
                 </div>
               </div>
             </div>
@@ -210,7 +212,7 @@ import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import { usePlanStore } from '../stores/planStore';
 import { useVideoStore } from '../stores/videoStore';
 import { useI18n } from 'vue-i18n';
-import type { Layout, LayoutElement, MediaLayoutElement } from '../types/broadcast';
+import type { Layout, LayoutElement, MediaLayoutElement, Schedule } from '../types/broadcast';
 import { LayoutElementType } from '../types/broadcast';
 import type { VideoDevice } from '../types/video';
 import { VideoSourceType } from '../types/video';
@@ -223,6 +225,7 @@ const props = defineProps<{
   visible: boolean;
   layout: Layout;
   scheduleType: string;
+  scheduleId?: string;
 }>();
 
 // Emits
@@ -234,6 +237,15 @@ const emit = defineEmits<{
 // Stores
 const planStore = usePlanStore();
 const videoStore = useVideoStore();
+
+// 获取当前分支
+const currentBranch = computed(() => planStore.currentBranch);
+
+// 获取当前日程
+const selectedSchedule = computed(() => {
+  if (!props.scheduleId || !currentBranch.value) return null;
+  return currentBranch.value.schedules.find(s => s.id === props.scheduleId) || null;
+});
 
 // 布局副本（用于编辑）
 const layoutCopy = ref<Layout>({ ...props.layout });
@@ -263,9 +275,27 @@ const hoveredElement = ref<number | null>(null);
 
 // 监听布局变化
 watch(() => props.layout, (newLayout) => {
-  layoutCopy.value = { ...newLayout };
+  console.log('[LayoutEditorModal.vue 布局编辑器] 布局已变更:', {
+    id: newLayout.id,
+    template: newLayout.template,
+    hasElements: !!(newLayout as any).elements,
+    elementsCount: (newLayout as any).elements?.length || 0
+  });
+  
+  // 创建布局的深拷贝
+  layoutCopy.value = JSON.parse(JSON.stringify(newLayout));
+  
   // 更新媒体元素
   mediaElements.value = getMediaElements();
+  
+  console.log('[LayoutEditorModal.vue 布局编辑器] 媒体元素已更新:', 
+    mediaElements.value.map(e => ({
+      id: e.id,
+      sourceId: e.sourceId,
+      sourceName: e.sourceName,
+      sourceType: e.sourceType
+    }))
+  );
 }, { immediate: true });
 
 // 监听可见性变化
@@ -345,9 +375,22 @@ async function initializeVideoSources() {
       await previewSource(device);
     }
     
+    // 获取当前布局的媒体元素
+    const currentMediaElements = getMediaElements();
+    console.log('[LayoutEditorModal.vue 布局编辑器] 当前布局媒体元素:', 
+      currentMediaElements.map(e => ({
+        id: e.id,
+        sourceId: e.sourceId,
+        sourceName: e.sourceName,
+        sourceType: e.sourceType
+      }))
+    );
+    
+    // 只有当布局中的媒体元素有sourceId时才激活它们
     // 激活已有的媒体源（仅在布局预览区域）
-    for (const element of mediaElements.value) {
+    for (const element of currentMediaElements) {
       if (element.sourceId && element.sourceType) {
+        console.log(`[LayoutEditorModal.vue 布局编辑器] 激活布局中的媒体元素: ID=${element.id}, 源=${element.sourceId}, 类型=${element.sourceType}`);
         switch (element.sourceType) {
           case VideoSourceType.CAMERA:
             await activateCamera(element.sourceId);
@@ -702,6 +745,7 @@ function getSourceThumbnail(sourceId: string): string {
  * 显示保存选项
  */
 function showSaveOptions() {
+  console.log('[LayoutEditorModal.vue 布局编辑器] 显示保存选项对话框');
   showingSaveOptions.value = true;
 }
 
@@ -709,18 +753,464 @@ function showSaveOptions() {
  * 保存当前布局
  */
 function saveCurrentLayout() {
-  emit('save', layoutCopy.value, false);
-  showingSaveOptions.value = false;
-  handleClose();
+  console.log('[LayoutEditorModal.vue 布局编辑器] 保存当前布局 - 单独保存模式');
+  console.log('[LayoutEditorModal.vue 布局编辑器] 当前布局信息:', {
+    layoutId: layoutCopy.value.id,
+    template: layoutCopy.value.template,
+    scheduleId: props.scheduleId,
+    scheduleType: props.scheduleType,
+    hasElements: !!layoutCopy.value.elements,
+    elementsCount: layoutCopy.value.elements?.length || 0
+  });
+  
+  // 创建布局的深拷贝，确保引用变化
+  const layoutToSave = JSON.parse(JSON.stringify(layoutCopy.value));
+  
+  // 确保媒体元素被正确保存
+  const currentMediaElements = mediaElements.value;
+  if (currentMediaElements.length > 0) {
+    // 记录媒体元素信息
+    console.log('[LayoutEditorModal.vue 布局编辑器] 保存的媒体元素:', 
+      currentMediaElements.map(e => ({
+        id: e.id,
+        sourceId: e.sourceId,
+        sourceName: e.sourceName,
+        sourceType: e.sourceType
+      }))
+    );
+    
+    // 确保layoutToSave有elements属性
+    if (!layoutToSave.elements) {
+      layoutToSave.elements = [];
+    }
+    
+    // 遍历所有媒体元素
+    currentMediaElements.forEach(element => {
+      // 在布局中查找对应的元素
+      const existingElementIndex = layoutToSave.elements.findIndex((e: any) => e.id === element.id && e.type === 'media');
+      
+      if (existingElementIndex >= 0) {
+        // 如果元素已存在，更新它
+        const updatedElement = {
+          ...layoutToSave.elements[existingElementIndex],
+          sourceId: element.sourceId,
+          sourceName: element.sourceName,
+          sourceType: element.sourceType
+        };
+        
+        // 如果有sourceId，查找对应的视频源以获取最新信息
+        if (element.sourceId) {
+          // 从所有视频源组中查找匹配的源
+          for (const group of videoStore.videoSourceGroups) {
+            const source = group.sources.find(s => s.id === element.sourceId);
+            if (source) {
+              updatedElement.sourceName = source.name;
+              updatedElement.sourceType = source.type;
+              break;
+            }
+          }
+        }
+        
+        // 更新元素
+        layoutToSave.elements[existingElementIndex] = updatedElement;
+      } else {
+        // 如果元素不存在，添加它
+        const newElement = { ...element };
+        
+        // 如果有sourceId，查找对应的视频源以获取最新信息
+        if (element.sourceId) {
+          // 从所有视频源组中查找匹配的源
+          for (const group of videoStore.videoSourceGroups) {
+            const source = group.sources.find(s => s.id === element.sourceId);
+            if (source) {
+              newElement.sourceName = source.name;
+              newElement.sourceType = source.type;
+              break;
+            }
+          }
+        }
+        
+        // 添加元素
+        layoutToSave.elements.push(newElement);
+      }
+    });
+    
+    console.log('[LayoutEditorModal.vue 布局编辑器] 最终保存的布局元素:', 
+      layoutToSave.elements.filter((e: any) => e.type === 'media').map((e: any) => ({
+        id: e.id,
+        sourceId: e.sourceId,
+        sourceName: e.sourceName,
+        sourceType: e.sourceType
+      }))
+    );
+  }
+  
+  // 直接调用planStore的updateLayoutInSchedule方法更新布局
+  if (props.scheduleId) {
+    console.log(`[LayoutEditorModal.vue 布局编辑器] 正在更新日程 ${props.scheduleId} 中的布局 ${layoutToSave.id}`);
+    const success = planStore.updateLayoutInSchedule(props.scheduleId, layoutToSave);
+    if (success) {
+      console.log(`[LayoutEditorModal.vue 布局编辑器] 布局已更新: 日程ID=${props.scheduleId}, 布局ID=${layoutToSave.id}`);
+      
+      // 通知渲染器更新布局
+      notifyRenderersLayoutChanged();
+      
+      // 关闭对话框
+      showingSaveOptions.value = false;
+      handleClose();
+    } else {
+      console.error(`[LayoutEditorModal.vue 布局编辑器] 布局更新失败: 日程ID=${props.scheduleId}, 布局ID=${layoutToSave.id}`);
+    }
+  } else {
+    console.error('[LayoutEditorModal.vue 布局编辑器] 无法保存布局：未提供日程ID');
+  }
 }
 
 /**
  * 保存相似布局
  */
 function saveSimilarLayouts() {
-  emit('save', layoutCopy.value, true);
+  console.log('[LayoutEditorModal.vue 布局编辑器] 保存所有相似布局 - 批量保存模式');
+  console.log('[LayoutEditorModal.vue 布局编辑器] 当前布局信息:', {
+    layoutId: layoutCopy.value.id,
+    template: layoutCopy.value.template,
+    scheduleId: props.scheduleId,
+    scheduleType: props.scheduleType,
+    hasElements: !!layoutCopy.value.elements,
+    elementsCount: layoutCopy.value.elements?.length || 0
+  });
+  
+  // 创建布局的深拷贝，确保引用变化
+  const layoutToSave = JSON.parse(JSON.stringify(layoutCopy.value));
+  
+  // 确保媒体元素被正确保存
+  const currentMediaElements = mediaElements.value;
+  if (currentMediaElements.length > 0) {
+    // 记录媒体元素信息
+    console.log('[LayoutEditorModal.vue 布局编辑器] 保存的媒体元素:', 
+      currentMediaElements.map(e => ({
+        id: e.id,
+        sourceId: e.sourceId,
+        sourceName: e.sourceName,
+        sourceType: e.sourceType
+      }))
+    );
+    
+    // 确保layoutToSave有elements属性
+    if (!layoutToSave.elements) {
+      layoutToSave.elements = [];
+    }
+    
+    // 遍历所有媒体元素
+    currentMediaElements.forEach(element => {
+      // 在布局中查找对应的元素
+      const existingElementIndex = layoutToSave.elements.findIndex((e: any) => e.id === element.id && e.type === 'media');
+      
+      if (existingElementIndex >= 0) {
+        // 如果元素已存在，更新它
+        const updatedElement = {
+          ...layoutToSave.elements[existingElementIndex],
+          sourceId: element.sourceId,
+          sourceName: element.sourceName,
+          sourceType: element.sourceType
+        };
+        
+        // 如果有sourceId，查找对应的视频源以获取最新信息
+        if (element.sourceId) {
+          // 从所有视频源组中查找匹配的源
+          for (const group of videoStore.videoSourceGroups) {
+            const source = group.sources.find(s => s.id === element.sourceId);
+            if (source) {
+              updatedElement.sourceName = source.name;
+              updatedElement.sourceType = source.type;
+              break;
+            }
+          }
+        }
+        
+        // 更新元素
+        layoutToSave.elements[existingElementIndex] = updatedElement;
+      } else {
+        // 如果元素不存在，添加它
+        const newElement = { ...element };
+        
+        // 如果有sourceId，查找对应的视频源以获取最新信息
+        if (element.sourceId) {
+          // 从所有视频源组中查找匹配的源
+          for (const group of videoStore.videoSourceGroups) {
+            const source = group.sources.find(s => s.id === element.sourceId);
+            if (source) {
+              newElement.sourceName = source.name;
+              newElement.sourceType = source.type;
+              break;
+            }
+          }
+        }
+        
+        // 添加元素
+        layoutToSave.elements.push(newElement);
+      }
+    });
+    
+    console.log('[LayoutEditorModal.vue 布局编辑器] 最终保存的布局元素:', 
+      layoutToSave.elements.filter((e: any) => e.type === 'media').map((e: any) => ({
+        id: e.id,
+        sourceId: e.sourceId,
+        sourceName: e.sourceName,
+        sourceType: e.sourceType
+      }))
+    );
+  }
+  
+  if (!props.scheduleId || !currentBranch.value) {
+    console.error('[LayoutEditorModal.vue 布局编辑器] 无法保存相似布局：未提供日程ID或未找到当前分支');
+    return;
+  }
+  
+  // 首先更新当前布局
+  console.log(`[LayoutEditorModal.vue 布局编辑器] 正在更新当前日程 ${props.scheduleId} 中的布局 ${layoutToSave.id}`);
+  const currentLayoutSuccess = planStore.updateLayoutInSchedule(props.scheduleId, layoutToSave);
+  if (currentLayoutSuccess) {
+    console.log(`[LayoutEditorModal.vue 布局编辑器] 当前布局已更新: 日程ID=${props.scheduleId}, 布局ID=${layoutToSave.id}`);
+  } else {
+    console.error(`[LayoutEditorModal.vue 布局编辑器] 当前布局更新失败: 日程ID=${props.scheduleId}, 布局ID=${layoutToSave.id}`);
+    // 如果当前布局更新失败，不继续更新其他布局
+    return;
+  }
+  
+  // 获取当前日程类型
+  const currentScheduleType = props.scheduleType;
+  
+  // 遍历所有日程，更新相同类型相同模板的布局
+  console.log(`[LayoutEditorModal.vue 布局编辑器] 开始更新所有使用模板 ${layoutToSave.template} 的布局`);
+  let updatedCount = 0;
+  
+  currentBranch.value.schedules.forEach(schedule => {
+    // 跳过当前日程，因为已经更新过了
+    if (schedule.id === props.scheduleId) {
+      return;
+    }
+    
+    // 只处理与当前选中的日程类型相同的日程
+    if (schedule.type === currentScheduleType) {
+      console.log(`[LayoutEditorModal.vue 布局编辑器] 处理相同类型日程: ${schedule.id}, 类型: ${schedule.type}`);
+      
+      // 遍历该日程的所有布局
+      schedule.layouts.forEach(l => {
+        // 只处理与当前选中的布局模板相同的布局
+        if (l.template === layoutToSave.template) {
+          console.log(`[LayoutEditorModal.vue 布局编辑器] 找到相似布局: 日程ID=${schedule.id}, 布局ID=${l.id}, 模板=${l.template}`);
+          
+          // 创建布局的深拷贝，避免引用问题
+          const updatedLayout = JSON.parse(JSON.stringify(l));
+          
+          // 更新布局的背景、标签背景和文字颜色
+          if (layoutToSave.background) updatedLayout.background = layoutToSave.background;
+          if (layoutToSave.labelBackground) updatedLayout.labelBackground = layoutToSave.labelBackground;
+          if (layoutToSave.textColor) updatedLayout.textColor = layoutToSave.textColor;
+          
+          // 更新布局的标签显示名称
+          if (layoutToSave.surgeonLabelDisplayName) updatedLayout.surgeonLabelDisplayName = layoutToSave.surgeonLabelDisplayName;
+          if (layoutToSave.surgeryLabelDisplayName) updatedLayout.surgeryLabelDisplayName = layoutToSave.surgeryLabelDisplayName;
+          if (layoutToSave.guestLabelDisplayName) updatedLayout.guestLabelDisplayName = layoutToSave.guestLabelDisplayName;
+          
+          // 更新布局的描述
+          if (layoutToSave.description) updatedLayout.description = layoutToSave.description;
+          
+          // 处理媒体元素
+          if (currentMediaElements.length > 0 && layoutToSave.elements) {
+            // 确保updatedLayout有elements属性
+            if (!updatedLayout.elements) {
+              updatedLayout.elements = [];
+            }
+            
+            // 获取布局模板
+            const template = planStore.layoutTemplates.find(t => t.template === layoutToSave.template);
+            
+            if (template && template.elements) {
+              // 遍历模板中的所有媒体元素
+              template.elements.forEach(templateElement => {
+                if (templateElement.type === 'media') {
+                  // 在编辑后的布局中查找对应的媒体元素
+                  const editedElement = layoutToSave.elements.find((e: any) => 
+                    e.id === templateElement.id && e.type === 'media'
+                  );
+                  
+                  // 在目标布局中查找对应的媒体元素
+                  let targetElementIndex = updatedLayout.elements.findIndex((e: any) => 
+                    e.id === templateElement.id && e.type === 'media'
+                  );
+                  
+                  // 如果目标布局中没有该元素，则创建一个
+                  if (targetElementIndex === -1) {
+                    updatedLayout.elements.push({ ...templateElement });
+                    targetElementIndex = updatedLayout.elements.length - 1;
+                  }
+                  
+                  // 如果编辑后的布局中有该元素，则更新目标布局中的元素
+                  if (editedElement) {
+                    // 只复制媒体源相关的属性
+                    updatedLayout.elements[targetElementIndex].sourceId = editedElement.sourceId;
+                    updatedLayout.elements[targetElementIndex].sourceName = editedElement.sourceName;
+                    updatedLayout.elements[targetElementIndex].sourceType = editedElement.sourceType;
+                  }
+                }
+              });
+            }
+          }
+          
+          // 使用planStore的updateLayoutInSchedule方法更新布局
+          console.log(`[LayoutEditorModal.vue 布局编辑器] 正在更新日程 ${schedule.id} 中的布局 ${updatedLayout.id}`);
+          const success = planStore.updateLayoutInSchedule(schedule.id, updatedLayout);
+          if (success) {
+            console.log(`[LayoutEditorModal.vue 布局编辑器] 已更新相似布局: 日程ID=${schedule.id}, 布局ID=${updatedLayout.id}`);
+            updatedCount++;
+          } else {
+            console.error(`[LayoutEditorModal.vue 布局编辑器] 更新相似布局失败: 日程ID=${schedule.id}, 布局ID=${updatedLayout.id}`);
+          }
+        }
+      });
+    }
+  });
+  
+  console.log(`[LayoutEditorModal.vue 布局编辑器] 批量保存完成，共更新了 ${updatedCount} 个相似布局`);
+  
+  // 通知渲染器更新布局
+  notifyRenderersLayoutChanged();
+  
+  // 关闭对话框
   showingSaveOptions.value = false;
   handleClose();
+}
+
+/**
+ * 通知渲染器布局已更改
+ * 当布局被编辑后保存时，通知预览和直播画布更新
+ */
+function notifyRenderersLayoutChanged() {
+  // 获取当前预览和直播布局
+  const currentPreviewLayout = planStore.previewingLayout;
+  const currentLiveLayout = planStore.liveLayout;
+  
+  // 检查当前编辑的布局是否是正在预览或直播的布局
+  // 注意：这里只检查id，确保只有完全匹配的布局才会被更新
+  const isEditingPreviewLayout = currentPreviewLayout && 
+    currentPreviewLayout.id === layoutCopy.value.id;
+  
+  const isEditingLiveLayout = currentLiveLayout && 
+    currentLiveLayout.id === layoutCopy.value.id;
+  
+  console.log(`[LayoutEditorModal.vue 布局编辑器] 布局已保存，检查是否需要更新渲染器:`, {
+    isEditingPreviewLayout,
+    isEditingLiveLayout,
+    previewLayoutId: currentPreviewLayout?.id,
+    editingLayoutId: layoutCopy.value.id,
+    scheduleId: props.scheduleId
+  });
+  
+  // 如果正在编辑的是预览布局，更新预览布局并通知预览画布更新
+  if (isEditingPreviewLayout && currentPreviewLayout) {
+    // 创建布局的深拷贝，确保引用变化
+    const updatedLayout = JSON.parse(JSON.stringify(layoutCopy.value));
+    
+    // 使用completeLayoutInfo方法补全布局信息
+    const completedLayout = planStore.completeLayoutInfo(updatedLayout);
+    
+    // 直接更新预览布局 - 使用setPreviewingScheduleAndLayout方法
+    if (planStore.previewingSchedule) {
+      planStore.setPreviewingScheduleAndLayout(planStore.previewingSchedule, completedLayout);
+    }
+    
+    // 触发planStore中的布局更新事件
+    planStore.notifyPreviewLayoutEdited();
+    
+    console.log('[LayoutEditorModal.vue 布局编辑器] 已更新预览布局:', completedLayout);
+  } else if (props.scheduleId) {
+    // 如果不是当前预览的布局，但有scheduleId，则检查是否需要更新预览
+    // 这种情况下，用户可能编辑了一个布局，但没有在预览它
+    const schedule = planStore.currentBranch?.schedules.find(s => s.id === props.scheduleId);
+    
+    if (schedule) {
+      // 查找更新后的布局
+      const updatedLayout = schedule.layouts.find(l => l.id === layoutCopy.value.id);
+      
+      if (updatedLayout) {
+        console.log('[LayoutEditorModal.vue 布局编辑器] 尝试更新预览布局:', {
+          scheduleId: props.scheduleId,
+          layoutId: updatedLayout.id
+        });
+        
+        // 如果当前预览的是同一个日程的其他布局，则自动切换到编辑的布局
+        if (planStore.previewingSchedule && planStore.previewingSchedule.id === props.scheduleId) {
+          // 创建布局的深拷贝，确保引用变化
+          const layoutToPreview = JSON.parse(JSON.stringify(updatedLayout));
+          
+          // 使用completeLayoutInfo方法补全布局信息
+          const completedLayout = planStore.completeLayoutInfo(layoutToPreview);
+          
+          // 设置为预览布局
+          planStore.setPreviewingScheduleAndLayout(schedule, completedLayout);
+          
+          // 触发planStore中的布局更新事件
+          planStore.notifyPreviewLayoutEdited();
+          
+          console.log('[LayoutEditorModal.vue 布局编辑器] 已自动切换预览到编辑的布局:', completedLayout);
+        }
+      }
+    }
+  }
+  
+  // 如果正在编辑的是直播布局，更新直播布局并通知直播画布更新
+  if (isEditingLiveLayout && currentLiveLayout) {
+    // 创建布局的深拷贝，确保引用变化
+    const updatedLayout = JSON.parse(JSON.stringify(layoutCopy.value));
+    
+    // 使用completeLayoutInfo方法补全布局信息
+    const completedLayout = planStore.completeLayoutInfo(updatedLayout);
+    
+    // 直接更新直播布局 - 使用setLiveScheduleAndLayout方法
+    if (planStore.liveSchedule) {
+      planStore.setLiveScheduleAndLayout(planStore.liveSchedule, completedLayout);
+    }
+    
+    // 触发planStore中的布局更新事件
+    planStore.notifyLiveLayoutEdited();
+    
+    console.log('[LayoutEditorModal.vue 布局编辑器] 已更新直播布局:', completedLayout);
+  } else if (props.scheduleId) {
+    // 如果不是当前直播的布局，但有scheduleId，则检查是否需要更新直播
+    // 这种情况下，用户可能编辑了一个布局，但没有在直播它
+    const schedule = planStore.currentBranch?.schedules.find(s => s.id === props.scheduleId);
+    
+    if (schedule) {
+      // 查找更新后的布局
+      const updatedLayout = schedule.layouts.find(l => l.id === layoutCopy.value.id);
+      
+      if (updatedLayout) {
+        console.log('[LayoutEditorModal.vue 布局编辑器] 尝试更新直播布局:', {
+          scheduleId: props.scheduleId,
+          layoutId: updatedLayout.id
+        });
+        
+        // 如果当前直播的是同一个日程的其他布局，则自动切换到编辑的布局
+        if (planStore.liveSchedule && planStore.liveSchedule.id === props.scheduleId) {
+          // 创建布局的深拷贝，确保引用变化
+          const layoutToLive = JSON.parse(JSON.stringify(updatedLayout));
+          
+          // 使用completeLayoutInfo方法补全布局信息
+          const completedLayout = planStore.completeLayoutInfo(layoutToLive);
+          
+          // 设置为直播布局
+          planStore.setLiveScheduleAndLayout(schedule, completedLayout);
+          
+          // 触发planStore中的布局更新事件
+          planStore.notifyLiveLayoutEdited();
+          
+          console.log('[LayoutEditorModal.vue 布局编辑器] 已自动切换直播到编辑的布局:', completedLayout);
+        }
+      }
+    }
+  }
 }
 
 /**
@@ -739,17 +1229,34 @@ function handleClose() {
  * @returns MediaLayoutElement[] 媒体元素列表
  */
 function getMediaElements(): MediaLayoutElement[] {
-  // 获取布局模板
+  // 首先检查布局本身是否已有elements属性
+  if (layoutCopy.value.elements) {
+    // 过滤出媒体类型的元素
+    const mediaElementsFromLayout = (layoutCopy.value.elements as LayoutElement[])
+      .filter(element => element.type === LayoutElementType.MEDIA)
+      .map(element => element as MediaLayoutElement);
+    
+    if (mediaElementsFromLayout.length > 0) {
+      console.log(`[LayoutEditorModal.vue 布局编辑器] 从布局中获取到 ${mediaElementsFromLayout.length} 个媒体元素`);
+      return mediaElementsFromLayout;
+    }
+  }
+  
+  // 如果布局中没有elements属性，则从模板中获取
   const template = planStore.layoutTemplates.find(t => t.template === layoutCopy.value.template);
   
   if (!template || !template.elements) {
+    console.log('[LayoutEditorModal.vue 布局编辑器] 未找到布局模板或模板中没有元素');
     return [];
   }
   
   // 过滤出媒体类型的元素
-  return template.elements
+  const mediaElementsFromTemplate = template.elements
     .filter(element => element.type === LayoutElementType.MEDIA)
     .map(element => element as MediaLayoutElement);
+  
+  console.log(`[LayoutEditorModal.vue 布局编辑器] 从模板中获取到 ${mediaElementsFromTemplate.length} 个媒体元素`);
+  return mediaElementsFromTemplate;
 }
 
 /**
@@ -882,9 +1389,15 @@ async function ensureCameraStreamsInPreview() {
     // 等待DOM更新
     await nextTick();
     
-    // 遍历所有媒体元素，找出摄像头类型的元素
-    for (const element of mediaElements.value) {
+    // 获取当前布局的媒体元素
+    const currentMediaElements = getMediaElements();
+    
+    // 遍历当前布局中的媒体元素，找出摄像头类型的元素
+    for (const element of currentMediaElements) {
+      // 只处理当前布局中实际有sourceId的元素
       if (element.sourceId && element.sourceType === VideoSourceType.CAMERA) {
+        console.log(`[LayoutEditorModal.vue 布局编辑器] 确保摄像头流显示: 元素ID=${element.id}, 源ID=${element.sourceId}`);
+        
         // 获取对应的视频元素
         const videoElement = document.getElementById(`video-preview-${element.sourceId}`) as HTMLVideoElement | null;
         
@@ -1395,9 +1908,17 @@ video.source-preview {
 
 .option-description {
   margin: 0;
-  font-size: 13px;
+  font-size: 14px;
   color: var(--el-text-color-secondary, #909399);
   line-height: 1.5;
+}
+
+.option-note {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--el-color-danger, #f56c6c);
+  line-height: 1.5;
+  font-weight: 500;
 }
 
 /* 删除不再需要的样式 */

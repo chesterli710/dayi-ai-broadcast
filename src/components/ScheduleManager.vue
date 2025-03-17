@@ -84,8 +84,8 @@
       :visible="showLayoutEditor"
       :layout="selectedLayout"
       :scheduleType="selectedScheduleType"
+      :scheduleId="selectedSchedule?.id"
       @close="closeLayoutEditor"
-      @save="saveLayout"
     />
     
     <!-- 日程编辑器Modal -->
@@ -294,97 +294,6 @@ function openLayoutEditor(schedule: Schedule, layout: Layout): void {
  */
 function closeLayoutEditor(): void {
   showLayoutEditor.value = false;
-}
-
-/**
- * 保存布局
- * @param layout 更新后的布局
- * @param saveAll 是否保存所有相似布局
- */
-function saveLayout(layout: Layout, saveAll: boolean): void {
-  if (!selectedSchedule.value) return;
-  
-  if (saveAll) {
-    // 保存所有相似布局
-    saveSimilarLayouts(layout);
-  } else {
-    // 仅保存当前布局
-    saveCurrentLayout(layout);
-  }
-}
-
-/**
- * 保存当前布局
- * @param layout 更新后的布局
- */
-function saveCurrentLayout(layout: Layout): void {
-  if (!selectedSchedule.value || !currentBranch.value) return;
-  
-  // 查找当前日程
-  const scheduleIndex = currentBranch.value.schedules.findIndex(s => s.id === selectedSchedule.value?.id);
-  
-  if (scheduleIndex !== -1) {
-    // 查找当前布局
-    const layoutIndex = currentBranch.value.schedules[scheduleIndex].layouts.findIndex(l => l.id === layout.id);
-    
-    if (layoutIndex !== -1) {
-      // 更新布局
-      currentBranch.value.schedules[scheduleIndex].layouts[layoutIndex] = layout;
-    }
-  }
-}
-
-/**
- * 保存所有相似布局
- * @param layout 更新后的布局
- */
-function saveSimilarLayouts(layout: Layout): void {
-  if (!selectedSchedule.value || !currentBranch.value) return;
-  
-  // 遍历所有日程
-  currentBranch.value.schedules.forEach(schedule => {
-    // 如果日程类型与当前选中的日程类型相同
-    if (schedule.type === selectedSchedule.value?.type) {
-      // 遍历该日程的所有布局
-      schedule.layouts.forEach((l, index) => {
-        // 如果布局模板与当前选中的布局模板相同
-        if (l.template === layout.template) {
-          // 更新布局的媒体源信息
-          const updatedLayout = { ...l };
-          
-          // 获取布局模板
-          const template = planStore.layoutTemplates.find(t => t.template === layout.template);
-          
-          if (template && template.elements) {
-            // 遍历模板中的所有媒体元素
-            const mediaElements = template.elements.filter(element => element.type === 'media');
-            
-            // 查找布局中对应的媒体元素
-            mediaElements.forEach(element => {
-              // 如果元素有sourceId和sourceName属性，则认为它是MediaLayoutElement
-              const mediaElement = element as any;
-              if (mediaElement.sourceId && mediaElement.sourceName) {
-                // 更新布局中对应的媒体元素
-                // 注意：这里我们不能直接访问updatedLayout.elements，因为Layout类型没有定义elements属性
-                // 我们可以使用类型断言来处理这种情况
-                const updatedLayoutAny = updatedLayout as any;
-                if (updatedLayoutAny.elements) {
-                  const updatedElement = updatedLayoutAny.elements.find((e: any) => e.id === element.id && e.type === 'media');
-                  if (updatedElement) {
-                    updatedElement.sourceId = mediaElement.sourceId;
-                    updatedElement.sourceName = mediaElement.sourceName;
-                  }
-                }
-              }
-            });
-          }
-          
-          // 更新布局
-          schedule.layouts[index] = updatedLayout;
-        }
-      });
-    }
-  });
 }
 
 /**

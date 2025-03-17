@@ -117,6 +117,7 @@ export interface Layout {
   surgeonLabelDisplayName?: string // "术者"在界面上的显示文字，有可能是 "手术团队"等
   surgeryLabelDisplayName?: string // "术式"在界面上的显示文字
   guestLabelDisplayName?: string // "互动嘉宾"在界面上的显示文字
+  elements?: LayoutElement[]      // 该布局包含的布局元素（一个布局内包含多个布局元素）
 }
 
 /**

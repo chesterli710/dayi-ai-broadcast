@@ -4,7 +4,7 @@
  */
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import type { Channel, Plan, Branch, Layout, LayoutTemplate, Schedule } from '../types/broadcast'
+import type { Channel, Plan, Branch, Layout, LayoutTemplate, Schedule, LayoutElement } from '../types/broadcast'
 import { initializeApp } from '../utils/initializeApp'
 import planApi from '../api/plan'
 import { ElMessage } from 'element-plus'
@@ -66,6 +66,21 @@ export const usePlanStore = defineStore('plan', () => {
   const isStreaming = ref<boolean>(false)
   
   /**
+   * 布局编辑事件
+   */
+  const layoutEditedEvent = ref<number>(0)
+  
+  /**
+   * 预览布局编辑事件
+   */
+  const previewLayoutEditedEvent = ref<number>(0)
+  
+  /**
+   * 直播布局编辑事件
+   */
+  const liveLayoutEditedEvent = ref<number>(0)
+  
+  /**
    * 设置当前频道
    * @param channel - 频道数据
    */
@@ -111,6 +126,36 @@ export const usePlanStore = defineStore('plan', () => {
         }
       })
     }
+    
+    // 加载布局模板后，确保所有日程中的布局都是完整的实体
+    if (layoutTemplates.value.length > 0) {
+      initializeScheduleLayouts(branch)
+    }
+  }
+  
+  /**
+   * 初始化分支中所有日程的布局
+   * 确保每个日程下的布局都是完整的实体对象
+   * @param branch - 分支数据
+   */
+  function initializeScheduleLayouts(branch: Branch): void {
+    if (!branch.schedules || !branch.schedules.length) return
+    
+    console.log('[planStore.ts 计划存储] 开始初始化分支中所有日程的布局')
+    
+    branch.schedules.forEach(schedule => {
+      if (!schedule.layouts) {
+        schedule.layouts = []
+        return
+      }
+      
+      // 对每个布局进行初始化，确保它们是完整的实体对象
+      schedule.layouts = schedule.layouts.map(layout => {
+        return completeLayoutInfo(layout, true)
+      })
+      
+      console.log(`[planStore.ts 计划存储] 日程 ${schedule.id} 的布局已初始化，共 ${schedule.layouts.length} 个布局`)
+    })
   }
   
   /**
@@ -138,6 +183,11 @@ export const usePlanStore = defineStore('plan', () => {
     } catch (error) {
       console.error('[planStore.ts 计划存储] 保存布局模板到本地存储失败:', error);
     }
+    
+    // 布局模板加载后，初始化当前分支中所有日程的布局
+    if (currentBranch.value) {
+      initializeScheduleLayouts(currentBranch.value)
+    }
   }
   
   /**
@@ -152,6 +202,12 @@ export const usePlanStore = defineStore('plan', () => {
       if (storedData && storedDate) {
         layoutTemplates.value = JSON.parse(storedData)
         layoutTemplatesLastUpdated.value = new Date(storedDate)
+        
+        // 布局模板加载后，初始化当前分支中所有日程的布局
+        if (currentBranch.value) {
+          initializeScheduleLayouts(currentBranch.value)
+        }
+        
         return true
       }
       
@@ -181,67 +237,76 @@ export const usePlanStore = defineStore('plan', () => {
    * 补全布局信息
    * 根据布局模板补全布局中的元素信息
    * @param layout - 需要补全的布局
+   * @param createNewInstance - 是否创建新实例而不是修改原对象
    * @returns Layout 补全后的布局
    */
-  function completeLayoutInfo(layout: Layout): Layout {
+  function completeLayoutInfo(layout: Layout, createNewInstance: boolean = false): Layout {
     // 查找对应的布局模板
     const template = layoutTemplates.value.find(t => t.template === layout.template)
     
     if (!template) {
-      return layout
+      return createNewInstance ? JSON.parse(JSON.stringify(layout)) : layout
     }
     
     // 创建新的布局对象，避免修改原始对象
-    const completedLayout: Layout = {
-      ...layout
+    const completedLayout: Layout = createNewInstance 
+      ? JSON.parse(JSON.stringify(layout))
+      : { ...layout }
+    
+    // 从Plan继承属性
+    if (currentPlan.value) {
+      // 背景相关属性继承
+      if (!completedLayout.background && currentPlan.value.background) {
+        completedLayout.background = currentPlan.value.background
+      }
+      
+      if (!completedLayout.labelBackground && currentPlan.value.labelBackground) {
+        completedLayout.labelBackground = currentPlan.value.labelBackground
+      }
+      
+      if (!completedLayout.textColor && currentPlan.value.textColor) {
+        completedLayout.textColor = currentPlan.value.textColor
+      }
+      
+      // 标签显示名称继承
+      if (!completedLayout.surgeonLabelDisplayName && currentPlan.value.surgeonLabelDisplayName) {
+        completedLayout.surgeonLabelDisplayName = currentPlan.value.surgeonLabelDisplayName
+      }
+      
+      if (!completedLayout.surgeryLabelDisplayName && currentPlan.value.surgeryLabelDisplayName) {
+        completedLayout.surgeryLabelDisplayName = currentPlan.value.surgeryLabelDisplayName
+      }
+      
+      if (!completedLayout.guestLabelDisplayName && currentPlan.value.guestLabelDisplayName) {
+        completedLayout.guestLabelDisplayName = currentPlan.value.guestLabelDisplayName
+      }
     }
     
-    // 如果布局没有指定背景、标签背景或文字颜色，则使用计划中的值
-    if (!completedLayout.background && currentPlan.value?.background) {
-      completedLayout.background = currentPlan.value.background
-    }
-    
-    if (!completedLayout.labelBackground && currentPlan.value?.labelBackground) {
-      completedLayout.labelBackground = currentPlan.value.labelBackground
-    }
-    
-    if (!completedLayout.textColor && currentPlan.value?.textColor) {
-      completedLayout.textColor = currentPlan.value.textColor
-    }
-    
-    // 如果布局没有指定术者、术式或嘉宾标签显示名称，则使用计划中的值
-    if (!completedLayout.surgeonLabelDisplayName && currentPlan.value?.surgeonLabelDisplayName) {
-      completedLayout.surgeonLabelDisplayName = currentPlan.value.surgeonLabelDisplayName
-    }
-    
-    if (!completedLayout.surgeryLabelDisplayName && currentPlan.value?.surgeryLabelDisplayName) {
-      completedLayout.surgeryLabelDisplayName = currentPlan.value.surgeryLabelDisplayName
-    }
-    
-    if (!completedLayout.guestLabelDisplayName && currentPlan.value?.guestLabelDisplayName) {
-      completedLayout.guestLabelDisplayName = currentPlan.value.guestLabelDisplayName
+    // 确保布局元素是完整的实体对象
+    if (template.elements && (!completedLayout.elements || createNewInstance)) {
+      // 深拷贝模板元素
+      const elementsCopy = JSON.parse(JSON.stringify(template.elements))
+      
+      // 如果已有元素，则保留现有元素的属性
+      if (completedLayout.elements && !createNewInstance) {
+        // 合并现有元素和模板元素
+        const mergedElements = elementsCopy.map((templateElement: LayoutElement) => {
+          const existingElement = completedLayout.elements?.find(e => e.id === templateElement.id)
+          return existingElement ? { ...templateElement, ...existingElement } : templateElement
+        })
+        completedLayout.elements = mergedElements
+      } else {
+        completedLayout.elements = elementsCopy
+      }
+      
+      // 确保elements存在后再访问其length属性
+      if (completedLayout.elements) {
+        console.log(`[planStore.ts 计划存储] 布局 ${layout.id} 的元素已初始化，共 ${completedLayout.elements.length} 个元素`)
+      }
     }
     
     return completedLayout
   }
-  
-  /**
-   * 计算属性：当前计划的所有布局
-   */
-  const allLayouts = computed(() => {
-    if (!currentBranch.value) return []
-    
-    const layouts: Layout[] = []
-    
-    // 收集所有日程中的布局
-    currentBranch.value.schedules.forEach(schedule => {
-      schedule.layouts.forEach(layout => {
-        layouts.push(completeLayoutInfo(layout))
-      })
-    })
-    
-    return layouts
-  })
   
   /**
    * 计算属性：布局模板是否需要更新
@@ -262,6 +327,11 @@ export const usePlanStore = defineStore('plan', () => {
     }
     
     try {
+      // 确保日程中的布局是完整的实体对象
+      if (schedule.layouts) {
+        schedule.layouts = schedule.layouts.map(layout => completeLayoutInfo(layout, true))
+      }
+      
       // 调用API创建日程
       const response = await planApi.createSchedule(currentBranch.value.id, schedule)
       
@@ -297,6 +367,19 @@ export const usePlanStore = defineStore('plan', () => {
     }
     
     try {
+      // 确保日程中的布局是完整的实体对象
+      if (schedule.layouts) {
+        // 这里不创建新实例，因为我们要保持对原始布局对象的引用
+        schedule.layouts.forEach(layout => {
+          if (!layout.elements) {
+            const template = layoutTemplates.value.find(t => t.template === layout.template)
+            if (template && template.elements) {
+              layout.elements = JSON.parse(JSON.stringify(template.elements))
+            }
+          }
+        })
+      }
+      
       // 调用API更新日程
       const response = await planApi.updateSchedule(currentBranch.value.id, schedule)
       
@@ -372,9 +455,31 @@ export const usePlanStore = defineStore('plan', () => {
    * @param layout - 布局数据
    */
   function setPreviewingScheduleAndLayout(schedule: Schedule, layout: Layout) {
-    previewingSchedule.value = schedule;
-    // 使用completeLayoutInfo方法补全布局信息，确保从Plan继承background等属性
-    previewingLayout.value = completeLayoutInfo(layout);
+    console.log('[planStore.ts 计划存储] 设置预览日程和布局:', {
+      scheduleId: schedule.id,
+      scheduleType: schedule.type,
+      layoutId: layout.id,
+      layoutTemplate: layout.template,
+      hasElements: !!(layout as any).elements
+    });
+    
+    // 创建深拷贝，避免引用问题
+    const scheduleCopy = JSON.parse(JSON.stringify(schedule)) as Schedule;
+    
+    // 创建布局的深拷贝
+    const layoutCopy = JSON.parse(JSON.stringify(layout));
+    
+    // 设置预览日程
+    previewingSchedule.value = scheduleCopy;
+    
+    // 设置预览布局
+    previewingLayout.value = layoutCopy;
+    
+    console.log('[planStore.ts 计划存储] 预览布局已设置:', {
+      hasElements: !!(previewingLayout.value as any).elements,
+      elementsCount: (previewingLayout.value as any).elements?.length || 0,
+      scheduleType: previewingSchedule.value?.type || '未知'
+    });
   }
   
   /**
@@ -404,9 +509,31 @@ export const usePlanStore = defineStore('plan', () => {
    * @param layout - 布局数据
    */
   function setLiveScheduleAndLayout(schedule: Schedule, layout: Layout) {
-    liveSchedule.value = schedule;
-    // 使用completeLayoutInfo方法补全布局信息，确保从Plan继承background等属性
-    liveLayout.value = completeLayoutInfo(layout);
+    console.log('[planStore.ts 计划存储] 设置直播日程和布局:', {
+      scheduleId: schedule.id,
+      scheduleType: schedule.type,
+      layoutId: layout.id,
+      layoutTemplate: layout.template,
+      hasElements: !!(layout as any).elements
+    });
+    
+    // 创建深拷贝，避免引用问题
+    const scheduleCopy = JSON.parse(JSON.stringify(schedule)) as Schedule;
+    
+    // 创建布局的深拷贝
+    const layoutCopy = JSON.parse(JSON.stringify(layout));
+    
+    // 设置直播日程
+    liveSchedule.value = scheduleCopy;
+    
+    // 设置直播布局
+    liveLayout.value = layoutCopy;
+    
+    console.log('[planStore.ts 计划存储] 直播布局已设置:', {
+      hasElements: !!(liveLayout.value as any).elements,
+      elementsCount: (liveLayout.value as any).elements?.length || 0,
+      scheduleType: liveSchedule.value?.type || '未知'
+    });
   }
   
   /**
@@ -456,19 +583,79 @@ export const usePlanStore = defineStore('plan', () => {
     isStreaming.value = false
   }
   
+  /**
+   * 通知预览布局已编辑
+   * 用于在布局编辑器中保存布局后通知预览画布更新
+   */
+  function notifyPreviewLayoutEdited() {
+    console.log('[planStore.ts 计划存储] 通知预览布局已编辑')
+    previewLayoutEditedEvent.value = Date.now()
+    layoutEditedEvent.value = Date.now()
+  }
+  
+  /**
+   * 通知直播布局已编辑
+   * 用于在布局编辑器中保存布局后通知直播画布更新
+   */
+  function notifyLiveLayoutEdited() {
+    console.log('[planStore.ts 计划存储] 通知直播布局已编辑')
+    liveLayoutEditedEvent.value = Date.now()
+    layoutEditedEvent.value = Date.now()
+  }
+  
+  /**
+   * 更新日程中的布局
+   * 在布局编辑器中修改布局后，更新对应日程中的布局
+   * @param scheduleId - 日程ID
+   * @param updatedLayout - 更新后的布局
+   * @returns 是否更新成功
+   */
+  function updateLayoutInSchedule(scheduleId: string, updatedLayout: Layout): boolean {
+    console.log(`[planStore.ts 计划存储] 开始更新日程 ${scheduleId} 中的布局 ${updatedLayout.id}，模板：${updatedLayout.template}`);
+    
+    if (!currentBranch.value) {
+      console.error('[planStore.ts 计划存储] 更新布局失败：当前没有选中分支');
+      return false;
+    }
+    
+    // 在当前分支中查找对应的日程
+    const scheduleIndex = currentBranch.value.schedules.findIndex(s => s.id === scheduleId);
+    if (scheduleIndex === -1) {
+      console.error(`[planStore.ts 计划存储] 更新布局失败：未找到日程 ${scheduleId}`);
+      return false;
+    }
+    
+    const schedule = currentBranch.value.schedules[scheduleIndex];
+    
+    // 在日程中查找对应的布局
+    const layoutIndex = schedule.layouts.findIndex(l => l.id === updatedLayout.id);
+    if (layoutIndex === -1) {
+      console.error(`[planStore.ts 计划存储] 更新布局失败：在日程 ${scheduleId} 中未找到布局 ${updatedLayout.id}`);
+      return false;
+    }
+    
+    // 更新布局
+    schedule.layouts[layoutIndex] = JSON.parse(JSON.stringify(updatedLayout));
+    
+    console.log(`[planStore.ts 计划存储] 已更新日程 ${scheduleId} 中的布局 ${updatedLayout.id}`);
+    return true;
+  }
+  
   return {
     currentChannel,
     currentPlan,
     currentBranch,
     layoutTemplates,
     layoutTemplatesLastUpdated,
-    allLayouts,
     needsLayoutTemplateUpdate,
     previewingSchedule,
     previewingLayout,
     liveSchedule,
     liveLayout,
     isStreaming,
+    layoutEditedEvent,
+    previewLayoutEditedEvent,
+    liveLayoutEditedEvent,
     setCurrentChannel,
     setCurrentPlan,
     setCurrentBranch,
@@ -476,6 +663,7 @@ export const usePlanStore = defineStore('plan', () => {
     loadLayoutTemplatesFromLocalStorage,
     saveLayoutTemplatesToLocalStorage,
     completeLayoutInfo,
+    initializeScheduleLayouts,
     saveSchedule,
     deleteSchedule,
     createSchedule,
@@ -488,6 +676,9 @@ export const usePlanStore = defineStore('plan', () => {
     isLiveScheduleAndLayout,
     switchPreviewToLive,
     startStreaming,
-    stopStreaming
+    stopStreaming,
+    notifyPreviewLayoutEdited,
+    notifyLiveLayoutEdited,
+    updateLayoutInSchedule
   }
 }) 
