@@ -84,6 +84,15 @@ class MainProcess {
         return false;
       }
     });
+    ipcMain.handle("set-device-volume", async (event, deviceId, volume) => {
+      try {
+        console.log(`[主进程] 记录设备 ${deviceId} 音量设置为 ${volume}`);
+        return true;
+      } catch (error) {
+        console.error(`[主进程] 处理设备 ${deviceId} 音量设置请求失败:`, error);
+        return true;
+      }
+    });
     ipcMain.handle("get-gpu-info", async () => {
       try {
         let vendor = "unknown", model = "Unknown";

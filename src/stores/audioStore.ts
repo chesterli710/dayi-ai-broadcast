@@ -63,10 +63,13 @@ export const useAudioStore = defineStore('audio', () => {
       // 获取所有音频设备
       const allDevices = await audioDeviceManager.getAllAudioDevices()
       
-      // 为每个设备添加默认音量和电平值
+      // 加载保存的音量设置
+      const savedVolumeSettings = loadDeviceVolumeSettings()
+      
+      // 为每个设备添加默认音量和电平值，应用保存的音量设置
       devices.value = allDevices.map(device => ({
         ...device,
-        volume: 100,
+        volume: savedVolumeSettings[device.id] ?? 100,
         level: 0
       }))
       
@@ -181,13 +184,21 @@ export const useAudioStore = defineStore('audio', () => {
    * @param deviceId - 设备ID
    * @param newVolume - 新的音量值 (0-100)
    */
-  function setDeviceVolume(deviceId: string, newVolume: number) {
+  async function setDeviceVolume(deviceId: string, newVolume: number) {
     const clampedVolume = Math.max(0, Math.min(100, newVolume))
+    
+    // 记录当前时间，用于防止电平监测覆盖音量设置
+    const setTime = Date.now()
     
     // 更新设备列表中的设备音量
     devices.value = devices.value.map(device => {
       if (device.id === deviceId) {
-        return { ...device, volume: clampedVolume }
+        return { 
+          ...device, 
+          volume: clampedVolume,
+          // 添加音量设置时间戳，用于防止电平监测覆盖
+          lastVolumeSetTime: setTime
+        }
       }
       return device
     })
@@ -195,13 +206,69 @@ export const useAudioStore = defineStore('audio', () => {
     // 更新激活设备列表中的设备音量
     activeDevices.value = activeDevices.value.map(device => {
       if (device.id === deviceId) {
-        return { ...device, volume: clampedVolume }
+        return { 
+          ...device, 
+          volume: clampedVolume,
+          // 添加音量设置时间戳，用于防止电平监测覆盖
+          lastVolumeSetTime: setTime
+        }
       }
       return device
     })
     
+    // 保存音量设置到本地存储，以便下次启动时恢复
+    saveDeviceVolumeSetting(deviceId, clampedVolume)
+    
     // 调用设备管理器设置设备音量
-    audioDeviceManager.setDeviceVolume(deviceId, clampedVolume)
+    try {
+      const success = await audioDeviceManager.setDeviceVolume(deviceId, clampedVolume)
+      if (success) {
+        console.log(`设备 ${deviceId} 采集音量已设置为 ${clampedVolume}`)
+      } else {
+        console.error(`设置设备 ${deviceId} 采集音量失败`)
+      }
+      return success
+    } catch (error) {
+      console.error(`设置设备 ${deviceId} 采集音量出错:`, error)
+      return false
+    }
+  }
+  
+  /**
+   * 保存设备音量设置到本地存储
+   * @param deviceId - 设备ID
+   * @param volume - 音量值
+   */
+  function saveDeviceVolumeSetting(deviceId: string, volume: number) {
+    try {
+      // 获取现有设置
+      const volumeSettingsStr = localStorage.getItem('audioDeviceVolumes')
+      const volumeSettings = volumeSettingsStr ? JSON.parse(volumeSettingsStr) : {}
+      
+      // 更新设置
+      volumeSettings[deviceId] = volume
+      
+      // 保存回本地存储
+      localStorage.setItem('audioDeviceVolumes', JSON.stringify(volumeSettings))
+      console.log(`设备 ${deviceId} 音量设置 ${volume} 已保存到本地存储`)
+    } catch (error) {
+      console.error('保存设备音量设置失败:', error)
+    }
+  }
+  
+  /**
+   * 从本地存储加载设备音量设置
+   */
+  function loadDeviceVolumeSettings() {
+    try {
+      const volumeSettingsStr = localStorage.getItem('audioDeviceVolumes')
+      if (!volumeSettingsStr) return {}
+      
+      return JSON.parse(volumeSettingsStr)
+    } catch (error) {
+      console.error('加载设备音量设置失败:', error)
+      return {}
+    }
   }
   
   /**
@@ -221,18 +288,26 @@ export const useAudioStore = defineStore('audio', () => {
           // 获取设备当前音频电平
           const level = await audioDeviceManager.getDeviceLevel(device.id)
           
-          // 更新设备列表中的设备电平
+          // 更新设备列表中的设备电平，但不修改音量
           devices.value = devices.value.map(d => {
             if (d.id === device.id) {
-              return { ...d, level }
+              return { 
+                ...d, 
+                level
+                // 不再更新音量，只更新电平
+              }
             }
             return d
           })
           
-          // 更新激活设备列表中的设备电平
+          // 更新激活设备列表中的设备电平，但不修改音量
           activeDevices.value = activeDevices.value.map(d => {
             if (d.id === device.id) {
-              return { ...d, level }
+              return { 
+                ...d, 
+                level
+                // 不再更新音量，只更新电平
+              }
             }
             return d
           })

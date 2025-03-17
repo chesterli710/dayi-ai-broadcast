@@ -11,16 +11,49 @@ export enum AudioSourceType {
 }
 
 /**
- * 音频设备信息
+ * 音频设备接口
  */
 export interface AudioDevice {
-  id: string;           // 设备ID
-  name: string;         // 设备名称
-  type: AudioSourceType; // 设备类型
-  isDefault: boolean;   // 是否为默认设备
-  isActive: boolean;    // 是否激活
-  volume: number;       // 设备音量 (0-100)
-  level: number;        // 当前音频电平 (0-100)
+  /**
+   * 设备ID
+   */
+  id: string;
+  
+  /**
+   * 设备名称
+   */
+  name: string;
+  
+  /**
+   * 设备类型
+   */
+  type: AudioSourceType;
+  
+  /**
+   * 是否为默认设备
+   */
+  isDefault: boolean;
+  
+  /**
+   * 是否激活
+   */
+  isActive: boolean;
+  
+  /**
+   * 设备音量 (0-100)
+   */
+  volume: number;
+  
+  /**
+   * 音频电平 (0-100)
+   */
+  level: number;
+
+  /**
+   * 最后一次设置音量的时间戳
+   * 用于防止电平监测覆盖音量设置
+   */
+  lastVolumeSetTime?: number;
 }
 
 /**

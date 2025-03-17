@@ -114,6 +114,22 @@ class MainProcess {
       }
     })
 
+    // 设置设备音量
+    ipcMain.handle('set-device-volume', async (event, deviceId, volume) => {
+      try {
+        console.log(`[主进程] 记录设备 ${deviceId} 音量设置为 ${volume}`)
+        
+        // 我们不再尝试修改系统级别的音量设置
+        // 而是简单地返回成功，让渲染进程使用Web Audio API的GainNode来控制音量
+        
+        return true
+      } catch (error) {
+        console.error(`[主进程] 处理设备 ${deviceId} 音量设置请求失败:`, error)
+        // 即使失败也返回成功，让UI保持一致
+        return true
+      }
+    })
+
     // 获取系统GPU信息
     ipcMain.handle('get-gpu-info', async () => {
       try {

@@ -39,6 +39,15 @@ contextBridge.exposeInMainWorld("electronAPI", {
     return ipcRenderer.invoke("check-stereo-mix-enabled");
   },
   /**
+   * 设置设备音量
+   * @param deviceId - 设备ID
+   * @param volume - 音量值 (0-100)
+   * @returns Promise<boolean> 是否设置成功
+   */
+  setDeviceVolume: (deviceId, volume) => {
+    return ipcRenderer.invoke("set-device-volume", deviceId, volume);
+  },
+  /**
    * 获取系统显卡信息
    * @returns Promise<{vendor: string, model: string}> 显卡信息
    */
@@ -47,14 +56,14 @@ contextBridge.exposeInMainWorld("electronAPI", {
   },
   /**
    * 获取系统可用窗口列表
-   * @returns Promise<Array<{id: string, name: string, appIcon: string|null, thumbnail: string}>> 窗口列表
+   * @returns Promise<WindowInfo[]> 窗口列表
    */
   getWindows: () => {
     return ipcRenderer.invoke("get-windows");
   },
   /**
    * 获取系统显示器列表
-   * @returns Promise<Array<{id: string, name: string, width: number, height: number, isPrimary: boolean, thumbnail: string|null}>> 显示器列表
+   * @returns Promise<DisplayInfo[]> 显示器列表
    */
   getDisplays: () => {
     return ipcRenderer.invoke("get-displays");

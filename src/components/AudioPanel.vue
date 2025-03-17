@@ -46,7 +46,9 @@
                 :min="0"
                 :max="100"
                 :disabled="isMuted"
-                @change="setMicrophoneVolume"
+                @input="setMicrophoneVolume"
+                :class="{ 'volume-changed': microphoneVolumeChanged }"
+                class="volume-slider"
               />
               <i class="bi bi-volume-up"></i>
             </div>
@@ -58,56 +60,23 @@
       <div class="system-audio-section">
         <div class="section-title">{{ $t('audioPanel.deviceTypes.systemAudio') }}</div>
         
-        <!-- 系统音频设备选择 -->
+        <!-- 系统音频设备控制 -->
         <div v-if="systemAudioDevices.length > 0" class="system-audio-selection">
-          <div class="device-select-container">
-            <el-select 
-              v-model="selectedSystemAudio" 
-              :placeholder="$t('audioPanel.selectSystemAudio')"
-              class="device-select"
-              @change="handleSystemAudioChange"
-            >
-              <el-option 
-                v-for="device in systemAudioDevices" 
-                :key="device.id" 
-                :label="device.name" 
-                :value="device.id" 
-              />
-            </el-select>
-            <el-button 
-              type="primary" 
-              size="small" 
-              class="refresh-button"
-              @click="refreshAudioDevices"
-              :title="$t('audioPanel.refreshDevices')"
-            >
-              <i class="bi bi-arrow-clockwise"></i>
-            </el-button>
-          </div>
-          
-          <!-- 系统音频设备选择提示 -->
-          <div class="device-selection-hint">
-            <el-alert
-              type="info"
-              :closable="false"
-              show-icon
-              size="small"
-            >
-              <template #title>
-                <span class="hint-title">{{ $t('audioPanel.deviceSelectionHint') }}</span>
-              </template>
-              <template #default>
-                <p>{{ $t('audioPanel.preferSpecificDevice') }}</p>
-              </template>
-            </el-alert>
-          </div>
-          
           <div class="device-activation">
             <span>{{ $t('audioPanel.enable') }}</span>
             <el-switch
               v-model="isSystemAudioActive"
               @change="toggleSystemAudio"
             />
+            <el-button 
+              type="primary" 
+              size="small" 
+              class="refresh-button ml-2"
+              @click="refreshAudioDevices"
+              :title="$t('audioPanel.refreshDevices')"
+            >
+              <i class="bi bi-arrow-clockwise"></i>
+            </el-button>
           </div>
           
           <!-- 系统音频电平和音量控制 -->
@@ -129,27 +98,18 @@
             
             <!-- 电平检测提示 -->
             <div v-if="activeSystemAudio.level === 0" class="level-warning">
-              <el-alert
-                type="info"
-                :closable="false"
-                show-icon
-                :title="$t('audioPanel.noLevelDetected')"
-                size="small"
-              >
-                <template #default>
-                  <p>{{ $t('audioPanel.tryDifferentDevice') }}</p>
-                  <p class="error-hint">{{ $t('audioPanel.deviceError') }}</p>
-                  <div class="device-actions">
-                    <el-button 
-                      type="primary" 
-                      size="small" 
-                      @click="refreshAudioDevices"
-                    >
-                      {{ $t('audioPanel.refreshDevices') }}
-                    </el-button>
-                  </div>
-                </template>
-              </el-alert>
+              <div class="signal-alert">
+                <i class="el-icon-info signal-icon"><el-icon><info-filled /></el-icon></i>
+                <span class="signal-text">{{ $t('audioPanel.noLevelDetected') }}</span>
+                <el-button 
+                  type="primary" 
+                  size="small" 
+                  @click="refreshAudioDevices"
+                  class="signal-button"
+                >
+                  {{ $t('audioPanel.refreshDevices') }}
+                </el-button>
+              </div>
             </div>
             
             <div class="volume-control">
@@ -161,7 +121,9 @@
                   :min="0"
                   :max="100"
                   :disabled="isMuted"
-                  @change="setSystemAudioVolume"
+                  @input="setSystemAudioVolume"
+                  :class="{ 'volume-changed': systemAudioVolumeChanged }"
+                  class="volume-slider"
                 />
                 <i class="bi bi-volume-up"></i>
               </div>
@@ -225,7 +187,8 @@
               :min="0"
               :max="100"
               :disabled="isMuted"
-              @change="setVolume"
+              @input="setVolume"
+              class="volume-slider"
             />
             <i class="bi bi-volume-up"></i>
           </div>
@@ -249,6 +212,19 @@ import { useI18n } from 'vue-i18n';
 import { useAudioStore } from '../stores/audioStore';
 import { AudioSourceType } from '../types/audio';
 import { isMacOS, isWindows } from '../utils/platformUtils';
+import { InfoFilled } from '@element-plus/icons-vue';
+
+// 添加防抖函数
+function debounce(fn: Function, delay: number) {
+  let timer: number | null = null;
+  return function(this: any, ...args: any[]) {
+    if (timer) clearTimeout(timer);
+    timer = window.setTimeout(() => {
+      fn.apply(this, args);
+      timer = null;
+    }, delay);
+  };
+}
 
 const { t } = useI18n();
 const audioStore = useAudioStore();
@@ -262,9 +238,6 @@ const isMuted = ref(audioStore.isMuted);
 // 当前选中的麦克风ID
 const selectedMicrophone = ref('');
 
-// 当前选中的系统音频ID
-const selectedSystemAudio = ref('');
-
 // 系统音频是否激活
 const isSystemAudioActive = ref(false);
 
@@ -277,6 +250,10 @@ const systemAudioVolume = ref(100);
 // 平台检测
 const isMacOSPlatform = computed(() => isMacOS());
 const isWindowsPlatform = computed(() => isWindows());
+
+// 添加音量变化状态
+const microphoneVolumeChanged = ref(false);
+const systemAudioVolumeChanged = ref(false);
 
 /**
  * 获取麦克风设备列表
@@ -329,41 +306,18 @@ function handleMicrophoneChange(deviceId: string) {
 }
 
 /**
- * 处理系统音频选择变更
- * @param deviceId - 设备ID
- */
-function handleSystemAudioChange(deviceId: string) {
-  // 先停用所有系统音频设备
-  systemAudioDevices.value.forEach(device => {
-    if (device.isActive && device.id !== deviceId) {
-      audioStore.deactivateDevice(device.id);
-    }
-  });
-  
-  // 激活选中的系统音频设备
-  audioStore.activateDevice(deviceId);
-  
-  // 更新系统音频音量
-  const selectedDevice = audioStore.devices.find(device => device.id === deviceId);
-  if (selectedDevice) {
-    systemAudioVolume.value = selectedDevice.volume;
-  }
-}
-
-/**
  * 切换系统音频设备状态
  * @param active - 是否激活
  */
 function toggleSystemAudio(active: boolean) {
-  if (active && selectedSystemAudio.value) {
+  if (active && systemAudioDevices.value.length > 0) {
+    // 使用第一个系统音频设备
+    const deviceId = systemAudioDevices.value[0].id;
     // 激活系统音频
-    audioStore.activateDevice(selectedSystemAudio.value);
+    audioStore.activateDevice(deviceId);
     
     // 更新系统音频音量
-    const selectedDevice = audioStore.devices.find(device => device.id === selectedSystemAudio.value);
-    if (selectedDevice) {
-      systemAudioVolume.value = selectedDevice.volume;
-    }
+    systemAudioVolume.value = systemAudioDevices.value[0].volume;
   } else if (!active && activeSystemAudio.value) {
     // 停用系统音频
     audioStore.deactivateDevice(activeSystemAudio.value.id);
@@ -383,8 +337,20 @@ function setVolume(value: number) {
  * @param value - 音量值
  */
 function setMicrophoneVolume(value: number) {
+  // 立即更新UI状态
+  microphoneVolume.value = value;
+  
+  // 立即设置实际音量，不使用防抖
   if (activeMicrophone.value) {
-    audioStore.setDeviceVolume(activeMicrophone.value.id, value);
+    // 添加视觉反馈
+    audioStore.setDeviceVolume(activeMicrophone.value.id, value)
+      .then(() => {
+        // 音量设置成功的视觉反馈
+        microphoneVolumeChanged.value = true;
+        setTimeout(() => {
+          microphoneVolumeChanged.value = false;
+        }, 500); // 减少反馈时间
+      });
   }
 }
 
@@ -393,8 +359,20 @@ function setMicrophoneVolume(value: number) {
  * @param value - 音量值
  */
 function setSystemAudioVolume(value: number) {
+  // 立即更新UI状态
+  systemAudioVolume.value = value;
+  
+  // 立即设置实际音量，不使用防抖
   if (activeSystemAudio.value) {
-    audioStore.setDeviceVolume(activeSystemAudio.value.id, value);
+    // 添加视觉反馈
+    audioStore.setDeviceVolume(activeSystemAudio.value.id, value)
+      .then(() => {
+        // 音量设置成功的视觉反馈
+        systemAudioVolumeChanged.value = true;
+        setTimeout(() => {
+          systemAudioVolumeChanged.value = false;
+        }, 500); // 减少反馈时间
+      });
   }
 }
 
@@ -438,14 +416,13 @@ function updateSelectedDevices() {
   );
   
   if (activeSysAudio) {
-    selectedSystemAudio.value = activeSysAudio.id;
     systemAudioVolume.value = activeSysAudio.volume;
     isSystemAudioActive.value = true;
-  } else if (systemAudioDevices.value.length > 0) {
-    // 如果没有激活的系统音频，默认选择第一个但不激活
-    selectedSystemAudio.value = systemAudioDevices.value[0].id;
-    systemAudioVolume.value = systemAudioDevices.value[0].volume;
+  } else {
     isSystemAudioActive.value = false;
+    if (systemAudioDevices.value.length > 0) {
+      systemAudioVolume.value = systemAudioDevices.value[0].volume;
+    }
   }
 }
 
@@ -699,5 +676,95 @@ onUnmounted(() => {
 .hint-title {
   font-weight: bold;
   color: var(--el-text-color-primary);
+}
+
+.compact-alert {
+  display: flex;
+  align-items: center;
+}
+
+.compact-alert .el-alert__content {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  padding: 0;
+}
+
+.compact-alert .el-alert__title {
+  margin: 0;
+  font-size: 13px;
+}
+
+.compact-button {
+  margin: 0 0 0 10px !important;
+  padding: 5px 10px;
+  height: auto;
+  line-height: 1.5;
+}
+
+.signal-alert {
+  display: flex;
+  align-items: center;
+  background-color: var(--el-color-info-light-9);
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 12px;
+}
+
+.signal-icon {
+  color: var(--el-color-info);
+  margin-right: 6px;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+}
+
+.signal-text {
+  flex: 1;
+  color: var(--el-color-info-dark-2);
+}
+
+.signal-button {
+  margin: 0 0 0 8px !important;
+  padding: 2px 8px;
+  height: 24px;
+  font-size: 12px;
+  line-height: 1;
+}
+
+/* 添加音量变化的视觉反馈样式 */
+.volume-changed :deep(.el-slider__bar) {
+  background-color: #67c23a !important;
+  transition: background-color 0.5s ease;
+}
+
+.volume-changed :deep(.el-slider__button) {
+  border-color: #67c23a !important;
+  transition: border-color 0.5s ease;
+}
+
+/* 优化音量滑块样式，提供更好的视觉反馈 */
+.volume-slider {
+  width: 100%;
+  margin: 0;
+}
+
+.volume-slider :deep(.el-slider__button) {
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--el-color-primary);
+  background-color: #fff;
+  transition: transform 0.1s;
+}
+
+.volume-slider :deep(.el-slider__button):hover,
+.volume-slider :deep(.el-slider__button.hover) {
+  transform: scale(1.2);
+}
+
+.volume-slider :deep(.el-slider__bar) {
+  background-color: var(--el-color-primary);
+  transition: width 0.1s;
 }
 </style> 

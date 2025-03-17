@@ -189,10 +189,6 @@ export default {
     globalControls: '全局控制',
     masterVolume: '主音量',
     noLevelDetected: '未检测到音频信号',
-    tryDifferentDevice: '如果您确定有音频在播放，请尝试选择其他系统音频设备',
-    deviceError: '当前设备ID无法用于音频捕获，请选择一个具体的系统音频设备',
-    deviceSelectionHint: '系统音频设备选择提示',
-    preferSpecificDevice: '请优先选择具体的音频设备（如BlackHole、立体声混音等），而不是通用的"系统音频"选项',
     deviceTypes: {
       microphone: '麦克风',
       systemAudio: '系统音频',

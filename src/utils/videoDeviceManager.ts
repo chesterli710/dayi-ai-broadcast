@@ -25,18 +25,13 @@ class VideoDeviceManager {
   private readonly RETRY_DELAY = 300;
 
   /**
-   * 记录日志
+   * 记录错误日志
    * @param message 日志消息
    * @param data 附加数据
-   * @param isError 是否为错误日志
    */
-  private log(message: string, data?: any, isError = false): void {
+  private log(message: string, data?: any, isError = true): void {
     const prefix = `[VideoDeviceManager]`;
-    if (isError) {
-      console.error(`${prefix} ${message}`, data || '');
-    } else {
-      console.log(`${prefix} ${message}`, data || '');
-    }
+    console.error(`${prefix} ${message}`, data || '');
   }
   
   /**
@@ -45,7 +40,6 @@ class VideoDeviceManager {
    */
   async initialize(): Promise<void> {
     if (this.initialized) return;
-    this.log('初始化视频设备管理器');
     this.initialized = true;
   }
   
@@ -133,35 +127,29 @@ class VideoDeviceManager {
    */
   async getWindowDevices(): Promise<VideoDevice[]> {
     try {
-      // 检查Electron API是否可用
       const electronAPI = this.getElectronAPI();
       if (!electronAPI || !electronAPI.getWindows) {
-        console.warn('Electron API不可用，无法获取窗口列表');
+        // 在非Electron环境或API不可用时返回空数组
         return [];
       }
-
-      // 通过Electron API获取窗口列表
-      const windows = await electronAPI.getWindows();
       
-      // 转换为VideoDevice格式
-      const devices = windows.map((win: WindowInfo) => {
-        // 检查缩略图是否存在且有效
-        const hasThumbnail = win.thumbnail && typeof win.thumbnail === 'string' && win.thumbnail.length > 22;
-        
+      // 通过Electron API获取窗口列表
+      const sources = await electronAPI.getWindows();
+      
+      // 将窗口信息转换为视频设备格式
+      const windowDevices: VideoDevice[] = sources.map((source: WindowInfo) => {
         return {
-          id: win.id,
-          name: win.name,
+          id: source.id,
+          name: source.name,
           type: VideoSourceType.WINDOW,
-          isActive: false,
-          thumbnail: hasThumbnail ? win.thumbnail : undefined,
-          sourceId: win.sourceId,
-          appIcon: win.appIcon
+          thumbnail: source.thumbnail,
+          isActive: false
         };
       });
       
-      return devices;
+      return windowDevices;
     } catch (error) {
-      console.error('获取窗口列表失败:', error);
+      console.error('获取窗口设备列表失败:', error);
       return [];
     }
   }
@@ -172,27 +160,28 @@ class VideoDeviceManager {
    */
   async getDisplayDevices(): Promise<VideoDevice[]> {
     try {
-      // 检查Electron API是否可用
       const electronAPI = this.getElectronAPI();
       if (!electronAPI || !electronAPI.getDisplays) {
-        console.warn('[videoDeviceManager.ts 视频设备] Electron API不可用，无法获取显示器列表');
         return [];
       }
-
-      // 通过Electron API获取显示器列表
-      const displays = await electronAPI.getDisplays();
       
-      // 转换为VideoDevice格式
-      return displays.map((display: DisplayInfo) => ({
-        id: display.id,
-        name: display.name || (display.isPrimary ? '主显示器' : `显示器 ${display.id}`),
-        type: VideoSourceType.DISPLAY,
-        isActive: false,
-        thumbnail: display.thumbnail,
-        sourceId: display.sourceId
-      }));
+      // 通过Electron API获取显示器列表
+      const sources = await electronAPI.getDisplays();
+      
+      // 将显示器信息转换为视频设备格式
+      const displayDevices: VideoDevice[] = sources.map((source: DisplayInfo) => {
+        return {
+          id: source.id,
+          name: source.name,
+          type: VideoSourceType.DISPLAY,
+          thumbnail: source.thumbnail,
+          isActive: false
+        };
+      });
+      
+      return displayDevices;
     } catch (error) {
-      console.error('[videoDeviceManager.ts 视频设备] 获取显示器列表失败:', error);
+      console.error('获取显示器设备列表失败:', error);
       return [];
     }
   }
@@ -420,13 +409,10 @@ class VideoDeviceManager {
    * 清理资源
    */
   cleanup(): void {
-    // 停止所有流
     this.stopAllStreams();
-    
-    // 清空映射
-    this.deviceTypeMap.clear();
+    this.initialized = false;
   }
 }
 
-// 导出单例
+// 导出单例实例
 export default new VideoDeviceManager(); 

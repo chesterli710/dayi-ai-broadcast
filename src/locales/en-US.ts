@@ -189,10 +189,6 @@ export default {
     globalControls: 'Global Controls',
     masterVolume: 'Master Volume',
     noLevelDetected: 'No audio signal detected',
-    tryDifferentDevice: 'If you are sure audio is playing, try selecting a different system audio device',
-    deviceError: 'Current device ID cannot be used for audio capture, please select a specific system audio device',
-    deviceSelectionHint: 'System Audio Device Selection Tip',
-    preferSpecificDevice: 'Please prioritize selecting specific audio devices (like BlackHole, Stereo Mix, etc.) rather than the generic "System Audio" option',
     deviceTypes: {
       microphone: 'Microphone',
       systemAudio: 'System Audio',

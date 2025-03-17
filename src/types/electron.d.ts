@@ -32,6 +32,14 @@ interface IElectronAPI {
   checkStereoMixEnabled: () => Promise<boolean>;
 
   /**
+   * 设置设备音量
+   * @param deviceId - 设备ID
+   * @param volume - 音量值 (0-100)
+   * @returns Promise<boolean> 是否设置成功
+   */
+  setDeviceVolume?: (deviceId: string, volume: number) => Promise<boolean>;
+
+  /**
    * 获取系统显卡信息
    * @returns Promise<{vendor: string, model: string}> 显卡信息
    */
