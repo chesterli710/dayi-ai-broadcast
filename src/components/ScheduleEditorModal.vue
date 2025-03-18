@@ -498,7 +498,7 @@
         >
           <div class="template-thumbnail">
             <img 
-              :src="template.thumbnail || '/placeholder-thumbnail.png'" 
+              :src="getTemplateThumbnail(template)" 
               :alt="getTemplateDisplayName(template)" 
               class="thumbnail-img"
               @error="handleThumbnailError"
@@ -558,6 +558,7 @@ import type { FormInstance, FormRules } from 'element-plus';
 import { ElMessage } from 'element-plus';
 import draggable from 'vuedraggable';
 import { cloneDeep } from 'lodash-es';
+import { getLayoutThumbnail as getImagePreloaderThumbnail } from '../utils/imagePreloader';
 
 // Props
 const props = defineProps<{
@@ -1397,44 +1398,6 @@ function updateEndTime(value: string | null) {
   }
 }
 
-/**
- * 获取布局缩略图URL
- * @param layout 布局对象
- * @returns 缩略图URL
- */
-const getLayoutThumbnail = (layout: Layout): string => {
-  const template = planStore.layoutTemplates.find(t => t.template === layout.template)
-  return template?.thumbnail || '/placeholder-thumbnail.png'
-}
-
-/**
- * 获取布局模板名称
- * @param templateId 模板ID
- * @returns 模板名称
- */
-const getLayoutTemplateName = (templateId: string): string => {
-  const template = planStore.layoutTemplates.find(t => t.template === templateId)
-  if (!template) return templateId
-  
-  const { locale } = useI18n()
-  const currentLocale = locale.value
-  
-  if (currentLocale === 'zh-CN') {
-    return template.name?.['zh-CN'] || template.name?.['en-US'] || templateId
-  } else {
-    return template.name?.['en-US'] || template.name?.['zh-CN'] || templateId
-  }
-}
-
-/**
- * 处理缩略图加载错误
- * @param event 错误事件
- */
-const handleThumbnailError = (event: Event) => {
-  const target = event.target as HTMLImageElement
-  target.src = '/placeholder-thumbnail.png'
-}
-
 // 布局描述编辑
 const editingLayoutIndex = ref<number>(-1);
 const editingLayoutDescription = ref<string>('');
@@ -1815,6 +1778,101 @@ function addLectureGuest(): void {
 function removeLectureGuest(index: number): void {
   scheduleForm.lectureInfo.guests.splice(index, 1);
 }
+
+// 布局缩略图缓存
+const layoutThumbnailCache = ref<Map<string, string>>(new Map());
+
+/**
+ * 获取布局缩略图
+ * @param layout 布局对象
+ * @returns 布局缩略图URL
+ */
+const getLayoutThumbnail = (layout: Layout): string => {
+  // 如果缓存中已有此缩略图，直接返回
+  if (layoutThumbnailCache.value.has(layout.template)) {
+    return layoutThumbnailCache.value.get(layout.template)!;
+  }
+  
+  // 查找对应的布局模板
+  const template = planStore.layoutTemplates.find(t => t.template === layout.template);
+  
+  // 如果找不到模板，返回占位图
+  if (!template) {
+    console.warn(`[ScheduleEditorModal.vue 日程编辑器] 找不到布局模板: ${layout.template}`);
+    return '/placeholder-thumbnail.png';
+  }
+  
+  // 使用默认缩略图，并异步加载
+  const defaultThumbnail = template.thumbnail || '/placeholder-thumbnail.png';
+  
+  // 异步加载缩略图
+  getImagePreloaderThumbnail(layout.template, template)
+    .then((thumbnailUrl) => {
+      // 加载完成后更新缓存
+      layoutThumbnailCache.value.set(layout.template, thumbnailUrl);
+    })
+    .catch((error) => {
+      console.error(`[ScheduleEditorModal.vue 日程编辑器] 获取布局 ${layout.template} 缩略图失败:`, error);
+    });
+  
+  return defaultThumbnail;
+};
+
+/**
+ * 获取布局模板缩略图
+ * @param template 布局模板
+ * @returns 缩略图URL
+ */
+function getTemplateThumbnail(template: any): string {
+  // 如果缓存中已有此缩略图，直接返回
+  if (layoutThumbnailCache.value.has(template.template)) {
+    return layoutThumbnailCache.value.get(template.template)!;
+  }
+  
+  // 使用默认缩略图，并异步加载
+  const defaultThumbnail = template.thumbnail || '/placeholder-thumbnail.png';
+  
+  // 异步加载缩略图
+  getImagePreloaderThumbnail(template.template, template)
+    .then((thumbnailUrl) => {
+      // 加载完成后更新缓存
+      layoutThumbnailCache.value.set(template.template, thumbnailUrl);
+    })
+    .catch((error) => {
+      console.error(`[ScheduleEditorModal.vue 日程编辑器] 获取布局 ${template.template} 缩略图失败:`, error);
+    });
+  
+  return defaultThumbnail;
+}
+
+/**
+ * 处理缩略图加载错误
+ * @param event 错误事件
+ */
+const handleThumbnailError = (event: Event): void => {
+  const target = event.target as HTMLImageElement;
+  target.src = '/placeholder-thumbnail.png';
+};
+
+/**
+ * 获取布局模板名称
+ * @param templateId 模板ID
+ * @returns 模板名称
+ */
+const getLayoutTemplateName = (templateId: string): string => {
+  const template = planStore.layoutTemplates.find(t => t.template === templateId);
+  if (!template) return templateId;
+  
+  const { locale } = useI18n();
+  const currentLocale = locale.value;
+  
+  if (currentLocale === 'zh-CN') {
+    return template.name?.['zh-CN'] || template.name?.['en-US'] || templateId;
+  } else {
+    return template.name?.['en-US'] || template.name?.['zh-CN'] || templateId;
+  }
+};
+
 </script>
 
 <style scoped>

@@ -4,7 +4,7 @@
  */
 import request from './request'
 import type { LayoutTemplate } from '../types/broadcast'
-import layoutThumbnailGenerator from '../utils/layoutThumbnailGenerator'
+import { preloadLayoutThumbnails, getLayoutThumbnail, isUrlAccessible } from '../utils/imagePreloader'
 
 /**
  * 布局模板最后更新时间响应
@@ -136,22 +136,9 @@ class LayoutApi {
         if (localLastUpdated >= serverLastUpdated) {
           const templates = JSON.parse(storedData)
           
-          // 为每个模板生成本地缩略图
-          for (const template of templates) {
-            try {
-              // 检查是否已有缩略图，如果是远程URL则不替换
-              if (!template.thumbnail || template.thumbnail.startsWith('data:') || template.thumbnail === '/assets/placeholder-layout.svg') {
-                // 生成并替换缩略图URL
-                const thumbnailUrl = await layoutThumbnailGenerator.getThumbnail(template)
-                template.thumbnail = thumbnailUrl
-                console.log(`[layout.ts API] 布局模板 ${template.template} 缩略图已生成: ${thumbnailUrl.substring(0, 30)}...`)
-              } else {
-                console.log(`[layout.ts API] 布局模板 ${template.template} 使用远程缩略图: ${template.thumbnail}`)
-              }
-            } catch (error) {
-              console.error(`[layout.ts API] 生成布局模板 ${template.template} 缩略图失败:`, error)
-            }
-          }
+          // 使用imagePreloader处理所有模板的缩略图 - 检查远程缩略图可访问性
+          console.log(`[layout.ts API] 检查并预加载布局模板缩略图，共 ${templates.length} 个模板`)
+          await preloadLayoutThumbnails(templates)
           
           return templates
         }
@@ -172,21 +159,11 @@ class LayoutApi {
           template.name['zh-CN'] = template.name['zh-CN'] || template.template
           template.name['en-US'] = template.name['en-US'] || template.template
         }
-        
-        try {
-          // 检查是否已有缩略图，如果是远程URL则保留
-          if (!template.thumbnail || template.thumbnail.startsWith('data:') || template.thumbnail === '/assets/placeholder-layout.svg') {
-            // 生成并替换缩略图URL - 强制更新缩略图
-            const thumbnailUrl = await layoutThumbnailGenerator.getThumbnail(template, true)
-            template.thumbnail = thumbnailUrl
-            console.log(`[layout.ts API] 布局模板 ${template.template} 缩略图已更新: ${thumbnailUrl.substring(0, 30)}...`)
-          } else {
-            console.log(`[layout.ts API] 布局模板 ${template.template} 保留远程缩略图: ${template.thumbnail}`)
-          }
-        } catch (error) {
-          console.error(`[layout.ts API] 更新布局模板 ${template.template} 缩略图失败:`, error)
-        }
       }
+      
+      // 使用imagePreloader处理所有模板的缩略图
+      console.log(`[layout.ts API] 预加载新获取的布局模板缩略图，共 ${templates.length} 个模板`)
+      await preloadLayoutThumbnails(templates)
       
       // 保存到本地存储
       localStorage.setItem('layoutTemplates', JSON.stringify(templates))
@@ -194,35 +171,41 @@ class LayoutApi {
       
       return templates
     } catch (error) {
-      console.error('加载布局模板失败')
+      console.error('加载布局模板失败', error)
       
       // 如果有本地数据，返回本地数据作为备用
       const storedData = localStorage.getItem('layoutTemplates')
       if (storedData) {
         const templates = JSON.parse(storedData)
         
-        // 为每个模板生成本地缩略图 - 强制更新缩略图
-        for (const template of templates) {
-          try {
-            // 检查是否已有缩略图，如果是远程URL则保留
-            if (!template.thumbnail || template.thumbnail.startsWith('data:') || template.thumbnail === '/assets/placeholder-layout.svg') {
-              // 生成并替换缩略图URL
-              const thumbnailUrl = await layoutThumbnailGenerator.getThumbnail(template, true)
-              template.thumbnail = thumbnailUrl
-              console.log(`[layout.ts API] 布局模板 ${template.template} 缩略图已重新生成: ${thumbnailUrl.substring(0, 30)}...`)
-            } else {
-              console.log(`[layout.ts API] 布局模板 ${template.template} 保留远程缩略图: ${template.thumbnail}`)
-            }
-          } catch (error) {
-            console.error(`[layout.ts API] 重新生成布局模板 ${template.template} 缩略图失败:`, error)
-          }
-        }
+        // 使用imagePreloader处理所有模板的缩略图
+        console.log(`[layout.ts API] 预加载本地缓存的布局模板缩略图（备用方案），共 ${templates.length} 个模板`)
+        await preloadLayoutThumbnails(templates)
         
         return templates
       }
       
       throw error
     }
+  }
+  
+  /**
+   * 获取单个布局模板的缩略图
+   * @param templateId 模板ID
+   * @param template 可选，布局模板对象
+   * @returns Promise<string> 缩略图URL
+   */
+  async getLayoutThumbnail(templateId: string, template?: LayoutTemplate): Promise<string> {
+    return getLayoutThumbnail(templateId, template)
+  }
+  
+  /**
+   * 检查远程缩略图URL是否可访问
+   * @param url 缩略图URL
+   * @returns Promise<boolean> 是否可访问
+   */
+  async isThumbnailAccessible(url: string): Promise<boolean> {
+    return isUrlAccessible(url)
   }
 }
 

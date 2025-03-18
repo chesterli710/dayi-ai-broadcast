@@ -6,7 +6,7 @@
     <div class="main-view-container">
       <!-- 预览和直播画布区域 -->
       <div class="canvas-area">
-        <div class="canvas-row">
+        <div class="canvas-row" ref="canvasRowRef">
           <PreviewCanvas class="preview-canvas" />
           <LiveCanvas class="live-canvas" />
         </div>
@@ -35,7 +35,7 @@
  * 主界面视图
  * 包含标题栏、预览和直播画布、控制面板等组件
  */
-import { onMounted, ref } from 'vue';
+import { onMounted, ref, onBeforeUnmount, nextTick } from 'vue';
 import { usePlanStore } from '../stores/planStore';
 import { useRouter } from 'vue-router';
 import TitleBar from '../components/TitleBar.vue';
@@ -51,6 +51,9 @@ import { ElMessage } from 'element-plus';
 
 const planStore = usePlanStore();
 const router = useRouter();
+
+// 引用canvas行元素
+const canvasRowRef = ref<HTMLElement | null>(null);
 
 // 图片预加载状态
 const isPreloading = ref(false);
@@ -87,6 +90,47 @@ async function preloadAllImages() {
   }
 }
 
+/**
+ * 调整画布行高度，使画布区域始终保持16:9的比例
+ */
+function adjustCanvasHeight() {
+  if (!canvasRowRef.value) return;
+  
+  const canvasRow = canvasRowRef.value;
+  const container = canvasRow.parentElement;
+  if (!container) return;
+  
+  // 考虑到画布行中有两个画布，每个都有间隔，计算单个画布的宽度
+  const containerWidth = container.clientWidth;
+  const gapWidth = 10; // 两个画布之间的间隔
+  const singleCanvasWidth = (containerWidth - gapWidth) / 2;
+  
+  // 标题栏高度
+  const titleBarHeight = 45;
+  
+  // 根据16:9比例计算画布区域高度
+  const canvasAreaHeight = Math.round((singleCanvasWidth / 16) * 9);
+  
+  // 最终行高度 = 画布区域高度 + 标题栏高度
+  const rowHeight = canvasAreaHeight + titleBarHeight;
+  
+  console.log(`[MainView.vue 主界面] 调整画布行高度: 容器宽度=${containerWidth}px, 单画布宽度=${singleCanvasWidth}px, 画布区域高度=${canvasAreaHeight}px, 行高=${rowHeight}px`);
+  
+  // 设置画布行高度
+  canvasRow.style.height = `${rowHeight}px`;
+  
+  // 设置控制面板高度 = 容器高度 - 画布行高度 - 间隔
+  const controlPanel = document.querySelector('.control-panel') as HTMLElement;
+  if (controlPanel) {
+    const totalHeight = container.clientHeight;
+    const controlPanelHeight = totalHeight - rowHeight - gapWidth;
+    controlPanel.style.height = `${Math.max(controlPanelHeight, 200)}px`; // 确保最小高度为200px
+  }
+}
+
+// 创建一个调整大小观察器
+let resizeObserver: ResizeObserver | null = null;
+
 // 组件挂载时加载布局模板并预加载图片
 onMounted(async () => {
   // 如果没有布局模板或需要更新，则从API获取
@@ -111,6 +155,39 @@ onMounted(async () => {
   if (planStore.currentPlan) {
     preloadAllImages();
   }
+  
+  // 等待DOM更新后再进行初始调整
+  nextTick(() => {
+    adjustCanvasHeight();
+    
+    // 创建ResizeObserver监听容器大小变化
+    if (window.ResizeObserver && canvasRowRef.value) {
+      resizeObserver = new ResizeObserver(() => {
+        adjustCanvasHeight();
+      });
+      
+      // 监听画布行的父元素
+      const parent = canvasRowRef.value.parentElement;
+      if (parent) {
+        resizeObserver.observe(parent);
+      }
+      
+      // 监听窗口大小变化
+      window.addEventListener('resize', adjustCanvasHeight);
+    }
+  });
+});
+
+// 组件卸载前清理资源
+onBeforeUnmount(() => {
+  // 清理ResizeObserver
+  if (resizeObserver) {
+    resizeObserver.disconnect();
+    resizeObserver = null;
+  }
+  
+  // 移除窗口大小变化监听
+  window.removeEventListener('resize', adjustCanvasHeight);
 });
 </script>
 
@@ -158,8 +235,8 @@ onMounted(async () => {
 .canvas-row {
   display: flex;
   gap: 10px;
-  min-height: 394px; /* 设置最小高度为394px */
-  height: 45%; /* 设置为容器高度的45% */
+  /* 高度将通过JavaScript动态计算设置 */
+  min-height: 250px; /* 设置一个最小高度，防止布局问题 */
 }
 
 .preview-canvas,
@@ -174,7 +251,8 @@ onMounted(async () => {
   display: flex;
   gap: 10px;
   overflow: auto;
-  height: calc(55% - 10px); /* 设置为容器高度的55%减去间距 */
+  /* 高度将通过JavaScript动态计算设置 */
+  min-height: 200px; /* 设置一个最小高度，防止布局问题 */
 }
 
 .live-control-panel {
@@ -183,14 +261,14 @@ onMounted(async () => {
 }
 
 .schedule-manager {
-  flex: 4; /* 日程管理组件比例为4 */
+  flex: 3.5; /* 日程管理组件比例为3.5 */
   min-width: 0; /* 防止flex子项溢出 */
   border: 1px solid var(--el-border-color);
   border-radius: var(--el-border-radius-base);
 }
 
 .audio-panel {
-  flex: 3; /* 音频面板比例为3 */
+  flex: 3.5; /* 音频面板比例为3.5 */
   min-width: 0; /* 防止flex子项溢出 */
 }
 
@@ -202,19 +280,20 @@ onMounted(async () => {
 @media (max-width: 1200px) {
   .canvas-row {
     flex-direction: column;
-    height: auto;
-    min-height: 788px; /* 两个画布的最小高度总和 */
+    height: auto !important; /* 覆盖JavaScript设置的高度 */
   }
   
   .preview-canvas,
   .live-canvas {
-    height: 450px; /* 固定高度 */
-    min-height: 394px;
+    height: auto; /* 高度将通过JavaScript动态计算设置 */
+    aspect-ratio: 16/9; /* 使用CSS的aspect-ratio属性保持16:9比例 */
+    min-height: 200px;
+    margin-bottom: 10px;
   }
   
   .control-panel {
     flex-direction: column;
-    height: auto;
+    height: auto !important; /* 覆盖JavaScript设置的高度 */
     min-height: 600px; /* 控制面板最小高度 */
   }
   

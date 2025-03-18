@@ -106,12 +106,16 @@ import { ScheduleType, type Schedule, type Layout } from '../types/broadcast';
 import { useI18n } from 'vue-i18n';
 import LayoutEditorModal from './LayoutEditorModal.vue';
 import ScheduleEditorModal from './ScheduleEditorModal.vue';
+import { getLayoutThumbnail as getImagePreloaderThumbnail } from '../utils/imagePreloader';
 
 const planStore = usePlanStore();
 const { locale, t } = useI18n();
 
 // 获取当前分支
 const currentBranch = computed(() => planStore.currentBranch);
+
+// 引入一个reactive对象来存储已加载的缩略图缓存
+const thumbnailCache = ref<Map<string, string>>(new Map());
 
 // 布局编辑器状态
 const showLayoutEditor = ref(false);
@@ -209,28 +213,35 @@ function getScheduleTitle(schedule: Schedule): string {
  * @returns 布局缩略图URL
  */
 function getLayoutThumbnail(layout: Layout): string {
+  // 如果缓存中已有此缩略图，直接返回
+  if (thumbnailCache.value.has(layout.template)) {
+    return thumbnailCache.value.get(layout.template)!;
+  }
+  
   // 查找对应的布局模板
   const template = planStore.layoutTemplates.find(t => t.template === layout.template);
   
-  // 如果找到模板并且有缩略图，则返回缩略图URL
-  if (template && template.thumbnail) {
-    // 判断缩略图类型
-    const isDataUrl = template.thumbnail.startsWith('data:');
-    const isRemoteUrl = template.thumbnail.startsWith('http');
-    
-    // 记录缩略图URL，便于调试
-    console.log(
-      `[ScheduleManager.vue 日程管理] 布局缩略图: ${template.template} -> ${
-        template.thumbnail.substring(0, 30)
-      }... (${isDataUrl ? '本地生成' : isRemoteUrl ? '远程URL' : '其他来源'})`
-    );
-    
-    return template.thumbnail;
+  // 如果找不到模板，返回占位图
+  if (!template) {
+    console.warn(`[ScheduleManager.vue 日程管理] 找不到布局模板: ${layout.template}`);
+    return '/assets/placeholder-layout.svg';
   }
   
-  // 否则返回默认缩略图
-  console.warn(`[ScheduleManager.vue 日程管理] 布局 ${layout.template} 没有缩略图，使用占位图`);
-  return '/assets/placeholder-layout.svg';
+  // 使用默认缩略图，并异步加载
+  const defaultThumbnail = template.thumbnail || '/assets/placeholder-layout.svg';
+  
+  // 异步加载缩略图
+  getImagePreloaderThumbnail(layout.template, template)
+    .then((thumbnailUrl) => {
+      // 加载完成后更新缓存
+      thumbnailCache.value.set(layout.template, thumbnailUrl);
+      console.log(`[ScheduleManager.vue 日程管理] 布局缩略图加载成功: ${layout.template}`);
+    })
+    .catch((error) => {
+      console.error(`[ScheduleManager.vue 日程管理] 获取布局 ${layout.template} 缩略图失败:`, error);
+    });
+  
+  return defaultThumbnail;
 }
 
 /**
