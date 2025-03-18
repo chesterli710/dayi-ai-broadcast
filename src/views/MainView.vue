@@ -114,7 +114,7 @@ function adjustCanvasHeight() {
   // 最终行高度 = 画布区域高度 + 标题栏高度
   const rowHeight = canvasAreaHeight + titleBarHeight;
   
-  console.log(`[MainView.vue 主界面] 调整画布行高度: 容器宽度=${containerWidth}px, 单画布宽度=${singleCanvasWidth}px, 画布区域高度=${canvasAreaHeight}px, 行高=${rowHeight}px`);
+  // console.log(`[MainView.vue 主界面] 调整画布行高度: 容器宽度=${containerWidth}px, 单画布宽度=${singleCanvasWidth}px, 画布区域高度=${canvasAreaHeight}px, 行高=${rowHeight}px`);
   
   // 设置画布行高度
   canvasRow.style.height = `${rowHeight}px`;

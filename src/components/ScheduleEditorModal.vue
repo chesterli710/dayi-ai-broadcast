@@ -1805,14 +1805,15 @@ const getLayoutThumbnail = (layout: Layout): string => {
   // 使用默认缩略图，并异步加载
   const defaultThumbnail = template.thumbnail || '/placeholder-thumbnail.png';
   
-  // 异步加载缩略图
-  getImagePreloaderThumbnail(layout.template, template)
+  // 异步加载缩略图，启用错误抑制
+  getImagePreloaderThumbnail(layout.template, template, true)
     .then((thumbnailUrl) => {
       // 加载完成后更新缓存
       layoutThumbnailCache.value.set(layout.template, thumbnailUrl);
     })
-    .catch((error) => {
-      console.error(`[ScheduleEditorModal.vue 日程编辑器] 获取布局 ${layout.template} 缩略图失败:`, error);
+    .catch(() => {
+      // 静默失败，不打印错误日志
+      layoutThumbnailCache.value.set(layout.template, '/placeholder-thumbnail.png');
     });
   
   return defaultThumbnail;
@@ -1832,14 +1833,15 @@ function getTemplateThumbnail(template: any): string {
   // 使用默认缩略图，并异步加载
   const defaultThumbnail = template.thumbnail || '/placeholder-thumbnail.png';
   
-  // 异步加载缩略图
-  getImagePreloaderThumbnail(template.template, template)
+  // 异步加载缩略图，启用错误抑制
+  getImagePreloaderThumbnail(template.template, template, true)
     .then((thumbnailUrl) => {
       // 加载完成后更新缓存
       layoutThumbnailCache.value.set(template.template, thumbnailUrl);
     })
-    .catch((error) => {
-      console.error(`[ScheduleEditorModal.vue 日程编辑器] 获取布局 ${template.template} 缩略图失败:`, error);
+    .catch(() => {
+      // 静默失败，不打印错误日志
+      layoutThumbnailCache.value.set(template.template, '/placeholder-thumbnail.png');
     });
   
   return defaultThumbnail;

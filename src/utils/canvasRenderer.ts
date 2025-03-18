@@ -7,6 +7,7 @@ import { LayoutElementType, ScheduleType } from '../types/broadcast';
 import { useVideoStore } from '../stores/videoStore';
 import { usePlanStore } from '../stores/planStore';
 import { getCachedImage, preloadImage, isDataUrl } from './imagePreloader';
+import { TextLayerRenderer } from './textLayerRenderer';
 
 // 扩展VideoDevice接口，添加videoElement属性
 declare module '../types/video' {
@@ -67,6 +68,9 @@ export class CanvasRenderer {
   // 帧计数
   private frameCount: number = 0;
   
+  // 文字图层渲染器
+  private textLayerRenderer: TextLayerRenderer;
+  
   /**
    * 构造函数
    * @param canvas 画布元素
@@ -82,6 +86,9 @@ export class CanvasRenderer {
       height: canvas.height,
       type: this.rendererType
     });
+    
+    // 初始化文字图层渲染器
+    this.textLayerRenderer = new TextLayerRenderer(this.rendererType, this.width, this.height);
     
     this.initCanvas();
     this.initOffscreenCanvas();
@@ -689,6 +696,33 @@ export class CanvasRenderer {
     const ctx = targetCtx || this.offscreenCtx || this.ctx;
     if (!ctx) return;
     
+    // 使用文字图层渲染器渲染文字
+    this.textLayerRenderer.renderTextLayer(this.currentLayout)
+      .then(imageBitmap => {
+        if (imageBitmap) {
+          // 将渲染后的文字图层绘制到画布上
+          ctx.drawImage(imageBitmap, 0, 0, this.width, this.height);
+        }
+        this.textLayerNeedsRedraw = false;
+      })
+      .catch(error => {
+        console.error(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 渲染文字图层时出错:`, error);
+        
+        // 如果使用独立的文字图层渲染器失败，回退到原始文字绘制方法
+        this.renderTextLayerFallback(ctx);
+      });
+  }
+  
+  /**
+   * 渲染文字图层 - 回退方案
+   * 当使用文字图层渲染器失败时使用此方法
+   * @param ctx 渲染上下文
+   */
+  private renderTextLayerFallback(ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D): void {
+    if (!this.currentLayout || !this.currentLayout.elements) {
+      return;
+    }
+    
     // 获取所有文本元素并按zIndex排序
     const textElements = this.currentLayout.elements
       .filter(element => 
@@ -879,6 +913,9 @@ export class CanvasRenderer {
         this.initOffscreenCanvas();
       }
       
+      // 调整文字图层渲染器尺寸
+      this.textLayerRenderer.resize(width, height);
+      
       // 标记所有图层需要重绘
       this.backgroundNeedsRedraw = true;
       this.foregroundNeedsRedraw = true;
@@ -913,6 +950,9 @@ export class CanvasRenderer {
     // 清除文字图层缓存
     this.textLayerCache.clear();
     
+    // 销毁文字图层渲染器
+    this.textLayerRenderer.destroy();
+    
     // 移除引用
     this.currentLayout = null;
   }
@@ -928,6 +968,9 @@ export class CanvasRenderer {
     this.backgroundNeedsRedraw = true;
     this.foregroundNeedsRedraw = true;
     this.textLayerNeedsRedraw = true;
+    
+    // 通知文字图层渲染器布局已变更
+    this.textLayerRenderer.onLayoutOrScheduleChanged();
     
     // 如果当前有布局，重新设置布局触发渲染
     if (this.currentLayout) {
@@ -1025,6 +1068,9 @@ export class CanvasRenderer {
       this.backgroundNeedsRedraw = true;
       this.foregroundNeedsRedraw = true;
       this.textLayerNeedsRedraw = true;
+      
+      // 通知文字图层渲染器布局元素已变更
+      this.textLayerRenderer.onLayoutOrScheduleChanged();
       
       console.log(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 布局元素已更新，标记所有图层需要重绘`);
     } else {

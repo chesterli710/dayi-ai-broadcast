@@ -209,36 +209,35 @@ function getScheduleTitle(schedule: Schedule): string {
 
 /**
  * 获取布局缩略图
- * @param layout 布局对象
+ * @param layout 布局配置
  * @returns 布局缩略图URL
  */
 function getLayoutThumbnail(layout: Layout): string {
-  // 如果缓存中已有此缩略图，直接返回
+  // 如果已经有缓存，直接返回
   if (thumbnailCache.value.has(layout.template)) {
     return thumbnailCache.value.get(layout.template)!;
   }
   
-  // 查找对应的布局模板
+  // 查找模板
   const template = planStore.layoutTemplates.find(t => t.template === layout.template);
   
-  // 如果找不到模板，返回占位图
   if (!template) {
-    console.warn(`[ScheduleManager.vue 日程管理] 找不到布局模板: ${layout.template}`);
+    console.warn(`[ScheduleManager.vue 日程管理] 未找到布局模板: ${layout.template}`);
     return '/assets/placeholder-layout.svg';
   }
   
   // 使用默认缩略图，并异步加载
   const defaultThumbnail = template.thumbnail || '/assets/placeholder-layout.svg';
   
-  // 异步加载缩略图
-  getImagePreloaderThumbnail(layout.template, template)
+  // 异步加载缩略图，启用错误抑制
+  getImagePreloaderThumbnail(layout.template, template, true)
     .then((thumbnailUrl) => {
       // 加载完成后更新缓存
       thumbnailCache.value.set(layout.template, thumbnailUrl);
-      console.log(`[ScheduleManager.vue 日程管理] 布局缩略图加载成功: ${layout.template}`);
     })
-    .catch((error) => {
-      console.error(`[ScheduleManager.vue 日程管理] 获取布局 ${layout.template} 缩略图失败:`, error);
+    .catch(() => {
+      // 静默失败，不打印错误日志
+      thumbnailCache.value.set(layout.template, '/assets/placeholder-layout.svg');
     });
   
   return defaultThumbnail;
