@@ -25,6 +25,8 @@ export interface Plan {
   background?: string  // 计划内所有布局通用的背景图片url，除非layout单独指定该字段
   labelBackground?: string // 计划内所有布局通用的标签背景图片url，除非layout单独指定该字段
   textColor?: string    // 计划内所有布局通用的文字颜色，除非laytou单独指定该字段
+  subjectLabelDisplayName?: string // "主题"（讲课的）主题在界面上的显示文字，默认为"主题"，有可能是"讲题"等
+  speakerLabelDisplayName?: string // "讲者"在界面上的显示文字，默认为"讲者"
   surgeonLabelDisplayName?: string // "术者"在界面上的显示文字，有可能是 "手术团队"等
   surgeryLabelDisplayName?: string // "术式"在界面上的显示文字
   guestLabelDisplayName?: string // "互动嘉宾"在界面上的显示文字
@@ -114,6 +116,8 @@ export interface Layout {
   foreground?: string             // 布局前景图url
   labelBackground?: string        // 布局的标签背景图片url
   textColor?: string              // 布局内文字颜色
+  subjectLabelDisplayName?: string // "主题"（讲课的）主题在界面上的显示文字，默认为"主题"，有可能是"讲题"等
+  speakerLabelDisplayName?: string // "讲者"在界面上的显示文字，默认为"讲者"
   surgeonLabelDisplayName?: string // "术者"在界面上的显示文字，有可能是 "手术团队"等
   surgeryLabelDisplayName?: string // "术式"在界面上的显示文字
   guestLabelDisplayName?: string // "互动嘉宾"在界面上的显示文字

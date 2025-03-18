@@ -28,6 +28,8 @@ export function setupPlanMock() {
           textColor: '#ffffff',
           surgeonLabelDisplayName: '手术团队',
           surgeryLabelDisplayName: '手术名称',
+          speakerLabelDisplayName: '主讲人',
+          subjectLabelDisplayName: '讲座主题',
           guestLabelDisplayName: '特邀嘉宾',
           branches: [
             {
@@ -119,6 +121,8 @@ export function setupPlanMock() {
           cover: 'https://picsum.photos/id/239/400/225',
           surgeonLabelDisplayName: '术者团队',
           surgeryLabelDisplayName: '术式',
+          speakerLabelDisplayName: '讲解专家',
+          subjectLabelDisplayName: '演讲主题',
           background: 'https://picsum.photos/id/12/1920/1080',
           guestLabelDisplayName: '互动嘉宾',
           branches: [
@@ -320,6 +324,8 @@ export function setupPlanMock() {
           textColor: '#333333',
           surgeonLabelDisplayName: '主讲专家',
           surgeryLabelDisplayName: '讲座主题',
+          speakerLabelDisplayName: '讲师',
+          subjectLabelDisplayName: '课程主题',
           guestLabelDisplayName: '参与嘉宾',
           branches: [
             {

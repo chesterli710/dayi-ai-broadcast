@@ -280,6 +280,15 @@ export const usePlanStore = defineStore('plan', () => {
       if (!completedLayout.guestLabelDisplayName && currentPlan.value.guestLabelDisplayName) {
         completedLayout.guestLabelDisplayName = currentPlan.value.guestLabelDisplayName
       }
+      
+      // 新增标签显示名称继承
+      if (!completedLayout.subjectLabelDisplayName && currentPlan.value.subjectLabelDisplayName) {
+        completedLayout.subjectLabelDisplayName = currentPlan.value.subjectLabelDisplayName
+      }
+      
+      if (!completedLayout.speakerLabelDisplayName && currentPlan.value.speakerLabelDisplayName) {
+        completedLayout.speakerLabelDisplayName = currentPlan.value.speakerLabelDisplayName
+      }
     }
     
     // 确保布局元素是完整的实体对象
