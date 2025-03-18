@@ -51,7 +51,7 @@ export class CanvasRenderer {
   private imageCache: Map<string, HTMLImageElement> = new Map();
   
   // 文字图层缓存
-  private textLayerCache: Map<string, ImageData> = new Map();
+  private textLayerCache: Map<string, ImageBitmap | ImageData> = new Map();
   
   // 背景图层是否需要重绘
   private backgroundNeedsRedraw: boolean = true;
@@ -70,6 +70,14 @@ export class CanvasRenderer {
   
   // 文字图层渲染器
   private textLayerRenderer: TextLayerRenderer;
+  
+  // 缓存元素坐标转换结果
+  private mediaElementsCache: Map<string, {
+    original: { x: number, y: number, width: number, height: number },
+    scaled: { x: number, y: number, width: number, height: number },
+    scale: { scaleX: number, scaleY: number },
+    canvasSize: { width: number, height: number }
+  }> = new Map();
   
   /**
    * 构造函数
@@ -92,6 +100,41 @@ export class CanvasRenderer {
     
     this.initCanvas();
     this.initOffscreenCanvas();
+    
+    // 监听布局编辑事件
+    if (this.rendererType === 'preview') {
+      // 使用 watch API 监听 previewLayoutEditedEvent 变化
+      const unwatch = this.planStore.$subscribe((mutation, state) => {
+        if (mutation.storeId === 'plan' && state.previewLayoutEditedEvent > 0) {
+          console.log(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 检测到预览布局编辑事件，标记文字图层需要重绘`);
+          this.textLayerNeedsRedraw = true;
+          
+          // 通知文字渲染器布局已变更
+          if (this.textLayerRenderer) {
+            this.onLayoutOrSizeChanged();
+          }
+          
+          // 启动渲染循环确保立即渲染
+          this.startRenderLoop();
+        }
+      });
+    } else if (this.rendererType === 'live') {
+      // 使用 watch API 监听 liveLayoutEditedEvent 变化
+      const unwatch = this.planStore.$subscribe((mutation, state) => {
+        if (mutation.storeId === 'plan' && state.liveLayoutEditedEvent > 0) {
+          console.log(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 检测到直播布局编辑事件，标记文字图层需要重绘`);
+          this.textLayerNeedsRedraw = true;
+          
+          // 通知文字渲染器布局已变更
+          if (this.textLayerRenderer) {
+            this.onLayoutOrSizeChanged();
+          }
+          
+          // 启动渲染循环确保立即渲染
+          this.startRenderLoop();
+        }
+      });
+    }
   }
   
   /**
@@ -163,7 +206,13 @@ export class CanvasRenderer {
       this.foregroundNeedsRedraw = true;
       this.textLayerNeedsRedraw = true;
       
+      // 清除媒体元素坐标缓存
+      this.onLayoutOrSizeChanged();
+      
       console.log(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 布局已变更，标记所有图层需要重绘`);
+      
+      // 启动渲染循环确保立即渲染
+      this.startRenderLoop();
     } else if (layout && this.currentLayout) {
       // 检查布局内容是否发生变化
       const oldElements = this.currentLayout.elements || [];
@@ -174,10 +223,18 @@ export class CanvasRenderer {
         this.backgroundNeedsRedraw = true;
         this.foregroundNeedsRedraw = true;
         this.textLayerNeedsRedraw = true;
+        
+        // 清除媒体元素坐标缓存
+        this.onLayoutOrSizeChanged();
+        
         console.log(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 布局元素数量变化，标记所有图层需要重绘`);
+        
+        // 启动渲染循环确保立即渲染
+        this.startRenderLoop();
       } else {
         // 检查元素内容是否变化
         let elementsChanged = false;
+        let mediaElementsChanged = false;
         
         for (let i = 0; i < newElements.length; i++) {
           const oldElement = oldElements[i];
@@ -186,135 +243,54 @@ export class CanvasRenderer {
           // 检查元素类型是否变化
           if (oldElement.type !== newElement.type) {
             elementsChanged = true;
+            
+            // 如果是媒体元素变化，标记媒体元素变化
+            if (oldElement.type === LayoutElementType.MEDIA || newElement.type === LayoutElementType.MEDIA) {
+              mediaElementsChanged = true;
+            }
+            
             break;
           }
           
-          // 检查媒体元素的sourceId/sourceName/sourceType是否变化
-          if (newElement.type === LayoutElementType.MEDIA) {
-            const oldMedia = oldElement as MediaLayoutElement;
-            const newMedia = newElement as MediaLayoutElement;
+          // 检查元素属性是否变化
+          if (JSON.stringify(oldElement) !== JSON.stringify(newElement)) {
+            elementsChanged = true;
             
-            if (
-              oldMedia.sourceId !== newMedia.sourceId ||
-              oldMedia.sourceName !== newMedia.sourceName ||
-              oldMedia.sourceType !== newMedia.sourceType
-            ) {
-              console.log(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 媒体元素源信息变化:`, {
-                id: newMedia.id,
-                oldSourceId: oldMedia.sourceId,
-                newSourceId: newMedia.sourceId,
-                oldSourceName: oldMedia.sourceName,
-                newSourceName: newMedia.sourceName
-              });
-              elementsChanged = true;
-              break;
+            // 如果是媒体元素变化，标记媒体元素变化
+            if (oldElement.type === LayoutElementType.MEDIA || newElement.type === LayoutElementType.MEDIA) {
+              mediaElementsChanged = true;
             }
-          }
-          
-          // 检查文本元素的内容是否变化
-          if (newElement.type && 
-              (newElement.type === LayoutElementType.HOST_LABEL || 
-               newElement.type === LayoutElementType.HOST_INFO || 
-               newElement.type === LayoutElementType.SUBJECT_LABEL || 
-               newElement.type === LayoutElementType.SUBJECT_INFO || 
-               newElement.type === LayoutElementType.GUEST_LABEL || 
-               newElement.type === LayoutElementType.GUEST_INFO)) {
-            const oldText = oldElement as TextLayoutElement;
-            const newText = newElement as TextLayoutElement;
             
-            if (
-              oldText.fontStyle?.fontSize !== newText.fontStyle?.fontSize ||
-              oldText.fontStyle?.fontWeight !== newText.fontStyle?.fontWeight ||
-              oldText.fontStyle?.fontColor !== newText.fontStyle?.fontColor ||
-              oldText.orientation !== newText.orientation
-            ) {
-              elementsChanged = true;
-              break;
-            }
+            break;
           }
         }
         
+        // 如果元素发生变化，标记需要重绘
         if (elementsChanged) {
           this.backgroundNeedsRedraw = true;
           this.foregroundNeedsRedraw = true;
           this.textLayerNeedsRedraw = true;
+          
           console.log(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 布局元素内容变化，标记所有图层需要重绘`);
+          
+          // 如果媒体元素变化，清除媒体元素坐标缓存
+          if (mediaElementsChanged) {
+            this.onLayoutOrSizeChanged();
+          }
+          
+          // 启动渲染循环确保立即渲染
+          this.startRenderLoop();
         }
       }
     }
     
-    // 保存旧布局的引用，用于比较
-    const oldLayout = this.currentLayout;
-    
     // 更新当前布局
     this.currentLayout = layout;
     
-    // 如果布局为空，则清除画布并显示空状态
-    if (!layout) {
-      console.log(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 布局为空，显示空状态`);
-      this.clearCanvas();
-      if (this.ctx) {
-        this.renderEmptyState();
-      }
-      
-      // 确保渲染循环正在运行
-      if (!this.animationFrameId) {
-        this.startRenderLoop();
-      }
-      return;
-    }
-    
-    // 预加载布局中的图片
-    const imagesToLoad: Promise<HTMLImageElement>[] = [];
-    
-    try {
-      // 预加载背景图
-      if (layout.background) {
-        console.log(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 预加载背景图:`, layout.background);
-        imagesToLoad.push(this.loadImage(layout.background));
-      }
-      
-      // 预加载前景图
-      if (layout.foreground) {
-        console.log(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 预加载前景图:`, layout.foreground);
-        imagesToLoad.push(this.loadImage(layout.foreground));
-      }
-      
-      // 等待所有图片加载完成
-      Promise.allSettled(imagesToLoad)
-        .then(results => {
-          // 统计加载成功和失败的图片数量
-          const succeeded = results.filter(r => r.status === 'fulfilled').length;
-          const failed = results.filter(r => r.status === 'rejected').length;
-          
-          console.log(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 图片加载完成: 成功=${succeeded}, 失败=${failed}`);
-          
-          // 标记需要重绘
-          this.backgroundNeedsRedraw = true;
-          this.foregroundNeedsRedraw = true;
-          this.textLayerNeedsRedraw = true;
-          
-          // 如果没有正在运行的渲染循环，则启动渲染循环
-          if (!this.animationFrameId) {
-            this.startRenderLoop();
-          }
-        })
-        .catch(error => {
-          console.error(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 加载图片时出错:`, error);
-          
-          // 即使出错，也确保渲染循环正在运行
-          if (!this.animationFrameId) {
-    this.startRenderLoop();
-          }
-        });
-    } catch (error) {
-      console.error(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 预加载图片时出错:`, error);
-    }
-    
-    // 不等待图片加载完成，立即启动渲染循环
-    // 这样可以先显示占位符，等图片加载完成后再更新
-    if (!this.animationFrameId) {
-      this.startRenderLoop();
+    // 使用新布局初始化文字渲染器
+    if (this.textLayerRenderer) {
+      // 如果布局变化，传递给文字渲染器，触发文字重新排版
+      this.textLayerRenderer.setLayout(layout);
     }
   }
   
@@ -376,10 +352,15 @@ export class CanvasRenderer {
     // 如果已经有渲染循环在运行，则不重复启动
     if (this.animationFrameId !== null) {
       console.log(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 渲染循环已在运行中，不重复启动`);
-        return;
-      }
-      
-    console.log(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 启动渲染循环`);
+      return;
+    }
+    
+    console.log(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 启动渲染循环`, {
+      layoutId: this.currentLayout?.id,
+      backgroundNeedsRedraw: this.backgroundNeedsRedraw,
+      foregroundNeedsRedraw: this.foregroundNeedsRedraw,
+      textLayerNeedsRedraw: this.textLayerNeedsRedraw
+    });
     
     // 记录启动时间
     const startTime = Date.now();
@@ -390,9 +371,9 @@ export class CanvasRenderer {
     
     const renderFrame = () => {
       try {
-      // 执行渲染
-      this.render();
-      
+        // 执行渲染
+        this.render();
+        
         // 重置连续错误计数
         if (consecutiveErrors > 0) {
           consecutiveErrors = 0;
@@ -417,7 +398,7 @@ export class CanvasRenderer {
         }
         
         // 请求下一帧
-      this.animationFrameId = requestAnimationFrame(renderFrame);
+        this.animationFrameId = requestAnimationFrame(renderFrame);
       } catch (error) {
         console.error(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 渲染帧时发生错误:`, error);
         
@@ -440,7 +421,7 @@ export class CanvasRenderer {
         }
         
         // 即使发生错误，也继续渲染循环
-      this.animationFrameId = requestAnimationFrame(renderFrame);
+        this.animationFrameId = requestAnimationFrame(renderFrame);
       }
     };
     
@@ -688,22 +669,39 @@ export class CanvasRenderer {
       return;
     }
     
-    // 如果文字图层不需要重绘，则跳过
-    if (!this.textLayerNeedsRedraw && !targetCtx) {
-      return;
-    }
-    
     const ctx = targetCtx || this.offscreenCtx || this.ctx;
     if (!ctx) return;
     
-    // 使用文字图层渲染器渲染文字
+    // 检查是否已有缓存的文字图层
+    const cacheKey = `${this.currentLayout.id}_${this.planStore.previewingSchedule?.id || this.planStore.liveSchedule?.id}`;
+    const cachedLayer = this.textLayerCache.get(cacheKey);
+    
+    if (cachedLayer && !this.textLayerNeedsRedraw) {
+      // 如果有缓存且不需要重绘，直接使用缓存
+      if (cachedLayer instanceof ImageBitmap) {
+        ctx.drawImage(cachedLayer, 0, 0, this.width, this.height);
+        return;
+      } else if (cachedLayer instanceof ImageData) {
+        ctx.putImageData(cachedLayer, 0, 0);
+        return;
+      }
+    }
+    
+    // 如果需要重绘或没有缓存，使用文字图层渲染器渲染文字
     this.textLayerRenderer.renderTextLayer(this.currentLayout)
       .then(imageBitmap => {
         if (imageBitmap) {
           // 将渲染后的文字图层绘制到画布上
           ctx.drawImage(imageBitmap, 0, 0, this.width, this.height);
+          
+          // 缓存渲染结果
+          this.textLayerCache.set(cacheKey, imageBitmap);
+          
+          // 标记文字图层不再需要重绘
+          this.textLayerNeedsRedraw = false;
+          
+          console.log(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 文字图层已渲染并缓存`);
         }
-        this.textLayerNeedsRedraw = false;
       })
       .catch(error => {
         console.error(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 渲染文字图层时出错:`, error);
@@ -888,48 +886,39 @@ export class CanvasRenderer {
   public resize(width: number, height: number): void {
     console.log(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 调整画布大小:`, width, height);
     
-    // 如果尺寸没有变化，则不执行任何操作
     if (this.width === width && this.height === height) {
-      console.log(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 画布尺寸未变化，跳过调整`);
+      console.log(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 尺寸未变化，跳过调整`);
       return;
     }
     
-    // 更新渲染尺寸
+    // 调整画布尺寸
     this.width = width;
     this.height = height;
+    this.canvas.width = width;
+    this.canvas.height = height;
     
-    try {
-      // 调整主画布尺寸
-      this.canvas.width = width;
-      this.canvas.height = height;
-      
-      // 设置画布样式尺寸，确保CSS样式正确应用
-      this.canvas.style.width = `${width}px`;
-      this.canvas.style.height = `${height}px`;
-      
-      // 调整离屏画布尺寸
-      if (this.offscreenCanvas) {
-        // 创建新的离屏画布
-        this.initOffscreenCanvas();
-      }
-      
-      // 调整文字图层渲染器尺寸
-      this.textLayerRenderer.resize(width, height);
-      
-      // 标记所有图层需要重绘
-      this.backgroundNeedsRedraw = true;
-      this.foregroundNeedsRedraw = true;
-      this.textLayerNeedsRedraw = true;
-      
-      console.log(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 画布尺寸调整完成`);
-      
-      // 确保渲染循环正在运行
-      if (!this.animationFrameId) {
-        this.startRenderLoop();
-      }
-    } catch (error) {
-      console.error(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 调整画布尺寸时出错:`, error);
+    // 如果使用离屏画布，也需要调整离屏画布尺寸
+    if (this.offscreenCanvas) {
+      this.offscreenCanvas.width = width;
+      this.offscreenCanvas.height = height;
     }
+    
+    // 调整文字图层渲染器尺寸
+    this.textLayerRenderer.resize(width, height);
+    
+    // 清除缓存
+    this.imageCache.clear();
+    this.textLayerCache.clear();
+    
+    // 调用布局尺寸变化方法，清除媒体元素坐标缓存
+    this.onLayoutOrSizeChanged();
+    
+    // 标记所有图层需要重绘
+    this.backgroundNeedsRedraw = true;
+    this.foregroundNeedsRedraw = true;
+    this.textLayerNeedsRedraw = true;
+    
+    console.log(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 画布大小调整完成`);
   }
   
   /**
@@ -979,108 +968,56 @@ export class CanvasRenderer {
   }
   
   /**
-   * 更新布局元素
-   * 用于在布局元素属性变化时更新渲染，而不需要重新设置整个布局
-   * 特别适用于媒体元素的sourceId/sourceName/sourceType变化
-   * @param elements 更新后的布局元素数组
+   * 更新布局中的元素
+   * @param elements 布局元素列表
    */
   public updateLayoutElements(elements: LayoutElement[]): void {
     if (!this.currentLayout) {
-      console.warn(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 无法更新布局元素：当前没有布局`);
+      console.warn(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 当前没有布局，无法更新元素`);
       return;
     }
     
-    console.log(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 更新布局元素:`, {
-      layoutId: this.currentLayout.id,
-      elementsCount: elements.length
-    });
+    // 检查是否有媒体元素位置/尺寸变化
+    let mediaElementsChanged = false;
     
-    // 检查元素是否发生变化
+    // 检查原有元素
     const oldElements = this.currentLayout.elements || [];
-    let elementsChanged = false;
     
-    // 检查元素数量是否变化
-    if (oldElements.length !== elements.length) {
-      elementsChanged = true;
-    } else {
-      // 检查元素内容是否变化
-      for (let i = 0; i < elements.length; i++) {
-        const oldElement = oldElements[i];
-        const newElement = elements[i];
+    // 将新元素与原有元素进行比较
+    for (const newElement of elements) {
+      if (newElement.type === LayoutElementType.MEDIA) {
+        const oldElement = oldElements.find(e => e.id === newElement.id) as MediaLayoutElement | undefined;
         
-        // 检查元素ID是否匹配
-        if (oldElement.id !== newElement.id) {
-          elementsChanged = true;
+        if (oldElement && oldElement.type === LayoutElementType.MEDIA) {
+          // 检查媒体元素位置或尺寸是否变化
+          if (
+            oldElement.x !== newElement.x ||
+            oldElement.y !== newElement.y ||
+            oldElement.width !== newElement.width ||
+            oldElement.height !== newElement.height ||
+            oldElement.sourceId !== (newElement as MediaLayoutElement).sourceId
+          ) {
+            mediaElementsChanged = true;
+            break;
+          }
+        } else {
+          // 新增媒体元素
+          mediaElementsChanged = true;
           break;
-        }
-        
-        // 检查媒体元素的sourceId/sourceName/sourceType是否变化
-        if (newElement.type === LayoutElementType.MEDIA) {
-          const oldMedia = oldElement as MediaLayoutElement;
-          const newMedia = newElement as MediaLayoutElement;
-          
-          if (
-            oldMedia.sourceId !== newMedia.sourceId ||
-            oldMedia.sourceName !== newMedia.sourceName ||
-            oldMedia.sourceType !== newMedia.sourceType
-          ) {
-            console.log(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 媒体元素源信息变化:`, {
-              id: newMedia.id,
-              oldSourceId: oldMedia.sourceId,
-              newSourceId: newMedia.sourceId,
-              oldSourceName: oldMedia.sourceName,
-              newSourceName: newMedia.sourceName
-            });
-            elementsChanged = true;
-            break;
-          }
-        }
-        
-        // 检查文本元素的内容是否变化
-        if (newElement.type && 
-            (newElement.type === LayoutElementType.HOST_LABEL || 
-             newElement.type === LayoutElementType.HOST_INFO || 
-             newElement.type === LayoutElementType.SUBJECT_LABEL || 
-             newElement.type === LayoutElementType.SUBJECT_INFO || 
-             newElement.type === LayoutElementType.GUEST_LABEL || 
-             newElement.type === LayoutElementType.GUEST_INFO)) {
-          const oldText = oldElement as TextLayoutElement;
-          const newText = newElement as TextLayoutElement;
-          
-          if (
-            oldText.fontStyle?.fontSize !== newText.fontStyle?.fontSize ||
-            oldText.fontStyle?.fontWeight !== newText.fontStyle?.fontWeight ||
-            oldText.fontStyle?.fontColor !== newText.fontStyle?.fontColor ||
-            oldText.orientation !== newText.orientation
-          ) {
-            elementsChanged = true;
-            break;
-          }
         }
       }
     }
     
-    if (elementsChanged) {
-      // 更新布局元素
-      this.currentLayout.elements = [...elements];
-      
-      // 标记所有图层需要重绘
-      this.backgroundNeedsRedraw = true;
-      this.foregroundNeedsRedraw = true;
-      this.textLayerNeedsRedraw = true;
-      
-      // 通知文字图层渲染器布局元素已变更
-      this.textLayerRenderer.onLayoutOrScheduleChanged();
-      
-      console.log(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 布局元素已更新，标记所有图层需要重绘`);
-    } else {
-      console.log(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 布局元素未发生变化，不需要重绘`);
+    // 如果媒体元素位置或尺寸变化，清除坐标缓存
+    if (mediaElementsChanged) {
+      this.onLayoutOrSizeChanged();
     }
     
-    // 确保渲染循环正在运行
-    if (!this.animationFrameId) {
-      this.startRenderLoop();
-    }
+    // 更新布局元素
+    this.currentLayout.elements = elements;
+    
+    // 标记文字图层需要重绘
+    this.textLayerNeedsRedraw = true;
   }
   
   /**
@@ -1092,6 +1029,22 @@ export class CanvasRenderer {
     
     // 清除画布
     ctx.clearRect(0, 0, this.width, this.height);
+  }
+
+  /**
+   * 生成媒体元素缓存键
+   * @param element 媒体元素
+   * @returns 缓存键
+   */
+  private generateMediaElementCacheKey(element: MediaLayoutElement): string {
+    return `${element.id}-${element.sourceId}-${element.x}-${element.y}-${element.width}-${element.height}-${this.width}-${this.height}`;
+  }
+
+  /**
+   * 清除媒体元素坐标转换缓存
+   */
+  public clearMediaElementCache(): void {
+    this.mediaElementsCache.clear();
   }
 
   /**
@@ -1116,40 +1069,54 @@ export class CanvasRenderer {
       console.warn(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 视频元素尚未准备好: ${element.sourceId}, readyState=${videoElement.readyState}`);
       return;
     }
+
+    // 生成元素唯一缓存键
+    const cacheKey = this.generateMediaElementCacheKey(element);
     
-    // 计算元素在1920x1080坐标系中的位置和尺寸
-    // 这里假设布局中的坐标是基于1920x1080的标准尺寸
-    const standardWidth = 1920;
-    const standardHeight = 1080;
-    
-    // 计算当前画布与标准尺寸的比例
-    const scaleX = this.width / standardWidth;
-    const scaleY = this.height / standardHeight;
-    
-    // 应用缩放比例计算实际绘制位置和尺寸
-    const x = element.x * scaleX;
-    const y = element.y * scaleY;
-    const width = element.width * scaleX;
-    const height = element.height * scaleY;
-    
-    // 记录转换后的坐标信息（用于调试）
-    if (this.frameCount % 60 === 0) { // 每60帧记录一次，避免日志过多
-      console.log(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 媒体元素坐标转换:`, {
+    // 检查缓存中是否已有坐标数据
+    let coords;
+    if (this.mediaElementsCache.has(cacheKey)) {
+      // 使用缓存的坐标数据
+      coords = this.mediaElementsCache.get(cacheKey)!;
+    } else {
+      // 计算元素在1920x1080坐标系中的位置和尺寸
+      // 这里假设布局中的坐标是基于1920x1080的标准尺寸
+      const standardWidth = 1920;
+      const standardHeight = 1080;
+      
+      // 计算当前画布与标准尺寸的比例
+      const scaleX = this.width / standardWidth;
+      const scaleY = this.height / standardHeight;
+      
+      // 应用缩放比例计算实际绘制位置和尺寸
+      const x = element.x * scaleX;
+      const y = element.y * scaleY;
+      const width = element.width * scaleX;
+      const height = element.height * scaleY;
+      
+      // 创建坐标数据对象
+      coords = {
         original: { x: element.x, y: element.y, width: element.width, height: element.height },
         scaled: { x, y, width, height },
         scale: { scaleX, scaleY },
         canvasSize: { width: this.width, height: this.height }
-      });
+      };
+      
+      // 将计算结果存入缓存
+      this.mediaElementsCache.set(cacheKey, coords);
+      
+      // 仅在首次计算或缓存未命中时输出日志
+      console.log(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 媒体元素坐标转换:`, coords);
     }
     
     // 绘制视频帧
     try {
       ctx.drawImage(
         videoElement,
-        x,
-        y,
-        width,
-        height
+        coords.scaled.x,
+        coords.scaled.y,
+        coords.scaled.width,
+        coords.scaled.height
       );
     } catch (error) {
       console.error(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 绘制视频帧时出错:`, error);
@@ -1402,6 +1369,20 @@ export class CanvasRenderer {
     try { this.renderTextLayer(this.ctx); } catch (e) { console.error(e); }
     
     console.log(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 直接渲染完成`);
+  }
+
+  /**
+   * 当布局或画布尺寸变化时调用
+   * 用于清除坐标转换缓存
+   */
+  public onLayoutOrSizeChanged(): void {
+    // 清除所有坐标缓存
+    this.clearMediaElementCache();
+    
+    // 标记文字图层需要重绘
+    this.textLayerNeedsRedraw = true;
+    
+    console.log(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 布局或尺寸变化，已清除坐标缓存`);
   }
 }
 

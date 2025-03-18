@@ -107,8 +107,8 @@ export function setupPlanMock() {
                 fps: 30,
                 codec: 'h264_nvenc',
                 preset: 'zerolatency',
-                streamUrl: 'rtmp://live.example.com/channel1',
-                streamSecret: 'live_secret_key_123'
+                streamUrl: 'rtmp://push-hsbj.vzan.com/v/',
+                streamSecret: '11749549_677976226177070841?t=91941c'
               }
             }
           ]
@@ -225,8 +225,8 @@ export function setupPlanMock() {
                 fps: 30,
                 codec: 'h264_nvenc',
                 preset: 'zerolatency',
-                streamUrl: 'rtmp://live.example.com/channel1/main',
-                streamSecret: 'live_secret_key_456'
+                streamUrl: 'rtmp://push-hsbj.vzan.com/v/',
+                streamSecret: '11749549_677976226177070841?t=91941c'
               }
             },
             {
@@ -300,8 +300,8 @@ export function setupPlanMock() {
                 fps: 30,
                 codec: 'h264_nvenc',
                 preset: 'zerolatency',
-                streamUrl: 'rtmp://live.example.com/channel1/sub',
-                streamSecret: 'live_secret_key_789'
+                streamUrl: 'rtmp://push-hsbj.vzan.com/v/',
+                streamSecret: '11749549_677976226177070841?t=91941c'
               }
             }
           ]
@@ -409,8 +409,8 @@ export function setupPlanMock() {
                 fps: 30,
                 codec: 'h264_nvenc',
                 preset: 'performance',
-                streamUrl: 'rtmp://live.example.com/channel2/main',
-                streamSecret: 'live_secret_key_abc'
+                streamUrl: 'rtmp://push-hsbj.vzan.com/v/',
+                streamSecret: '11749549_677976226177070841?t=91941c'
               }
             },
             {
@@ -493,8 +493,8 @@ export function setupPlanMock() {
                 fps: 30,
                 codec: 'h264_nvenc',
                 preset: 'performance',
-                streamUrl: 'rtmp://live.example.com/channel2/sub-a',
-                streamSecret: 'live_secret_key_def'
+                streamUrl: 'rtmp://push-hsbj.vzan.com/v/',
+                streamSecret: '11749549_677976226177070841?t=91941c'
               }
             },
             {
@@ -577,8 +577,8 @@ export function setupPlanMock() {
                 fps: 30,
                 codec: 'h264_nvenc',
                 preset: 'performance',
-                streamUrl: 'rtmp://live.example.com/channel2/sub-b',
-                streamSecret: 'live_secret_key_ghi'
+                streamUrl: 'rtmp://push-hsbj.vzan.com/v/',
+                streamSecret: '11749549_677976226177070841?t=91941c'
               }
             }
           ]

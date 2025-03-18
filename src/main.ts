@@ -6,6 +6,7 @@ import elementPlus from './plugins/element-plus'
 import i18n from './plugins/i18n'
 import setupDirectives from './plugins/directives'
 import { setupMock } from './mock'
+import { initializeNotoSansFont } from './utils/fontLoader'
 import './styles/theme.scss'
 import './styles/disable-selection.scss'
 import './style.css'
@@ -14,6 +15,15 @@ import 'bootstrap-icons/font/bootstrap-icons.css'
 
 // 初始化 Mock 服务
 setupMock()
+
+// 初始化思源黑体字体
+initializeNotoSansFont()
+  .then(status => {
+    console.log(`[main.ts] 思源黑体字体初始化完成，状态: ${status}`);
+  })
+  .catch(error => {
+    console.error('[main.ts] 思源黑体字体初始化失败:', error);
+  });
 
 /**
  * 应用初始化

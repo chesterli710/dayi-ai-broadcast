@@ -1254,6 +1254,13 @@ async function handleSaveAndReturn(): Promise<boolean> {
       // 更新原始表单数据，重置未保存更改状态
       originalFormData.value = cloneDeep(scheduleForm);
       hasUnsavedChanges.value = false;
+      
+      // 通知预览和直播布局需要重新渲染文字图层
+      // 这将触发文字图层的重绘，确保显示最新的日程信息
+      console.log(`[ScheduleEditorModal.vue 日程编辑器] 日程保存成功，通知文字图层重绘`);
+      planStore.notifyPreviewLayoutEdited();
+      planStore.notifyLiveLayoutEdited();
+      
       return true;
     } else {
       ElMessage.error(t('scheduleEditor.saveFailed'));

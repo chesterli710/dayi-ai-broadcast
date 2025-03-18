@@ -1,0 +1,31 @@
+/**
+ * 思源黑体字体定义文件
+ * 定义了思源黑体(Source Han Sans CN)字体的各种字重
+ */
+
+/* 思源黑体 Regular 字重 */
+@font-face {
+  font-family: 'Source Han Sans CN';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/SourceHanSansCN-Regular.woff2') format('woff2');
+}
+
+/* 思源黑体 Medium 字重 */
+@font-face {
+  font-family: 'Source Han Sans CN';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('/fonts/SourceHanSansCN-Medium.woff2') format('woff2');
+}
+
+/* 思源黑体 Bold 字重 */
+@font-face {
+  font-family: 'Source Han Sans CN';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('/fonts/SourceHanSansCN-Bold.woff2') format('woff2');
+} 

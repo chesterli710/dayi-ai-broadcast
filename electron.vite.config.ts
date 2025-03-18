@@ -47,7 +47,20 @@ export default defineConfig({
     rollupOptions: {
       input: {
         main: resolve(__dirname, 'index.html')
+      },
+      // 确保字体文件被正确复制到打包目录
+      output: {
+        assetFileNames: (assetInfo) => {
+          // 对字体文件保持其在assets目录下的相对路径
+          const name = assetInfo.name || '';
+          if (/\.(woff2?|ttf|otf)$/.test(name)) {
+            return 'assets/fonts/[name][extname]';
+          }
+          return 'assets/[name]-[hash][extname]';
+        }
       }
-    }
+    },
+    // 添加对字体文件的复制配置
+    assetsInlineLimit: 0, // 确保所有资源文件都不会被内联为base64
   }
 }) 
