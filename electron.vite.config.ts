@@ -80,8 +80,6 @@ export default defineConfig({
       input: {
         main: resolve(__dirname, 'index.html')
       },
-      // 添加外部依赖
-      external: ['html2canvas'],
       // 确保字体文件被正确复制到打包目录
       output: {
         assetFileNames: (assetInfo) => {
@@ -97,11 +95,5 @@ export default defineConfig({
     },
     // 添加对字体文件的复制配置
     assetsInlineLimit: 0, // 确保所有资源文件都不会被内联为base64
-  },
-  // 确保环境变量在生产环境中被正确替换
-  define: {
-    'import.meta.env.VITE_USE_MOCK': JSON.stringify(process.env.VITE_USE_MOCK || 'true'),
-    'import.meta.env.VITE_API_BASE_URL': JSON.stringify(process.env.VITE_API_BASE_URL || 'https://api.example.com'),
-    'import.meta.env.VITE_APP_TITLE': JSON.stringify(process.env.VITE_APP_TITLE || '大医AI导播系统')
   }
 }) 

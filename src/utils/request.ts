@@ -78,7 +78,7 @@ class HttpRequest {
       },
       (error) => {
         // 对响应错误做点什么
-        console.error(`网络请求错误: ${error.message}`)
+        console.error(`网络请求错误:`, error)
         return Promise.reject(error)
       }
     )
@@ -129,7 +129,7 @@ class HttpRequest {
 }
 
 // 创建请求实例
-const baseURL = import.meta.env.VITE_API_BASE_URL || '/api'
+const baseURL = import.meta.env.VITE_API_BASE_URL
 const request = new HttpRequest(baseURL)
 
 export default request 
