@@ -2,25 +2,33 @@
   "name": "dayi-ai-broadcast",
   "private": true,
   "version": "0.0.0",
+  "description": "大医AI导播系统 - 智能视频导播解决方案",
+  "author": "大医AI团队 <support@dayi-ai.com>",
   "main": "dist-electron/main.js",
   "scripts": {
     "dev": "vite",
     "build": "vue-tsc -b && vite build",
     "preview": "vite preview",
     "electron:dev": "vite --config electron.vite.config.ts",
-    "electron:build": "vue-tsc -b && vite build --config electron.vite.config.ts && electron-builder",
-    "electron:build:no-check": "vite build --config electron.vite.config.ts && electron-builder",
-    "build:win": "vite build --config electron.vite.config.ts && electron-builder --win",
-    "build:mac": "vite build --config electron.vite.config.ts && electron-builder --mac",
-    "build:win:check": "vue-tsc -b && vite build --config electron.vite.config.ts && electron-builder --win",
-    "build:mac:check": "vue-tsc -b && vite build --config electron.vite.config.ts && electron-builder --mac",
-    "electron:preview": "electron-builder install-app-deps && npm run electron:build && electron ."
+    "electron:build": "vue-tsc -b && cross-env NODE_ENV=production vite build --config electron.vite.config.ts --mode production && electron-builder --config electron-builder.config.js",
+    "electron:build:no-check": "cross-env NODE_ENV=production vite build --config electron.vite.config.ts --mode production && electron-builder --config electron-builder.config.js",
+    "build:win": "cross-env NODE_ENV=production vite build --config electron.vite.config.ts --mode production && electron-builder --config electron-builder.config.js --win --x64",
+    "build:mac": "cross-env NODE_ENV=production vite build --config electron.vite.config.ts --mode production && electron-builder --config electron-builder.config.js --mac",
+    "build:win:check": "vue-tsc -b && cross-env NODE_ENV=production vite build --config electron.vite.config.ts --mode production && electron-builder --config electron-builder.config.js --win --x64",
+    "build:mac:check": "vue-tsc -b && cross-env NODE_ENV=production vite build --config electron.vite.config.ts --mode production && electron-builder --config electron-builder.config.js --mac",
+    "electron:preview": "electron-builder install-app-deps && npm run electron:build && electron .",
+    "package:all": "vue-tsc -b && cross-env NODE_ENV=production vite build --config electron.vite.config.ts --mode production && npm run package:win && npm run package:mac",
+    "package:win": "cross-env NODE_ENV=production electron-builder --config electron-builder.config.js --win --x64",
+    "package:mac": "cross-env NODE_ENV=production electron-builder --config electron-builder.config.js --mac",
+    "postinstall": "electron-builder install-app-deps",
+    "clean": "rimraf dist dist-electron release"
   },
   "dependencies": {
     "@element-plus/icons-vue": "^2.3.1",
     "axios": "^1.8.3",
     "bootstrap-icons": "^1.11.3",
     "element-plus": "^2.9.6",
+    "html2canvas": "^1.4.1",
     "mockjs": "^1.1.0",
     "pinia": "^2.1.7",
     "vue": "^3.5.13",
@@ -34,8 +42,10 @@
     "@vitejs/plugin-vue": "^5.2.1",
     "@vue/devtools": "^7.7.2",
     "@vue/tsconfig": "^0.7.0",
+    "cross-env": "^7.0.3",
     "electron": "^35.0.1",
     "electron-builder": "^24.13.3",
+    "rimraf": "^6.0.1",
     "sass": "^1.85.1",
     "typescript": "~5.7.2",
     "vite": "^6.2.0",
@@ -45,22 +55,77 @@
   "build": {
     "appId": "com.dayi.ai.broadcast",
     "productName": "大医AI导播系统",
+    "asar": true,
     "directories": {
       "output": "release"
     },
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*"
+    ],
     "mac": {
-      "category": "public.app-category.utilities"
+      "artifactName": "${productName}-${version}-mac.${ext}",
+      "category": "public.app-category.utilities",
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "icon": "build/icon.icns",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist"
+    },
+    "dmg": {
+      "contents": [
+        {
+          "x": 410,
+          "y": 150,
+          "type": "link",
+          "path": "/Applications"
+        },
+        {
+          "x": 130,
+          "y": 150,
+          "type": "file"
+        }
+      ],
+      "window": {
+        "width": 540,
+        "height": 380
+      }
     },
     "win": {
+      "artifactName": "${productName}-${version}-win.${ext}",
       "target": [
-        "nsis"
-      ]
-    },
-    "linux": {
-      "target": [
-        "AppImage"
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
       ],
-      "category": "Utility"
+      "icon": "build/icon.ico",
+      "publisherName": "大医AI导播系统",
+      "requestedExecutionLevel": "asInvoker"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "大医AI导播系统",
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico"
+    },
+    "portable": {
+      "artifactName": "${productName}-${version}-portable.exe"
     }
   }
 }

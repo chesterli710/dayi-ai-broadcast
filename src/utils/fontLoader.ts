@@ -39,6 +39,31 @@ interface FontWeightURLMap {
 }
 
 /**
+ * 获取正确的资源URL
+ * 在不同环境中处理资源路径
+ * @param url 原始URL
+ * @returns 处理后的URL
+ */
+function getAssetUrl(url: string): string {
+  // 判断是否为绝对路径
+  if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:')) {
+    return url;
+  }
+  
+  // 移除开头的斜杠以确保相对路径正确
+  const cleanUrl = url.startsWith('/') ? url.substring(1) : url;
+  
+  // 如果是开发环境，直接使用路径
+  // 如果是生产环境，使用相对路径
+  if (import.meta.env.DEV) {
+    return `/${cleanUrl}`;
+  } else {
+    // 在Electron打包环境中，使用相对路径
+    return `./${cleanUrl}`;
+  }
+}
+
+/**
  * 加载字体
  * @param fontFamily 字体名称
  * @param weightURLs 字体权重与URL的映射
@@ -62,8 +87,12 @@ export async function loadFont(fontFamily: string, weightURLs: FontWeightURLMap)
     
     // 遍历每个字体权重
     for (const [weight, url] of Object.entries(weightURLs)) {
+      // 处理URL以确保在不同环境下都能正确加载
+      const processedUrl = getAssetUrl(url);
+      console.log(`[fontLoader.ts] 字体文件URL(权重 ${weight}): ${processedUrl}`);
+      
       // 创建新的FontFace对象
-      const font = new FontFace(fontFamily, `url(${url})`, {
+      const font = new FontFace(fontFamily, `url(${processedUrl})`, {
         weight,
         style: 'normal',
         display: 'swap'
@@ -136,9 +165,9 @@ export function getFontFamily(fontFamily: string, fallback: string = 'sans-serif
  */
 export async function initializeNotoSansFont(): Promise<FontLoadStatus> {
   return loadFont('Source Han Sans CN', {
-    '400': '/fonts/SourceHanSansCN-Regular.woff2',
-    '500': '/fonts/SourceHanSansCN-Medium.woff2',
-    '700': '/fonts/SourceHanSansCN-Bold.woff2'
+    '400': 'fonts/SourceHanSansCN-Regular.woff2',
+    '500': 'fonts/SourceHanSansCN-Medium.woff2',
+    '700': 'fonts/SourceHanSansCN-Bold.woff2'
   });
 }
 

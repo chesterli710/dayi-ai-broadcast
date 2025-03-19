@@ -12,10 +12,14 @@ import { setupSvgIconsMock } from './svg'
  */
 export function setupMock() {
   // 检查环境变量是否启用Mock
-  const useMock = import.meta.env.VITE_USE_MOCK === 'true'
+  const useMockValue = import.meta.env.VITE_USE_MOCK
+  const useMock = useMockValue === 'true' || useMockValue === true
+  
+  console.log(`[Mock] 环境变量 VITE_USE_MOCK=${useMockValue}, 类型: ${typeof useMockValue}`)
+  console.log(`[Mock] Mock数据状态: ${useMock ? '启用' : '禁用'}`)
   
   if (!useMock) {
-    console.log('Mock数据已禁用')
+    console.log('[Mock] Mock数据已禁用')
     return
   }
   
@@ -31,5 +35,5 @@ export function setupMock() {
   // 设置SVG图标相关的Mock数据
   setupSvgIconsMock()
   
-  console.log('Mock数据初始化完成')
+  console.log('[Mock] Mock数据初始化完成')
 } 

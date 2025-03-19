@@ -2,6 +2,37 @@ import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import electron from 'vite-plugin-electron'
 import { resolve } from 'path'
+import fs from 'fs'
+import path from 'path'
+
+// 复制public/fonts目录到dist/fonts目录
+function copyFontsPlugin() {
+  return {
+    name: 'copy-fonts-plugin',
+    writeBundle() {
+      // 确保dist/fonts目录存在
+      const distFontsDir = path.resolve(__dirname, 'dist/fonts')
+      if (!fs.existsSync(distFontsDir)) {
+        fs.mkdirSync(distFontsDir, { recursive: true })
+      }
+      
+      // 复制字体文件
+      const publicFontsDir = path.resolve(__dirname, 'public/fonts')
+      if (fs.existsSync(publicFontsDir)) {
+        const fontFiles = fs.readdirSync(publicFontsDir)
+        fontFiles.forEach(file => {
+          const ext = path.extname(file).toLowerCase()
+          if (['.woff', '.woff2', '.ttf', '.otf'].includes(ext)) {
+            const srcPath = path.join(publicFontsDir, file)
+            const destPath = path.join(distFontsDir, file)
+            fs.copyFileSync(srcPath, destPath)
+            console.log(`Copied font file: ${file}`)
+          }
+        })
+      }
+    }
+  }
+}
 
 /**
  * Electron的Vite配置
@@ -28,7 +59,8 @@ export default defineConfig({
           }
         }
       }
-    })
+    }),
+    copyFontsPlugin()
   ],
   // 解析配置
   resolve: {
@@ -48,13 +80,16 @@ export default defineConfig({
       input: {
         main: resolve(__dirname, 'index.html')
       },
+      // 添加外部依赖
+      external: ['html2canvas'],
       // 确保字体文件被正确复制到打包目录
       output: {
         assetFileNames: (assetInfo) => {
           // 对字体文件保持其在assets目录下的相对路径
           const name = assetInfo.name || '';
           if (/\.(woff2?|ttf|otf)$/.test(name)) {
-            return 'assets/fonts/[name][extname]';
+            // 确保字体文件保持原始路径结构
+            return 'fonts/[name][extname]';
           }
           return 'assets/[name]-[hash][extname]';
         }
@@ -62,5 +97,11 @@ export default defineConfig({
     },
     // 添加对字体文件的复制配置
     assetsInlineLimit: 0, // 确保所有资源文件都不会被内联为base64
+  },
+  // 确保环境变量在生产环境中被正确替换
+  define: {
+    'import.meta.env.VITE_USE_MOCK': JSON.stringify(process.env.VITE_USE_MOCK || 'true'),
+    'import.meta.env.VITE_API_BASE_URL': JSON.stringify(process.env.VITE_API_BASE_URL || 'https://api.example.com'),
+    'import.meta.env.VITE_APP_TITLE': JSON.stringify(process.env.VITE_APP_TITLE || '大医AI导播系统')
   }
 }) 

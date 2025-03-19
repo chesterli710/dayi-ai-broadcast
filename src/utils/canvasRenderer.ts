@@ -705,42 +705,7 @@ export class CanvasRenderer {
       })
       .catch(error => {
         console.error(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 渲染文字图层时出错:`, error);
-        
-        // 如果使用独立的文字图层渲染器失败，回退到原始文字绘制方法
-        this.renderTextLayerFallback(ctx);
       });
-  }
-  
-  /**
-   * 渲染文字图层 - 回退方案
-   * 当使用文字图层渲染器失败时使用此方法
-   * @param ctx 渲染上下文
-   */
-  private renderTextLayerFallback(ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D): void {
-    if (!this.currentLayout || !this.currentLayout.elements) {
-      return;
-    }
-    
-    // 获取所有文本元素并按zIndex排序
-    const textElements = this.currentLayout.elements
-      .filter(element => 
-        element.type === LayoutElementType.HOST_LABEL ||
-        element.type === LayoutElementType.HOST_INFO ||
-        element.type === LayoutElementType.SUBJECT_LABEL ||
-        element.type === LayoutElementType.SUBJECT_INFO ||
-        element.type === LayoutElementType.GUEST_LABEL ||
-        element.type === LayoutElementType.GUEST_INFO
-      ) as TextLayoutElement[];
-    
-    // 按zIndex排序（从小到大）
-    textElements.sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0));
-    
-    // 渲染每个文本元素
-    for (const element of textElements) {
-      this.renderTextElement(element, ctx);
-    }
-    
-    this.textLayerNeedsRedraw = false;
   }
   
   /**
@@ -826,48 +791,7 @@ export class CanvasRenderer {
         return '测试文本';
     }
   }
-  
-  /**
-   * 获取主持人名称
-   * @param schedule 日程
-   * @returns 主持人名称
-   */
-  private getHostName(schedule: Schedule): string {
-    if (schedule.type === ScheduleType.SURGERY && schedule.surgeryInfo) {
-      return schedule.surgeryInfo.surgeons.map(surgeon => surgeon.name).join(', ');
-    } else if (schedule.type === ScheduleType.LECTURE && schedule.lectureInfo) {
-      return schedule.lectureInfo.speakers.map(speaker => speaker.name).join(', ');
-    }
-    return '';
-  }
-  
-  /**
-   * 获取主题标题
-   * @param schedule 日程
-   * @returns 主题标题
-   */
-  private getSubjectTitle(schedule: Schedule): string {
-    if (schedule.type === ScheduleType.SURGERY && schedule.surgeryInfo) {
-      return schedule.surgeryInfo.procedure;
-    } else if (schedule.type === ScheduleType.LECTURE && schedule.lectureInfo) {
-      return schedule.lectureInfo.topic;
-    }
-    return '';
-  }
-  
-  /**
-   * 获取嘉宾名称
-   * @param schedule 日程
-   * @returns 嘉宾名称
-   */
-  private getGuestNames(schedule: Schedule): string {
-    if (schedule.type === ScheduleType.SURGERY && schedule.surgeryInfo && schedule.surgeryInfo.guests) {
-      return schedule.surgeryInfo.guests.map(guest => guest.name).join(', ');
-    } else if (schedule.type === ScheduleType.LECTURE && schedule.lectureInfo && schedule.lectureInfo.guests) {
-      return schedule.lectureInfo.guests.map(guest => guest.name).join(', ');
-    }
-    return '';
-  }
+
   
   /**
    * 调整画布大小
