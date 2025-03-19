@@ -34,9 +34,9 @@ export class CanvasRenderer {
   // 当前布局
   private currentLayout: Layout | null = null;
   
-  // 渲染尺寸
-  private width: number = 1920;
-  private height: number = 1080;
+  // 渲染尺寸固定为1920*1080
+  private readonly width: number = 1920;
+  private readonly height: number = 1080;
   
   // 视频存储
   private videoStore = useVideoStore();
@@ -96,7 +96,7 @@ export class CanvasRenderer {
     });
     
     // 初始化文字图层渲染器
-    this.textLayerRenderer = new TextLayerRenderer(this.rendererType, this.width, this.height);
+    this.textLayerRenderer = new TextLayerRenderer(this.rendererType);
     
     this.initCanvas();
     this.initOffscreenCanvas();
@@ -144,7 +144,7 @@ export class CanvasRenderer {
     console.log('[canvasRenderer.ts 画布渲染器] 开始初始化画布');
     
     try {
-      // 设置画布尺寸
+      // 设置画布尺寸固定为1920*1080
       this.canvas.width = this.width;
       this.canvas.height = this.height;
       
@@ -175,7 +175,7 @@ export class CanvasRenderer {
    */
   private initOffscreenCanvas(): void {
     try {
-      // 创建离屏画布
+      // 创建离屏画布，尺寸固定为1920*1080
       this.offscreenCanvas = new OffscreenCanvas(this.width, this.height);
       this.offscreenCtx = this.offscreenCanvas.getContext('2d', { alpha: true });
       
@@ -752,23 +752,14 @@ export class CanvasRenderer {
     // 根据元素类型获取文本内容
     const text = this.getTextContent(element);
     
-    // 计算元素在1920x1080坐标系中的位置和尺寸
-    // 这里假设布局中的坐标是基于1920x1080的标准尺寸
-    const standardWidth = 1920;
-    const standardHeight = 1080;
+    // 直接使用元素在1920x1080坐标系中的位置和尺寸，无需转换
+    const x = element.x;
+    const y = element.y;
+    const width = element.width;
+    const height = element.height;
     
-    // 计算当前画布与标准尺寸的比例
-    const scaleX = this.width / standardWidth;
-    const scaleY = this.height / standardHeight;
-    
-    // 应用缩放比例计算实际绘制位置和尺寸
-    const x = element.x * scaleX;
-    const y = element.y * scaleY;
-    const width = element.width * scaleX;
-    const height = element.height * scaleY;
-    
-    // 设置字体样式，字体大小也需要缩放
-    const fontSize = element.fontStyle.fontSize * scaleY;
+    // 设置字体样式，无需缩放
+    const fontSize = element.fontStyle.fontSize;
     ctx.font = `${element.fontStyle.fontWeight === 'bold' ? 'bold' : 'normal'} ${fontSize}px Arial`;
     ctx.fillStyle = element.fontStyle.fontColor || '#FFFFFF';
     ctx.textAlign = 'left';
@@ -880,45 +871,23 @@ export class CanvasRenderer {
   
   /**
    * 调整画布大小
-   * @param width 宽度
-   * @param height 高度
+   * 注意：此方法不再改变画布的实际渲染尺寸(1920x1080)，而是通过CSS缩放来适应显示
+   * @param width 显示宽度
+   * @param height 显示高度
    */
   public resize(width: number, height: number): void {
-    console.log(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 调整画布大小:`, width, height);
+    console.log(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 调整画布显示尺寸:`, width, height);
     
-    if (this.width === width && this.height === height) {
-      console.log(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 尺寸未变化，跳过调整`);
-      return;
-    }
+    // 仅调整CSS样式，不改变画布实际尺寸
+    this.canvas.style.width = `${width}px`;
+    this.canvas.style.height = `${height}px`;
     
-    // 调整画布尺寸
-    this.width = width;
-    this.height = height;
-    this.canvas.width = width;
-    this.canvas.height = height;
+    // 以下逻辑不再执行
+    // 不再调整实际画布尺寸
+    // 不再调整离屏画布尺寸
+    // 不再调整文字图层渲染器尺寸
     
-    // 如果使用离屏画布，也需要调整离屏画布尺寸
-    if (this.offscreenCanvas) {
-      this.offscreenCanvas.width = width;
-      this.offscreenCanvas.height = height;
-    }
-    
-    // 调整文字图层渲染器尺寸
-    this.textLayerRenderer.resize(width, height);
-    
-    // 清除缓存
-    this.imageCache.clear();
-    this.textLayerCache.clear();
-    
-    // 调用布局尺寸变化方法，清除媒体元素坐标缓存
-    this.onLayoutOrSizeChanged();
-    
-    // 标记所有图层需要重绘
-    this.backgroundNeedsRedraw = true;
-    this.foregroundNeedsRedraw = true;
-    this.textLayerNeedsRedraw = true;
-    
-    console.log(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 画布大小调整完成`);
+    console.log(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 画布显示尺寸调整完成，实际渲染尺寸保持1920x1080不变`);
   }
   
   /**
@@ -1079,26 +1048,11 @@ export class CanvasRenderer {
       // 使用缓存的坐标数据
       coords = this.mediaElementsCache.get(cacheKey)!;
     } else {
-      // 计算元素在1920x1080坐标系中的位置和尺寸
-      // 这里假设布局中的坐标是基于1920x1080的标准尺寸
-      const standardWidth = 1920;
-      const standardHeight = 1080;
-      
-      // 计算当前画布与标准尺寸的比例
-      const scaleX = this.width / standardWidth;
-      const scaleY = this.height / standardHeight;
-      
-      // 应用缩放比例计算实际绘制位置和尺寸
-      const x = element.x * scaleX;
-      const y = element.y * scaleY;
-      const width = element.width * scaleX;
-      const height = element.height * scaleY;
-      
-      // 创建坐标数据对象
+      // 直接使用元素在1920x1080坐标系中的位置和尺寸，无需转换
       coords = {
         original: { x: element.x, y: element.y, width: element.width, height: element.height },
-        scaled: { x, y, width, height },
-        scale: { scaleX, scaleY },
+        scaled: { x: element.x, y: element.y, width: element.width, height: element.height },
+        scale: { scaleX: 1, scaleY: 1 },
         canvasSize: { width: this.width, height: this.height }
       };
       
@@ -1106,7 +1060,7 @@ export class CanvasRenderer {
       this.mediaElementsCache.set(cacheKey, coords);
       
       // 仅在首次计算或缓存未命中时输出日志
-      console.log(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 媒体元素坐标转换:`, coords);
+      console.log(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 媒体元素坐标:`, coords);
     }
     
     // 绘制视频帧

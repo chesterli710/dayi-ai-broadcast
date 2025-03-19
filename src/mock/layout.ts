@@ -47,7 +47,7 @@ export function setupLayoutMock() {
               x: 12,
               y: 370,
               width: 402,
-              height: 117,
+              height: 137,
               zIndex: 10001,
               type: LayoutElementType.HOST_INFO,
               fontStyle: {
@@ -60,9 +60,9 @@ export function setupLayoutMock() {
             {
               id: 4,
               x: 12,
-              y: 495,
+              y: 515,
               width: 402,
-              height: 175,
+              height: 155,
               zIndex: 10002,
               type: LayoutElementType.SUBJECT_INFO,
               fontStyle: {

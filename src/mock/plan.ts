@@ -64,7 +64,12 @@ export function setupPlanMock() {
                     surgeons: [
                       {
                         name: '张医生',
-                        title: '主任医师',
+                        title: '主任',
+                        organization: '北京协和医院'
+                      },
+                      {
+                        name: '王山',
+                        title: '教授',
                         organization: '北京协和医院'
                       }
                     ]
