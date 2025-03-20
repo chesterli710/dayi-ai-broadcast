@@ -1,653 +1,825 @@
 /**
- * 音频设备管理工具类
- * 用于检测和管理系统音频设备
+ * 音频设备管理器
+ * 负责管理系统音频设备，提供麦克风和系统音频捕获功能
  */
-import type { AudioDevice, SystemAudioStatus } from '../types/audio';
-import { AudioSourceType } from '../types/audio';
-import { isMacOS, isWindows } from './platformUtils';
+
+import { ref, computed, reactive } from 'vue';
+import type { MicrophoneDeviceInfo, AudioOutputDeviceInfo, AudioDeviceState, SystemAudioState } from '../types/audio';
+import { useAppStore } from '../stores/appStore';
 
 /**
- * 音频设备管理器类
- * 负责检测和管理系统音频设备
+ * 判断当前环境是否为Electron
  */
-class AudioDeviceManager {
-  /**
-   * 音频上下文
-   * 用于音频处理和分析
-   */
-  private audioContext: AudioContext | null = null;
-  
-  /**
-   * 音频分析器映射
-   * 用于存储每个设备的音频分析器
-   */
-  private analyserMap: Map<string, {
-    analyser: AnalyserNode;
-    stream: MediaStream;
-    source: MediaStreamAudioSourceNode;
-    gainNode?: GainNode;
-  }> = new Map();
-  
-  /**
-   * 获取系统可用的音频输入设备
-   * @returns Promise<AudioDevice[]> 音频设备列表
-   */
-  async getAudioInputDevices(): Promise<AudioDevice[]> {
-    try {
-      // 使用Web API获取音频输入设备
-      const devices = await navigator.mediaDevices.enumerateDevices();
-      const audioInputDevices = devices
-        .filter(device => device.kind === 'audioinput')
-        .map((device, index) => {
-          return {
-            id: device.deviceId,
-            name: device.label || `麦克风 ${index + 1}`,
-            type: AudioSourceType.MICROPHONE,
-            isDefault: device.deviceId === 'default',
-            isActive: false,
-            volume: 100,
-            level: 0
-          };
-        });
-      
-      return audioInputDevices;
-    } catch (error) {
-      console.error('获取音频输入设备失败:', error);
-      return [];
+const isElectron = computed(() => {
+  return window.electronAPI !== undefined;
+});
+
+/**
+ * 判断当前操作系统
+ */
+const isMac = computed(() => {
+  return navigator.platform.toLowerCase().includes('mac');
+});
+
+/**
+ * 判断当前操作系统是否为Windows
+ */
+const isWindows = computed(() => {
+  return navigator.platform.toLowerCase().includes('win');
+});
+
+/**
+ * 判断是否支持WASAPI捕获
+ */
+const isWasapiSupported = ref(false);
+
+/**
+ * 判断是否安装了BlackHole (仅macOS)
+ */
+const isBlackholeInstalled = ref(false);
+
+/**
+ * 判断是否启用了立体声混音 (仅Windows)
+ */
+const isStereoMixEnabled = ref(false);
+
+/**
+ * 所有麦克风设备列表
+ */
+const microphoneDevices = ref<MicrophoneDeviceInfo[]>([]);
+
+/**
+ * 所有音频输出设备列表 (仅Windows中使用)
+ */
+const audioOutputDevices = ref<AudioOutputDeviceInfo[]>([]);
+
+/**
+ * 音频处理元素，用于音频分析和处理
+ */
+const audioContext = ref<AudioContext | null>(null);
+const microphoneStream = ref<MediaStream | null>(null);
+const systemAudioStream = ref<MediaStream | null>(null);
+const microphoneSource = ref<MediaStreamAudioSourceNode | null>(null);
+const systemAudioSource = ref<MediaStreamAudioSourceNode | null>(null);
+const microphoneAnalyser = ref<AnalyserNode | null>(null);
+const systemAudioAnalyser = ref<AnalyserNode | null>(null);
+const audioDataArray = ref<Uint8Array | null>(null);
+
+/**
+ * 麦克风设备状态
+ */
+const microphoneState = reactive<AudioDeviceState>({
+  deviceId: '',
+  volume: 100,
+  muted: false,
+  level: 0
+});
+
+/**
+ * 系统音频状态
+ */
+const systemAudioState = reactive<SystemAudioState>({
+  enabled: false,
+  volume: 100,
+  muted: false,
+  level: 0,
+  captureMethod: 'none'
+});
+
+/**
+ * WASAPI音频电平监测定时器
+ */
+let wasapiLevelTimer: number | null = null;
+
+/**
+ * 添加systemAudioGainNode的响应式引用定义
+ */
+const systemAudioGainNode = ref<GainNode | null>(null);
+
+/**
+ * 初始化音频设备管理器
+ */
+export async function initAudioDeviceManager() {
+  // 创建音频上下文
+  try {
+    audioContext.value = new (window.AudioContext || (window as any).webkitAudioContext)();
+  } catch (error) {
+    console.error('[audioDeviceManager.ts] 创建音频上下文失败', error);
+  }
+
+  // 检查平台特定功能
+  if (isElectron.value) {
+    if (isMac.value) {
+      isBlackholeInstalled.value = await window.electronAPI?.checkBlackholeInstalled() || false;
     }
-  }
 
-  /**
-   * 检查系统音频捕获状态
-   * @returns Promise<SystemAudioStatus> 系统音频状态
-   */
-  async checkSystemAudioStatus(): Promise<SystemAudioStatus> {
-    // 初始状态
-    const status: SystemAudioStatus = {
-      isAvailable: false
-    };
-
-    try {
-      if (isMacOS()) {
-        // 在MacOS上检查Blackhole是否已安装
-        status.isBlackholeInstalled = await this.checkBlackholeInstalled();
-        status.isAvailable = status.isBlackholeInstalled;
-      } else if (isWindows()) {
-        // 在Windows上检查立体声混音是否已启用
-        status.isStereoMixEnabled = await this.checkStereoMixEnabled();
-        status.isAvailable = status.isStereoMixEnabled;
-      }
+    if (isWindows.value) {
+      isStereoMixEnabled.value = await window.electronAPI?.checkStereoMixEnabled() || false;
+      isWasapiSupported.value = await window.electronAPI?.checkWasapiAvailable() || false;
       
-      return status;
-    } catch (error) {
-      console.error('检查系统音频状态失败:', error);
-      return status;
-    }
-  }
-
-  /**
-   * 检查MacOS上Blackhole是否已安装
-   * @returns Promise<boolean> 是否已安装
-   */
-  private async checkBlackholeInstalled(): Promise<boolean> {
-    try {
-      // 在Electron环境中，通过IPC调用主进程执行命令行检查
-      if (this.isElectronAPIAvailable() && window.electronAPI?.checkBlackholeInstalled) {
-        return await window.electronAPI.checkBlackholeInstalled();
-      }
-      
-      // 如果不在Electron环境或API不可用，尝试通过枚举设备检查
-      const devices = await navigator.mediaDevices.enumerateDevices();
-      return devices.some(device => 
-        device.label.toLowerCase().includes('blackhole') && 
-        (device.kind === 'audioinput' || device.kind === 'audiooutput')
-      );
-    } catch (error) {
-      console.error('检查Blackhole安装状态失败:', error);
-      return false;
-    }
-  }
-
-  /**
-   * 检查Windows上立体声混音是否已启用
-   * @returns Promise<boolean> 是否已启用
-   */
-  private async checkStereoMixEnabled(): Promise<boolean> {
-    try {
-      // 在Electron环境中，通过IPC调用主进程执行命令行检查
-      if (this.isElectronAPIAvailable() && window.electronAPI?.checkStereoMixEnabled) {
-        return await window.electronAPI.checkStereoMixEnabled();
-      }
-      
-      // 如果不在Electron环境或API不可用，尝试通过枚举设备检查
-      const devices = await navigator.mediaDevices.enumerateDevices();
-      return devices.some(device => 
-        (device.label.toLowerCase().includes('stereo mix') || 
-         device.label.toLowerCase().includes('立体声混音')) && 
-        device.kind === 'audioinput'
-      );
-    } catch (error) {
-      console.error('检查立体声混音状态失败:', error);
-      return false;
-    }
-  }
-
-  /**
-   * 检查Electron API是否可用
-   * @returns boolean 是否可用
-   */
-  private isElectronAPIAvailable(): boolean {
-    return typeof window !== 'undefined' && !!window.electronAPI;
-  }
-
-  /**
-   * 获取系统音频设备
-   * @returns Promise<AudioDevice | null> 系统音频设备
-   */
-  async getSystemAudioDevice(): Promise<AudioDevice | null> {
-    const status = await this.checkSystemAudioStatus();
-    
-    if (!status.isAvailable) {
-      return null;
-    }
-    
-    // 创建系统音频设备对象
-    return {
-      id: 'system-audio',
-      name: '系统音频',
-      type: AudioSourceType.SYSTEM_AUDIO,
-      isDefault: false,
-      isActive: false,
-      volume: 100,
-      level: 0
-    };
-  }
-
-  /**
-   * 获取所有可能的系统音频设备
-   * 包括虚拟音频设备和系统混音设备
-   * @returns Promise<AudioDevice[]> 系统音频设备列表
-   */
-  async getSystemAudioDevices(): Promise<AudioDevice[]> {
-    try {
-      const devices: AudioDevice[] = [];
-      
-      // 检查系统音频状态
-      const status = await this.checkSystemAudioStatus();
-      
-      // 添加默认系统音频设备
-      if (status.isAvailable) {
-        devices.push({
-          id: 'system-audio',
-          name: '系统音频',
-          type: AudioSourceType.SYSTEM_AUDIO,
-          isDefault: true,
-          isActive: false,
-          volume: 100,
-          level: 0
-        });
-      }
-      
-      // 在macOS上，仅查找BlackHole设备
-      if (isMacOS()) {
-        // 查找所有包含"BlackHole"的设备
-        const allDevices = await navigator.mediaDevices.enumerateDevices();
-        const blackholeDevices = allDevices
-          .filter(device => 
-            device.kind === 'audioinput' && 
-            device.label.toLowerCase().includes('blackhole')
-          )
-          .map((device, index) => ({
-            id: device.deviceId,
-            name: device.label || `BlackHole ${index + 1}`,
-            type: AudioSourceType.SYSTEM_AUDIO,
-            isDefault: false,
-            isActive: false,
-            volume: 100,
-            level: 0
-          }));
-        
-        // 添加找到的BlackHole设备
-        devices.push(...blackholeDevices);
-      }
-      
-      // 在Windows上，仅查找立体声混音设备
-      if (isWindows()) {
-        // 查找所有包含"立体声混音"或"Stereo Mix"的设备
-        const allDevices = await navigator.mediaDevices.enumerateDevices();
-        const stereoMixDevices = allDevices
-          .filter(device => 
-            device.kind === 'audioinput' && 
-            (device.label.toLowerCase().includes('立体声混音') || 
-             device.label.toLowerCase().includes('stereo mix'))
-          )
-          .map((device, index) => ({
-            id: device.deviceId,
-            name: device.label || `立体声混音 ${index + 1}`,
-            type: AudioSourceType.SYSTEM_AUDIO,
-            isDefault: false,
-            isActive: false,
-            volume: 100,
-            level: 0
-          }));
-        
-        // 添加找到的立体声混音设备
-        devices.push(...stereoMixDevices);
-      }
-      
-      return devices;
-    } catch (error) {
-      console.error('获取系统音频设备失败:', error);
-      return [];
-    }
-  }
-
-  /**
-   * 获取所有音频设备（包括麦克风和系统音频）
-   * @returns Promise<AudioDevice[]> 所有音频设备
-   */
-  async getAllAudioDevices(): Promise<AudioDevice[]> {
-    const inputDevices = await this.getAudioInputDevices();
-    const systemAudioDevices = await this.getSystemAudioDevices();
-    
-    return [...inputDevices, ...systemAudioDevices];
-  }
-  
-  /**
-   * 设置设备音量
-   * @param deviceId - 设备ID
-   * @param volume - 音量值 (0-100)
-   * @returns 是否设置成功
-   */
-  async setDeviceVolume(deviceId: string, volume: number): Promise<boolean> {
-    console.log(`设置设备 ${deviceId} 采集音量: ${volume}`);
-    
-    // 将百分比音量转换为0-1范围的增益值
-    const gainValue = volume / 100;
-    
-    // 获取真实设备ID（处理system-audio特殊情况）
-    let realDeviceId = deviceId;
-    if (deviceId === 'system-audio') {
-      // 根据操作系统获取系统音频设备
-      if (isMacOS()) {
-        // macOS下查找BlackHole设备
-        const devices = await this.getAllAudioDevices();
-        const blackholeDevice = devices.find(d => d.name.includes('BlackHole'));
-        if (blackholeDevice) {
-          realDeviceId = blackholeDevice.id;
-        } else {
-          console.warn('未找到BlackHole设备，无法设置系统音频音量');
-          return true; // 返回成功以避免UI错误
-        }
-      } else if (isWindows()) {
-        // Windows下查找Stereo Mix设备
-        const devices = await this.getAllAudioDevices();
-        const stereoMixDevice = devices.find(d => d.name.includes('Stereo Mix'));
-        if (stereoMixDevice) {
-          realDeviceId = stereoMixDevice.id;
-        } else {
-          console.warn('未找到Stereo Mix设备，无法设置系统音频音量');
-          return true; // 返回成功以避免UI错误
+      // 获取音频输出设备列表 (仅用于Windows WASAPI捕获)
+      if (isWasapiSupported.value && window.electronAPI?.getAudioOutputDevices) {
+        try {
+          const devices = await window.electronAPI.getAudioOutputDevices() || [];
+          audioOutputDevices.value = devices;
+          console.log('[audioDeviceManager.ts] 获取到音频输出设备列表', devices);
+        } catch (error) {
+          console.error('[audioDeviceManager.ts] 获取音频输出设备列表失败', error);
         }
       }
     }
+  }
+
+  // 加载麦克风设备列表
+  await refreshMicrophoneDevices();
+}
+
+/**
+ * 刷新麦克风设备列表
+ */
+export async function refreshMicrophoneDevices() {
+  try {
+    // 请求麦克风权限并获取设备列表
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     
-    // 查找设备对应的分析器信息
-    const analyserInfo = this.analyserMap.get(realDeviceId);
-    if (analyserInfo) {
-      try {
-        // 获取或创建增益节点
-        if (!analyserInfo.gainNode && analyserInfo.source && analyserInfo.analyser) {
-          // 创建增益节点
-          const gainNode = this.audioContext!.createGain();
-          
-          // 重新连接音频流：source -> gainNode -> analyser
-          analyserInfo.source.disconnect();
-          analyserInfo.source.connect(gainNode);
-          gainNode.connect(analyserInfo.analyser);
-          
-          // 存储增益节点
-          analyserInfo.gainNode = gainNode;
-          console.log(`为设备 ${realDeviceId} 创建了增益节点`);
-        }
-        
-        // 设置增益值
-        if (analyserInfo.gainNode) {
-          analyserInfo.gainNode.gain.value = gainValue;
-          console.log(`设备 ${realDeviceId} 增益值已设置为 ${gainValue}`);
-          return true;
-        } else {
-          console.error(`设备 ${realDeviceId} 的增益节点不存在，无法设置音量`);
-          return false;
-        }
-      } catch (error) {
-        console.error(`设置设备 ${realDeviceId} 增益值出错:`, error);
-        return false;
-      }
-    } else {
-      console.log(`设备 ${realDeviceId} 尚未创建分析器，尝试创建并设置音量`);
-      
-      // 尝试为设备创建分析器
-      try {
-        await this.createAnalyserForDevice(realDeviceId);
-        
-        // 递归调用自身以设置音量
-        return await this.setDeviceVolume(realDeviceId, volume);
-      } catch (error) {
-        console.error(`为设备 ${realDeviceId} 创建分析器失败:`, error);
-        return false;
-      }
-    }
+    // 立即停止流，我们只是为了获取权限
+    stream.getTracks().forEach(track => track.stop());
+    
+    // 获取设备列表
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    
+    // 过滤出音频输入设备
+    const audioInputDevices = devices.filter(device => device.kind === 'audioinput');
+    
+    // 格式化为我们的设备信息结构
+    microphoneDevices.value = audioInputDevices.map(device => ({
+      deviceId: device.deviceId,
+      label: device.label || `麦克风 ${device.deviceId.substring(0, 5)}...`,
+      isDefault: device.deviceId === 'default'
+    }));
+    
+    console.log('[audioDeviceManager.ts] 获取到麦克风设备列表', microphoneDevices.value);
+  } catch (error) {
+    console.error('[audioDeviceManager.ts] 获取麦克风设备列表失败', error);
+    microphoneDevices.value = [];
   }
-  
-  /**
-   * 获取设备音频电平
-   * @param deviceId - 设备ID
-   * @returns Promise<number> 音频电平 (0-100)
-   */
-  async getDeviceLevel(deviceId: string): Promise<number> {
-    try {
-      // 如果设备已经有分析器，使用现有分析器
-      if (this.analyserMap.has(deviceId)) {
-        return this.getAnalyserLevel(deviceId);
+}
+
+/**
+ * 打开麦克风
+ * @param deviceId 设备ID
+ */
+export async function openMicrophone(deviceId: string | null): Promise<boolean> {
+  try {
+    // 关闭现有麦克风
+    closeMicrophone();
+    
+    if (!deviceId) return false;
+    
+    // 更新状态
+    microphoneState.deviceId = deviceId;
+    
+    // 打开麦克风
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        deviceId: { exact: deviceId }
       }
+    });
+    
+    microphoneStream.value = stream;
+    
+    // 创建音频处理节点
+    if (audioContext.value) {
+      microphoneSource.value = audioContext.value.createMediaStreamSource(stream);
+      microphoneAnalyser.value = audioContext.value.createAnalyser();
+      microphoneAnalyser.value.fftSize = 256;
       
-      // 如果没有分析器，尝试创建一个
-      try {
-        await this.createAnalyserForDevice(deviceId);
-        if (this.analyserMap.has(deviceId)) {
-          return this.getAnalyserLevel(deviceId);
-        }
-      } catch (error: any) {
-        // 如果是system-audio设备，尝试查找其他可能的系统音频设备
-        if (deviceId === 'system-audio') {
-          // 查找所有可能的系统音频设备
-          const allDevices = await navigator.mediaDevices.enumerateDevices();
-          
-          // 筛选可能的系统音频设备
-          let potentialSystemAudioDevices: MediaDeviceInfo[] = [];
-          
-          if (isMacOS()) {
-            // 在Mac上仅查找BlackHole设备
-            potentialSystemAudioDevices = allDevices.filter(device => 
-              device.kind === 'audioinput' && 
-              device.label.toLowerCase().includes('blackhole')
-            );
-          } else if (isWindows()) {
-            // 在Windows上仅查找立体声混音设备
-            potentialSystemAudioDevices = allDevices.filter(device => 
-              device.kind === 'audioinput' && 
-              (device.label.toLowerCase().includes('stereo mix') ||
-               device.label.toLowerCase().includes('立体声混音'))
-            );
-          }
-          
-          // 尝试每一个潜在的系统音频设备
-          for (const device of potentialSystemAudioDevices) {
-            try {
-              await this.createRealDeviceAnalyser(device.deviceId);
-              // 将分析器映射到system-audio
-              if (this.analyserMap.has(device.deviceId)) {
-                const analyserInfo = this.analyserMap.get(device.deviceId);
-                if (analyserInfo) {
-                  this.analyserMap.set(deviceId, analyserInfo);
-                  return this.getAnalyserLevel(deviceId);
-                }
-              }
-            } catch (innerError: any) {
-              // 继续尝试下一个设备
-            }
-          }
-          
-          console.error(`[音频设备管理] 所有系统音频设备尝试失败，无法获取音频电平`);
-        } else {
-          console.error(`[音频设备管理] 获取设备 ${deviceId} 音频电平失败: ${error.message}`);
-        }
-        
-        // 所有尝试都失败，返回0
-        return 0;
-      }
+      // 连接节点
+      microphoneSource.value.connect(microphoneAnalyser.value);
       
-      return 0;
-    } catch (error: any) {
-      console.error(`[音频设备管理] 获取设备 ${deviceId} 音频电平失败: ${error.message}`);
-      return 0;
-    }
-  }
-  
-  /**
-   * 为设备创建音频分析器
-   * @param deviceId - 设备ID
-   */
-  private async createAnalyserForDevice(deviceId: string): Promise<void> {
-    try {
-      // 如果已经有分析器，先释放资源
-      if (this.analyserMap.has(deviceId)) {
-        this.releaseAnalyser(deviceId);
-      }
+      // 创建数据数组
+      audioDataArray.value = new Uint8Array(microphoneAnalyser.value.frequencyBinCount);
       
-      // 如果没有音频上下文，创建一个
-      if (!this.audioContext) {
-        this.audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-      }
-      
-      // 特殊处理system-audio设备ID
-      // 这是一个虚拟设备ID，不能直接用于getUserMedia
-      if (deviceId === 'system-audio') {
-        // 尝试查找真实的系统音频设备
-        const allDevices = await navigator.mediaDevices.enumerateDevices();
-        
-        let systemAudioDevice;
-        
-        if (isMacOS()) {
-          // 在Mac上仅查找BlackHole设备
-          systemAudioDevice = allDevices.find(device => 
-            device.kind === 'audioinput' && 
-            device.label.toLowerCase().includes('blackhole')
-          );
-        } else if (isWindows()) {
-          // 在Windows上仅查找立体声混音设备
-          systemAudioDevice = allDevices.find(device => 
-            device.kind === 'audioinput' && 
-            (device.label.toLowerCase().includes('stereo mix') ||
-             device.label.toLowerCase().includes('立体声混音'))
-          );
-        }
-        
-        if (systemAudioDevice) {
-          // 使用找到的真实设备ID创建分析器
-          await this.createRealDeviceAnalyser(systemAudioDevice.deviceId);
-          // 将分析器映射到虚拟设备ID
-          if (this.analyserMap.has(systemAudioDevice.deviceId)) {
-            const analyserInfo = this.analyserMap.get(systemAudioDevice.deviceId);
-            if (analyserInfo) {
-              this.analyserMap.set(deviceId, analyserInfo);
-              // 不要删除原始映射，因为我们需要在两个ID上都能访问同一个分析器
-            }
-          } else {
-            throw new Error(`无法为找到的系统音频设备 ${systemAudioDevice.label} 创建分析器`);
-          }
-        } else {
-          throw new Error('未找到可用的系统音频设备');
-        }
-      } else {
-        // 正常设备ID，直接创建分析器
-        await this.createRealDeviceAnalyser(deviceId);
-      }
-    } catch (error: any) {
-      console.error(`[音频设备管理] 为设备 ${deviceId} 创建音频分析器失败: ${error.message}`);
-      throw error;
-    }
-  }
-  
-  /**
-   * 为真实设备ID创建音频分析器
-   * @param deviceId - 真实设备ID
-   */
-  private async createRealDeviceAnalyser(deviceId: string): Promise<void> {
-    try {
-      // 获取设备的媒体流
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: { deviceId: { exact: deviceId } },
-        video: false
-      });
-      
-      // 创建音频源和分析器
-      const source = this.audioContext!.createMediaStreamSource(stream);
-      const analyser = this.audioContext!.createAnalyser();
-      
-      // 创建增益节点
-      const gainNode = this.audioContext!.createGain();
-      gainNode.gain.value = 1.0; // 默认增益为1.0（100%）
-      
-      // 配置分析器
-      analyser.fftSize = 256;
-      analyser.smoothingTimeConstant = 0.8;
-      
-      // 连接音频源到增益节点，再连接到分析器
-      source.connect(gainNode);
-      gainNode.connect(analyser);
-      
-      // 存储分析器信息
-      this.analyserMap.set(deviceId, { analyser, stream, source, gainNode });
-    } catch (error: any) {
-      if (error.name === 'OverconstrainedError') {
-        console.error(`[音频设备管理] 设备ID不存在或无法访问: ${deviceId}`);
-      } else if (error.name === 'NotAllowedError') {
-        console.error(`[音频设备管理] 用户拒绝了麦克风访问权限`);
-      } else if (error.name === 'NotFoundError') {
-        console.error(`[音频设备管理] 找不到指定的设备: ${deviceId}`);
-      }
-      throw error;
-    }
-  }
-  
-  /**
-   * 获取分析器的音频电平
-   * @param deviceId - 设备ID
-   * @returns number 音频电平 (0-100)
-   */
-  private getAnalyserLevel(deviceId: string): number {
-    const analyserInfo = this.analyserMap.get(deviceId);
-    if (!analyserInfo) {
-      return 0;
+      // 开始分析音频电平
+      startMicrophoneLevelAnalysis();
     }
     
-    const { analyser } = analyserInfo;
-    const dataArray = new Uint8Array(analyser.frequencyBinCount);
-    analyser.getByteFrequencyData(dataArray);
-    
-    // 计算平均值
-    let sum = 0;
-    for (let i = 0; i < dataArray.length; i++) {
-      sum += dataArray[i];
-    }
-    const average = sum / dataArray.length;
-    
-    // 将平均值转换为0-100范围
-    const level = Math.min(100, Math.round(average / 255 * 100));
-    
-    return level;
+    console.log('[audioDeviceManager.ts] 成功打开麦克风', deviceId);
+    return true;
+  } catch (error) {
+    console.error('[audioDeviceManager.ts] 打开麦克风失败', error);
+    return false;
   }
+}
+
+/**
+ * 启动麦克风音频电平分析
+ */
+function startMicrophoneLevelAnalysis() {
+  if (!microphoneAnalyser.value || !audioDataArray.value) return;
   
-  /**
-   * 释放分析器资源
-   * @param deviceId - 设备ID
-   */
-  private releaseAnalyser(deviceId: string): void {
-    const analyserInfo = this.analyserMap.get(deviceId);
-    if (!analyserInfo) {
+  // 定义分析函数
+  const analyzeLevel = () => {
+    if (!microphoneAnalyser.value || !audioDataArray.value) return;
+    
+    // 如果已静音，则强制电平为0
+    if (microphoneState.muted) {
+      microphoneState.level = 0;
+      requestAnimationFrame(analyzeLevel);
       return;
     }
     
-    const { source, stream, gainNode } = analyserInfo;
+    // 获取音频数据
+    microphoneAnalyser.value.getByteFrequencyData(audioDataArray.value);
     
-    try {
-      // 断开连接
-      if (gainNode) {
-        gainNode.disconnect();
+    // 计算平均电平
+    let sum = 0;
+    for (let i = 0; i < audioDataArray.value.length; i++) {
+      sum += audioDataArray.value[i];
+    }
+    
+    // 计算平均值并转换到0-100范围
+    const average = sum / audioDataArray.value.length;
+    microphoneState.level = Math.min(100, Math.round((average / 256) * 100));
+    
+    // 继续下一帧分析
+    requestAnimationFrame(analyzeLevel);
+  };
+  
+  // 开始分析
+  analyzeLevel();
+}
+
+/**
+ * 关闭麦克风
+ */
+export function closeMicrophone() {
+  // 停止所有轨道
+  if (microphoneStream.value) {
+    microphoneStream.value.getTracks().forEach(track => track.stop());
+    microphoneStream.value = null;
+  }
+  
+  // 断开音频节点
+  if (microphoneSource.value) {
+    microphoneSource.value.disconnect();
+    microphoneSource.value = null;
+  }
+  
+  microphoneAnalyser.value = null;
+  
+  // 重置状态
+  microphoneState.level = 0;
+  console.log('[audioDeviceManager.ts] 麦克风已关闭');
+}
+
+/**
+ * 设置麦克风静音状态
+ * @param muted 是否静音
+ */
+export function setMicrophoneMuted(muted: boolean) {
+  microphoneState.muted = muted;
+  
+  // 如果有流，设置其轨道的启用状态
+  if (microphoneStream.value) {
+    microphoneStream.value.getAudioTracks().forEach(track => {
+      track.enabled = !muted;
+    });
+  }
+  
+  // 如果静音，确保电平为0
+  if (muted) {
+    microphoneState.level = 0;
+  }
+  
+  console.log('[audioDeviceManager.ts] 设置麦克风静音状态', muted);
+}
+
+/**
+ * 设置麦克风音量
+ * @param volume 音量值 (0-100)
+ */
+export function setMicrophoneVolume(volume: number) {
+  microphoneState.volume = Math.max(0, Math.min(100, volume));
+  console.log('[audioDeviceManager.ts] 设置麦克风音量', microphoneState.volume);
+  
+  // 如果有GainNode，可以设置音量增益
+  // 这里简化处理，仅保存音量值
+}
+
+/**
+ * 打开系统音频捕获
+ * @param outputDeviceId (可选) 输出设备ID，仅用于WASAPI捕获
+ */
+export async function openSystemAudio(outputDeviceId?: string): Promise<boolean> {
+  // 先关闭现有的系统音频捕获
+  closeSystemAudio();
+  
+  // 尝试各种捕获方法
+  if (isElectron.value) {
+    // Windows平台只使用desktop capture
+    if (isWindows.value) {
+      return await startDesktopCapturerAudio();
+    } else if (isMac.value && isBlackholeInstalled.value) {
+      // macOS下通过BlackHole捕获
+      return await startBlackholeCapture();
+    } else {
+      // 其他情况下使用desktopCapturer API
+      return await startDesktopCapturerAudio();
+    }
+  } else {
+    console.error('[audioDeviceManager.ts] 当前不在Electron环境中，无法捕获系统音频');
+    return false;
+  }
+}
+
+/**
+ * 使用WASAPI捕获系统音频 (仅限Windows)
+ */
+async function startWasapiCapture(outputDeviceId?: string): Promise<boolean> {
+  try {
+    if (!isElectron.value || !isWasapiSupported.value || !window.electronAPI?.startWasapiCapture) {
+      return false;
+    }
+    
+    const result = await window.electronAPI.startWasapiCapture(outputDeviceId) || false;
+    
+    if (result) {
+      systemAudioState.enabled = true;
+      systemAudioState.captureMethod = 'wasapi';
+      console.log('[audioDeviceManager.ts] 成功启动WASAPI音频捕获');
+      
+      // 启动WASAPI电平监测
+      if (wasapiLevelTimer) {
+        window.clearInterval(wasapiLevelTimer);
       }
-      source.disconnect();
       
-      // 停止媒体流的所有轨道
-      const tracks = stream.getTracks();
+      wasapiLevelTimer = window.setInterval(async () => {
+        if (systemAudioState.muted) {
+          systemAudioState.level = 0;
+          return;
+        }
+        
+        if (window.electronAPI?.getWasapiAudioLevel) {
+          const level = await window.electronAPI.getWasapiAudioLevel() || 0;
+          systemAudioState.level = level;
+        }
+      }, 100);
       
-      tracks.forEach((track) => {
+      return true;
+    }
+    
+    return false;
+  } catch (error) {
+    console.error('[audioDeviceManager.ts] WASAPI音频捕获失败', error);
+    systemAudioState.captureMethod = 'none';
+    return false;
+  }
+}
+
+/**
+ * 使用BlackHole插件捕获系统音频 (仅限macOS)
+ */
+async function startBlackholeCapture(): Promise<boolean> {
+  try {
+    if (!isElectron.value || !isBlackholeInstalled.value) {
+      return false;
+    }
+    
+    // 尝试获取BlackHole设备
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    const blackholeDevice = devices.find(device => 
+      device.kind === 'audioinput' && device.label.includes('BlackHole')
+    );
+    
+    if (!blackholeDevice) {
+      console.error('[audioDeviceManager.ts] 找不到BlackHole设备');
+      return false;
+    }
+    
+    // 捕获BlackHole设备的音频
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        deviceId: { exact: blackholeDevice.deviceId }
+      }
+    });
+    
+    systemAudioStream.value = stream;
+    
+    // 创建音频处理节点
+    if (audioContext.value) {
+      systemAudioSource.value = audioContext.value.createMediaStreamSource(stream);
+      systemAudioAnalyser.value = audioContext.value.createAnalyser();
+      systemAudioAnalyser.value.fftSize = 256;
+      
+      // 连接节点
+      systemAudioSource.value.connect(systemAudioAnalyser.value);
+      
+      // 创建数据数组
+      const dataArray = new Uint8Array(systemAudioAnalyser.value.frequencyBinCount);
+      
+      // 开始分析音频电平
+      const analyzeLevel = () => {
+        if (!systemAudioAnalyser.value) return;
+        
+        // 如果已静音，则强制电平为0
+        if (systemAudioState.muted) {
+          systemAudioState.level = 0;
+          requestAnimationFrame(analyzeLevel);
+          return;
+        }
+        
+        // 获取音频数据
+        systemAudioAnalyser.value.getByteFrequencyData(dataArray);
+        
+        // 计算平均电平
+        let sum = 0;
+        for (let i = 0; i < dataArray.length; i++) {
+          sum += dataArray[i];
+        }
+        
+        // 计算平均值并转换到0-100范围
+        const average = sum / dataArray.length;
+        systemAudioState.level = Math.min(100, Math.round((average / 256) * 100));
+        
+        // 继续下一帧分析
+        requestAnimationFrame(analyzeLevel);
+      };
+      
+      // 开始分析
+      analyzeLevel();
+    }
+    
+    systemAudioState.enabled = true;
+    systemAudioState.captureMethod = 'blackhole';
+    console.log('[audioDeviceManager.ts] 成功启动BlackHole音频捕获');
+    
+    return true;
+  } catch (error) {
+    console.error('[audioDeviceManager.ts] BlackHole音频捕获失败', error);
+    systemAudioState.captureMethod = 'none';
+    return false;
+  }
+}
+
+/**
+ * 使用desktopCapturer API捕获系统音频
+ */
+async function startDesktopCapturerAudio(): Promise<boolean> {
+  try {
+    if (!isElectron.value) {
+      return false;
+    }
+    
+    console.log('[audioDeviceManager.ts] 尝试使用desktopCapturer捕获系统音频');
+    
+    // 使用getUserMedia和desktopCapturer结合捕获系统音频
+    const constraints: MediaStreamConstraints = {
+      audio: {
+        // 添加TypeScript注释忽略类型检查，因为这是Electron特有的非标准参数
+        // @ts-ignore
+        mandatory: {
+          chromeMediaSource: 'desktop'
+        }
+      },
+      video: {
+        // @ts-ignore
+        mandatory: {
+          chromeMediaSource: 'desktop',
+          chromeMediaSourceId: 'screen:0:0',
+          minWidth: 1,
+          maxWidth: 1,
+          minHeight: 1,
+          maxHeight: 1
+        }
+      }
+    };
+    
+    const stream = await navigator.mediaDevices.getUserMedia(constraints);
+    
+    // 安全地移除视频轨道，防止removeChild错误
+    const videoTracks = stream.getVideoTracks();
+    if (videoTracks.length > 0) {
+      videoTracks.forEach(track => {
         try {
           track.stop();
-        } catch (error: any) {
-          console.error(`[音频设备管理] 停止设备 ${deviceId} 的音频轨道失败: ${error.message}`);
+          stream.removeTrack(track);
+        } catch (e) {
+          console.warn('[audioDeviceManager.ts] 移除视频轨道时出错', e);
+          track.enabled = false; // 如果无法移除，至少禁用它
         }
       });
+    }
+    
+    // 确保我们只处理音频轨道
+    const audioTracks = stream.getAudioTracks();
+    if (audioTracks.length === 0) {
+      console.error('[audioDeviceManager.ts] 捕获的桌面流中没有音频轨道');
+      return false;
+    }
+    
+    // 创建一个只包含音频轨道的新流
+    const audioOnlyStream = new MediaStream(audioTracks);
+    systemAudioStream.value = audioOnlyStream;
+    
+    // 创建音频处理节点
+    if (audioContext.value && systemAudioStream.value) {
+      // 首先检查音频上下文的状态
+      if (audioContext.value.state === 'suspended') {
+        await audioContext.value.resume();
+      }
       
-      // 从映射中移除
-      this.analyserMap.delete(deviceId);
-    } catch (error: any) {
-      console.error(`[音频设备管理] 释放设备 ${deviceId} 的分析器资源时发生错误: ${error.message}`);
+      // 创建和连接音频节点
+      systemAudioSource.value = audioContext.value.createMediaStreamSource(systemAudioStream.value);
+      systemAudioAnalyser.value = audioContext.value.createAnalyser();
+      
+      // 增强音频分析配置
+      systemAudioAnalyser.value.fftSize = 1024; // 更高的FFT尺寸以获得更好的频率分辨率
+      systemAudioAnalyser.value.smoothingTimeConstant = 0.8; // 增加平滑系数，使电平变化更平滑
+      
+      // 连接节点
+      systemAudioSource.value.connect(systemAudioAnalyser.value);
+      
+      // 创建一个增益节点，用于应用系统音量
+      systemAudioGainNode.value = audioContext.value.createGain();
+      systemAudioGainNode.value.gain.value = systemAudioState.volume / 100;
+      
+      // 连接增益节点
+      systemAudioAnalyser.value.connect(systemAudioGainNode.value);
+      
+      // 创建数据数组
+      const bufferLength = systemAudioAnalyser.value.frequencyBinCount;
+      const dataArray = new Uint8Array(bufferLength);
+      
+      // 开始分析音频电平
+      const analyzeLevel = () => {
+        if (!systemAudioAnalyser.value) return;
+        
+        // 如果已静音，则强制电平为0
+        if (systemAudioState.muted) {
+          systemAudioState.level = 0;
+          requestAnimationFrame(analyzeLevel);
+          return;
+        }
+        
+        // 获取频域数据
+        systemAudioAnalyser.value.getByteFrequencyData(dataArray);
+        
+        // Windows平台优化的电平检测算法
+        let sum = 0;
+        let significantBins = 0;
+        
+        // 低频范围（通常包含大部分听觉上重要的声音）
+        const lowFreqEndIndex = Math.floor(bufferLength * 0.4); // 低频占总频谱的40%
+        for (let i = 0; i < lowFreqEndIndex; i++) {
+          // 给予低频更高的权重，因为人耳对低频更敏感
+          const weight = 1.5 - (i / lowFreqEndIndex) * 0.5; // 权重从1.5线性降至1.0
+          sum += dataArray[i] * weight;
+          
+          // 只统计有显著能量的频率
+          if (dataArray[i] > 5) {
+            significantBins++;
+          }
+        }
+        
+        // 中高频范围（检测语音、音乐等）
+        for (let i = lowFreqEndIndex; i < bufferLength; i++) {
+          // 给予中高频正常权重
+          sum += dataArray[i];
+          
+          // 只统计有显著能量的频率
+          if (dataArray[i] > 10) { // 中高频要求更高的能量才算显著
+            significantBins++;
+          }
+        }
+        
+        // 计算加权平均值并应用调整因子
+        let average = sum / bufferLength;
+        
+        // 增加Windows平台的电平灵敏度
+        if (isWindows.value) {
+          const sensitivity = 2.5; // Windows平台需要更高的灵敏度
+          average *= sensitivity;
+          
+          // 确保有意义的微弱信号也能显示
+          if (significantBins > 3 && average < 10) {
+            average = Math.max(average, 10); // 至少显示10%的电平
+          }
+        }
+        
+        // 计算最终电平值（0-100）
+        systemAudioState.level = Math.min(100, Math.round((average / 256) * 100));
+        
+        // 继续下一帧分析
+        requestAnimationFrame(analyzeLevel);
+      };
+      
+      // 开始分析
+      analyzeLevel();
+      
+      // 创建一个静音的音频节点连接到目标，防止"AudioContext was not allowed to start"警告
+      const silentNode = audioContext.value.createGain();
+      silentNode.gain.value = 0;
+      silentNode.connect(audioContext.value.destination);
+      
+      console.log('[audioDeviceManager.ts] 音频分析器已设置，电平检测已启动');
     }
-  }
-  
-  /**
-   * 模拟音频电平
-   * 用于系统音频等无法直接获取电平的设备
-   * @returns number 模拟的音频电平 (0-100)
-   */
-  private simulateAudioLevel(): number {
-    // 不再使用模拟电平，而是返回0
-    return 0;
-  }
-
-  /**
-   * 显示安装Blackhole的指导（MacOS）
-   */
-  showBlackholeInstallGuide(): void {
-    // 在实际应用中，这里可以显示一个模态框或通知，指导用户安装Blackhole
-  }
-
-  /**
-   * 显示启用立体声混音的指导（Windows）
-   */
-  showStereoMixEnableGuide(): void {
-    // 在实际应用中，这里可以显示一个模态框或通知，指导用户启用立体声混音
-  }
-  
-  /**
-   * 释放所有资源
-   * 在应用关闭时调用
-   */
-  releaseResources(): void {
-    // 释放所有分析器
-    const deviceIds = Array.from(this.analyserMap.keys());
     
-    for (const deviceId of deviceIds) {
-      try {
-        this.releaseAnalyser(deviceId);
-      } catch (error: any) {
-        console.error(`[音频设备管理] 释放设备 ${deviceId} 的资源时发生错误: ${error.message}`);
-      }
-    }
+    systemAudioState.enabled = true;
+    systemAudioState.captureMethod = 'desktop-capturer';
+    console.log('[audioDeviceManager.ts] 成功启动desktopCapturer音频捕获');
     
-    // 关闭音频上下文
-    if (this.audioContext && this.audioContext.state !== 'closed') {
-      try {
-        this.audioContext.close();
-      } catch (error: any) {
-        console.error(`[音频设备管理] 关闭音频上下文时发生错误: ${error.message}`);
-      }
-    }
-    
-    this.audioContext = null;
+    return true;
+  } catch (error) {
+    console.error('[audioDeviceManager.ts] desktopCapturer音频捕获失败', error);
+    systemAudioState.captureMethod = 'none';
+    return false;
   }
 }
 
-// 导出单例实例
-const audioDeviceManager = new AudioDeviceManager();
-
-// 在窗口关闭前释放资源
-if (typeof window !== 'undefined') {
-  window.addEventListener('beforeunload', () => {
-    audioDeviceManager.releaseResources();
-  });
+/**
+ * 关闭系统音频捕获
+ */
+export function closeSystemAudio() {
+  // 根据不同的捕获方法进行清理
+  if (systemAudioState.captureMethod === 'wasapi') {
+    // 停止WASAPI捕获
+    if (isElectron.value && window.electronAPI?.stopWasapiCapture) {
+      window.electronAPI.stopWasapiCapture();
+    }
+    
+    // 清除电平监测定时器
+    if (wasapiLevelTimer) {
+      window.clearInterval(wasapiLevelTimer);
+      wasapiLevelTimer = null;
+    }
+  } else {
+    // 停止媒体流
+    if (systemAudioStream.value) {
+      systemAudioStream.value.getTracks().forEach(track => track.stop());
+      systemAudioStream.value = null;
+    }
+    
+    // 断开音频节点
+    if (systemAudioSource.value) {
+      systemAudioSource.value.disconnect();
+      systemAudioSource.value = null;
+    }
+    
+    systemAudioAnalyser.value = null;
+  }
+  
+  // 重置状态
+  systemAudioState.enabled = false;
+  systemAudioState.level = 0;
+  systemAudioState.captureMethod = 'none';
+  console.log('[audioDeviceManager.ts] 系统音频捕获已关闭');
 }
 
-export default audioDeviceManager; 
+/**
+ * 设置系统音频静音状态
+ * @param muted 是否静音
+ */
+export function setSystemAudioMuted(muted: boolean) {
+  systemAudioState.muted = muted;
+  
+  // 根据不同的捕获方法处理静音
+  if (systemAudioStream.value) {
+    // 对音频轨道设置启用状态
+    systemAudioStream.value.getAudioTracks().forEach(track => {
+      track.enabled = !muted;
+    });
+    
+    // 如果使用desktop-capturer且有增益节点，设置增益为0实现静音
+    if (systemAudioState.captureMethod === 'desktop-capturer' && systemAudioGainNode.value) {
+      try {
+        systemAudioGainNode.value.gain.value = muted ? 0 : systemAudioState.volume / 100;
+      } catch (error) {
+        console.error('[audioDeviceManager.ts] 设置系统音频静音状态失败', error);
+      }
+    }
+    
+    if (muted) {
+      systemAudioState.level = 0;
+    }
+  } else if (systemAudioState.captureMethod === 'wasapi') {
+    // WASAPI捕获方式下，静音通过电平监测时直接设置电平为0
+    if (muted) {
+      systemAudioState.level = 0;
+    }
+  }
+  
+  console.log('[audioDeviceManager.ts] 设置系统音频静音状态', muted);
+}
+
+/**
+ * 设置系统音频音量
+ * @param volume 音量值 (0-100)
+ */
+export function setSystemAudioVolume(volume: number) {
+  systemAudioState.volume = Math.max(0, Math.min(100, volume));
+  console.log('[audioDeviceManager.ts] 设置系统音频音量', systemAudioState.volume);
+  
+  // 如果使用desktop-capturer，通过GainNode应用音量
+  if (systemAudioState.captureMethod === 'desktop-capturer' && systemAudioGainNode.value) {
+    try {
+      // 音量值从0-100转换为0-1的增益值
+      systemAudioGainNode.value.gain.value = systemAudioState.volume / 100;
+      console.log('[audioDeviceManager.ts] 已应用系统音频增益', systemAudioGainNode.value.gain.value);
+    } catch (error) {
+      console.error('[audioDeviceManager.ts] 设置系统音频增益失败', error);
+    }
+  }
+  // 如果是WASAPI捕获，尝试设置设备音量
+  else if (systemAudioState.captureMethod === 'wasapi' && isElectron.value && window.electronAPI?.setDeviceVolume) {
+    // 发送设置音量请求到主进程
+    const selectedOutputId = systemAudioState.captureMethod === 'wasapi' ? 
+      microphoneState.deviceId : ''; // 此处需要存储选中的输出设备ID，临时使用麦克风ID代替
+    
+    window.electronAPI.setDeviceVolume(selectedOutputId, volume);
+  }
+}
+
+/**
+ * 获取麦克风设备列表
+ */
+export function getMicrophoneDevices() {
+  return microphoneDevices.value;
+}
+
+/**
+ * 获取音频输出设备列表
+ */
+export function getAudioOutputDevices() {
+  return audioOutputDevices.value;
+}
+
+/**
+ * 获取麦克风状态
+ */
+export function getMicrophoneState() {
+  return microphoneState;
+}
+
+/**
+ * 获取系统音频状态
+ */
+export function getSystemAudioState() {
+  return systemAudioState;
+}
+
+/**
+ * 获取捕获支持信息
+ */
+export function getCaptureSupport() {
+  return {
+    isWasapiSupported: isWasapiSupported.value,
+    isBlackholeInstalled: isBlackholeInstalled.value,
+    isStereoMixEnabled: isStereoMixEnabled.value
+  };
+}
+
+/**
+ * 清理音频设备管理器资源
+ */
+export function cleanupAudioDeviceManager() {
+  // 关闭麦克风
+  closeMicrophone();
+  
+  // 关闭系统音频捕获
+  closeSystemAudio();
+  
+  // 关闭音频上下文
+  if (audioContext.value) {
+    audioContext.value.close();
+    audioContext.value = null;
+  }
+  
+  console.log('[audioDeviceManager.ts] 音频设备管理器资源已清理');
+}
+
+/**
+ * 刷新设备列表
+ */
+export async function refreshDevices(): Promise<void> {
+  try {
+    // 获取麦克风设备列表
+    await refreshMicrophoneDevices();
+    
+    // 获取音频输出设备列表（Windows平台特有）
+    if (isWindows.value && isElectron.value && window.electronAPI?.getAudioOutputDevices) {
+      try {
+        const outputDevices = await window.electronAPI.getAudioOutputDevices();
+        if (outputDevices && Array.isArray(outputDevices)) {
+          audioOutputDevices.value = outputDevices;
+          console.log('[audioDeviceManager.ts] 已刷新音频输出设备列表', audioOutputDevices.value);
+        }
+      } catch (err) {
+        console.error('[audioDeviceManager.ts] 获取音频输出设备失败', err);
+        audioOutputDevices.value = [];
+      }
+    }
+  } catch (error) {
+    console.error('[audioDeviceManager.ts] 刷新设备列表失败', error);
+  }
+}

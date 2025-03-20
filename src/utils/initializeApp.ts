@@ -13,7 +13,7 @@ import type { StreamConfig } from '../types/broadcast'
  */
 export async function initializeAudioDevices() {
   const audioStore = useAudioStore()
-  return await audioStore.initAudioDevices()
+  return await audioStore.initialize()
 }
 
 /**

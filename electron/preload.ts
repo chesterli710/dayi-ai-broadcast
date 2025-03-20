@@ -55,6 +55,39 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
 
   /**
+   * 检查Windows上WASAPI捕获是否可用
+   * @returns Promise<boolean> 是否可用
+   */
+  checkWasapiAvailable: () => {
+    return ipcRenderer.invoke('check-wasapi-available')
+  },
+
+  /**
+   * 启动WASAPI音频捕获
+   * @param deviceId - 可选的输出设备ID，如果不提供则使用默认输出设备
+   * @returns Promise<MediaStream> 捕获的媒体流
+   */
+  startWasapiCapture: (deviceId) => {
+    return ipcRenderer.invoke('start-wasapi-capture', deviceId)
+  },
+
+  /**
+   * 停止WASAPI音频捕获
+   */
+  stopWasapiCapture: () => {
+    return ipcRenderer.invoke('stop-wasapi-capture')
+  },
+
+  /**
+   * 获取WASAPI音频电平
+   * @param deviceId - 可选的输出设备ID，如果不提供则使用当前捕获的设备
+   * @returns Promise<number> 音频电平 (0-100)
+   */
+  getWasapiAudioLevel: (deviceId) => {
+    return ipcRenderer.invoke('get-wasapi-audio-level', deviceId)
+  },
+
+  /**
    * 设置设备音量
    * @param deviceId - 设备ID
    * @param volume - 音量值 (0-100)
@@ -62,6 +95,22 @@ contextBridge.exposeInMainWorld('electronAPI', {
    */
   setDeviceVolume: (deviceId, volume) => {
     return ipcRenderer.invoke('set-device-volume', deviceId, volume)
+  },
+
+  /**
+   * 获取Windows上的默认音频输出设备
+   * @returns Promise<string> 默认音频输出设备名称
+   */
+  getDefaultAudioOutput: () => {
+    return ipcRenderer.invoke('get-default-audio-output')
+  },
+
+  /**
+   * 获取Windows上的所有音频输出设备
+   * @returns Promise<{id: string, name: string, isDefault: boolean}[]> 音频输出设备列表
+   */
+  getAudioOutputDevices: () => {
+    return ipcRenderer.invoke('get-audio-output-devices')
   },
 
   /**

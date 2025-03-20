@@ -1,443 +1,441 @@
 /**
- * 音频存储
- * 管理应用的音频设备和配置状态
+ * 音频状态管理
+ * 提供音频设备管理和状态共享的Pinia Store
  */
-import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
-import type { AudioDevice, AudioConfig, SystemAudioStatus } from '../types/audio'
-import { AudioSourceType, AudioCodecType, AudioSampleRate, AudioBitrate } from '../types/audio'
-import audioDeviceManager from '../utils/audioDeviceManager'
+
+import { defineStore } from 'pinia';
+import { ref, reactive, computed, watch, onUnmounted } from 'vue';
+import {
+  type MicrophoneDeviceInfo,
+  type AudioOutputDeviceInfo,
+  type AudioSettings,
+  AudioCodecType,
+  AudioSampleRate,
+  AudioBitrate
+} from '../types/audio';
+import {
+  initAudioDeviceManager,
+  refreshMicrophoneDevices,
+  getMicrophoneDevices,
+  getAudioOutputDevices,
+  getMicrophoneState,
+  getSystemAudioState,
+  getCaptureSupport,
+  openMicrophone,
+  closeMicrophone,
+  setMicrophoneMuted,
+  setMicrophoneVolume,
+  openSystemAudio,
+  closeSystemAudio,
+  setSystemAudioMuted,
+  setSystemAudioVolume,
+  cleanupAudioDeviceManager
+} from '../utils/audioDeviceManager';
 
 /**
- * 音频存储
- * 管理应用的音频设备和配置状态
+ * 音频状态Store
  */
 export const useAudioStore = defineStore('audio', () => {
-  /**
-   * 可用的音频设备列表
-   */
-  const devices = ref<AudioDevice[]>([])
+  // 判断当前操作系统是否为Windows
+  const isWindows = computed(() => {
+    return navigator.platform.toLowerCase().includes('win');
+  });
+
+  // 是否已初始化
+  const initialized = ref(false);
   
-  /**
-   * 当前激活的音频设备
-   */
-  const activeDevices = ref<AudioDevice[]>([])
+  // 麦克风设备列表
+  const microphoneDevices = ref<MicrophoneDeviceInfo[]>([]);
   
-  /**
-   * 音频配置
-   */
-  const config = ref<AudioConfig>({
+  // 音频输出设备列表
+  const audioOutputDevices = ref<AudioOutputDeviceInfo[]>([]);
+  
+  // 捕获支持状态
+  const captureSupport = reactive({
+    isWasapiSupported: false,
+    isBlackholeInstalled: false,
+    isStereoMixEnabled: false
+  });
+  
+  // 麦克风状态
+  const microphoneState = reactive({
+    deviceId: '',
+    volume: 100,
+    muted: false,
+    level: 0
+  });
+  
+  // 系统音频状态
+  const systemAudioState = reactive({
+    enabled: false,
+    volume: 100,
+    muted: false,
+    level: 0,
+    captureMethod: 'none' as 'blackhole' | 'wasapi' | 'desktop-capturer' | 'none'
+  });
+  
+  // 当前音频设置
+  const audioSettings = reactive<AudioSettings>({
+    selectedMicrophoneId: null,
+    selectedOutputDeviceId: null,
+    microphoneVolume: 100,
+    microphoneMuted: false,
+    systemAudioVolume: 100,
+    systemAudioMuted: false
+  });
+  
+  // 音频编码配置
+  const config = reactive({
     codec: AudioCodecType.AAC,
-    sampleRate: AudioSampleRate.RATE_48000,
-    bitrate: AudioBitrate.BITRATE_192K,
+    sampleRate: AudioSampleRate.RATE_44100,
+    bitrate: AudioBitrate.BITRATE_128,
     channels: 2
-  })
+  });
   
   /**
-   * 系统音频状态
+   * 初始化音频管理系统
    */
-  const systemAudioStatus = ref<SystemAudioStatus>({
-    isAvailable: false
-  })
-  
-  /**
-   * 是否静音
-   */
-  const isMuted = ref(false)
-  
-  /**
-   * 全局音量 (0-100)
-   */
-  const volume = ref(100)
-  
-  /**
-   * 音频电平监测定时器
-   */
-  let levelMonitorTimer: number | null = null;
-  
-  /**
-   * 初始化音频设备
-   */
-  async function initAudioDevices() {
+  async function initialize() {
+    if (initialized.value) return;
+    
     try {
-      // 获取所有音频设备
-      const allDevices = await audioDeviceManager.getAllAudioDevices()
+      // 初始化音频设备管理器
+      await initAudioDeviceManager();
       
-      // 加载保存的音量设置
-      const savedVolumeSettings = loadDeviceVolumeSettings()
+      // 获取设备列表
+      microphoneDevices.value = getMicrophoneDevices();
+      audioOutputDevices.value = getAudioOutputDevices();
       
-      // 为每个设备添加默认音量和电平值，应用保存的音量设置
-      devices.value = allDevices.map(device => ({
-        ...device,
-        volume: savedVolumeSettings[device.id] ?? 100,
-        level: 0
-      }))
+      // 获取捕获支持状况
+      const support = getCaptureSupport();
+      captureSupport.isWasapiSupported = support.isWasapiSupported;
+      captureSupport.isBlackholeInstalled = support.isBlackholeInstalled;
+      captureSupport.isStereoMixEnabled = support.isStereoMixEnabled;
       
-      // 检查系统音频状态
-      systemAudioStatus.value = await audioDeviceManager.checkSystemAudioStatus()
-      
-      // 默认激活麦克风和系统音频（如果可用）
-      const defaultDevices = devices.value.filter(device => 
-        device.type === AudioSourceType.MICROPHONE && device.isDefault ||
-        device.type === AudioSourceType.SYSTEM_AUDIO
-      )
-      
-      // 如果没有默认设备，尝试使用第一个麦克风
-      if (defaultDevices.length === 0) {
-        const firstMic = devices.value.find(device => device.type === AudioSourceType.MICROPHONE)
-        if (firstMic) {
-          defaultDevices.push(firstMic)
+      // 尝试选择默认麦克风
+      if (microphoneDevices.value.length > 0) {
+        const defaultDevice = microphoneDevices.value.find(device => device.isDefault);
+        if (defaultDevice) {
+          audioSettings.selectedMicrophoneId = defaultDevice.deviceId;
+        } else {
+          audioSettings.selectedMicrophoneId = microphoneDevices.value[0].deviceId;
         }
       }
       
-      // 设置激活设备
-      activeDevices.value = defaultDevices.map(device => ({
-        ...device,
-        isActive: true
-      }))
-      
-      // 如果系统音频不可用，显示相应的指导
-      if (!systemAudioStatus.value.isAvailable) {
-        if (systemAudioStatus.value.isBlackholeInstalled === false) {
-          audioDeviceManager.showBlackholeInstallGuide()
-        } else if (systemAudioStatus.value.isStereoMixEnabled === false) {
-          audioDeviceManager.showStereoMixEnableGuide()
+      // 尝试选择默认输出设备
+      if (audioOutputDevices.value.length > 0) {
+        const defaultOutputDevice = audioOutputDevices.value.find(device => device.isDefault);
+        if (defaultOutputDevice) {
+          audioSettings.selectedOutputDeviceId = defaultOutputDevice.id;
+        } else {
+          audioSettings.selectedOutputDeviceId = audioOutputDevices.value[0].id;
         }
       }
       
-      // 启动音频电平监测
-      startLevelMonitoring()
+      // 设置监听器，同步状态
+      setInterval(() => {
+        const mic = getMicrophoneState();
+        const sys = getSystemAudioState();
+        
+        // 更新麦克风状态
+        microphoneState.deviceId = mic.deviceId;
+        microphoneState.volume = mic.volume;
+        microphoneState.muted = mic.muted;
+        microphoneState.level = mic.level;
+        
+        // 更新系统音频状态
+        systemAudioState.enabled = sys.enabled;
+        systemAudioState.volume = sys.volume;
+        systemAudioState.muted = sys.muted;
+        systemAudioState.level = sys.level;
+        systemAudioState.captureMethod = sys.captureMethod;
+      }, 100);
       
-      return true
+      initialized.value = true;
+      console.log('[audioStore.ts] 音频系统初始化完成');
     } catch (error) {
-      console.error('初始化音频设备失败:', error)
-      return false
+      console.error('[audioStore.ts] 音频系统初始化失败', error);
     }
   }
   
   /**
-   * 激活音频设备
-   * @param deviceId - 设备ID
-   */
-  function activateDevice(deviceId: string) {
-    const device = devices.value.find(d => d.id === deviceId)
-    if (!device) {
-      console.error(`找不到设备: ${deviceId}`)
-      return
-    }
-    
-    // 如果设备已经激活，则不做任何操作
-    if (activeDevices.value.some(d => d.id === deviceId)) {
-      console.log(`设备已经激活: ${deviceId}`)
-      return
-    }
-    
-    console.log(`激活设备: ${deviceId}, 类型: ${device.type}`)
-    
-    // 如果是麦克风，先停用其他麦克风
-    if (device.type === AudioSourceType.MICROPHONE) {
-      const activeMics = activeDevices.value.filter(d => d.type === AudioSourceType.MICROPHONE)
-      for (const mic of activeMics) {
-        console.log(`停用其他麦克风: ${mic.id}`)
-        deactivateDevice(mic.id)
-      }
-    }
-    
-    // 添加到激活设备列表
-    activeDevices.value.push({
-      ...device,
-      isActive: true
-    })
-    
-    // 更新设备列表中的激活状态
-    devices.value = devices.value.map(d => {
-      if (d.id === deviceId) {
-        return { ...d, isActive: true }
-      }
-      return d
-    })
-  }
-  
-  /**
-   * 停用音频设备
-   * @param deviceId - 设备ID
-   */
-  function deactivateDevice(deviceId: string) {
-    console.log(`停用设备: ${deviceId}`)
-    
-    // 从激活设备列表中移除
-    activeDevices.value = activeDevices.value.filter(d => d.id !== deviceId)
-    
-    // 更新设备列表中的激活状态
-    devices.value = devices.value.map(d => {
-      if (d.id === deviceId) {
-        return { ...d, isActive: false }
-      }
-      return d
-    })
-  }
-  
-  /**
-   * 切换设备激活状态
-   * @param deviceId - 设备ID
-   */
-  function toggleDevice(deviceId: string) {
-    if (activeDevices.value.some(d => d.id === deviceId)) {
-      deactivateDevice(deviceId)
-    } else {
-      activateDevice(deviceId)
-    }
-  }
-  
-  /**
-   * 更新音频配置
-   * @param newConfig - 新的音频配置
-   */
-  function updateConfig(newConfig: Partial<AudioConfig>) {
-    config.value = {
-      ...config.value,
-      ...newConfig
-    }
-  }
-  
-  /**
-   * 切换静音状态
-   */
-  function toggleMute() {
-    isMuted.value = !isMuted.value
-  }
-  
-  /**
-   * 设置全局音量
-   * @param newVolume - 新的音量值 (0-100)
-   */
-  function setVolume(newVolume: number) {
-    volume.value = Math.max(0, Math.min(100, newVolume))
-  }
-  
-  /**
-   * 设置设备音量
-   * @param deviceId - 设备ID
-   * @param newVolume - 新的音量值 (0-100)
-   */
-  async function setDeviceVolume(deviceId: string, newVolume: number) {
-    const clampedVolume = Math.max(0, Math.min(100, newVolume))
-    
-    // 记录当前时间，用于防止电平监测覆盖音量设置
-    const setTime = Date.now()
-    
-    // 更新设备列表中的设备音量
-    devices.value = devices.value.map(device => {
-      if (device.id === deviceId) {
-        return { 
-          ...device, 
-          volume: clampedVolume,
-          // 添加音量设置时间戳，用于防止电平监测覆盖
-          lastVolumeSetTime: setTime
-        }
-      }
-      return device
-    })
-    
-    // 更新激活设备列表中的设备音量
-    activeDevices.value = activeDevices.value.map(device => {
-      if (device.id === deviceId) {
-        return { 
-          ...device, 
-          volume: clampedVolume,
-          // 添加音量设置时间戳，用于防止电平监测覆盖
-          lastVolumeSetTime: setTime
-        }
-      }
-      return device
-    })
-    
-    // 保存音量设置到本地存储，以便下次启动时恢复
-    saveDeviceVolumeSetting(deviceId, clampedVolume)
-    
-    // 调用设备管理器设置设备音量
-    try {
-      const success = await audioDeviceManager.setDeviceVolume(deviceId, clampedVolume)
-      if (success) {
-        console.log(`设备 ${deviceId} 采集音量已设置为 ${clampedVolume}`)
-      } else {
-        console.error(`设置设备 ${deviceId} 采集音量失败`)
-      }
-      return success
-    } catch (error) {
-      console.error(`设置设备 ${deviceId} 采集音量出错:`, error)
-      return false
-    }
-  }
-  
-  /**
-   * 保存设备音量设置到本地存储
-   * @param deviceId - 设备ID
-   * @param volume - 音量值
-   */
-  function saveDeviceVolumeSetting(deviceId: string, volume: number) {
-    try {
-      // 获取现有设置
-      const volumeSettingsStr = localStorage.getItem('audioDeviceVolumes')
-      const volumeSettings = volumeSettingsStr ? JSON.parse(volumeSettingsStr) : {}
-      
-      // 更新设置
-      volumeSettings[deviceId] = volume
-      
-      // 保存回本地存储
-      localStorage.setItem('audioDeviceVolumes', JSON.stringify(volumeSettings))
-      console.log(`设备 ${deviceId} 音量设置 ${volume} 已保存到本地存储`)
-    } catch (error) {
-      console.error('保存设备音量设置失败:', error)
-    }
-  }
-  
-  /**
-   * 从本地存储加载设备音量设置
-   */
-  function loadDeviceVolumeSettings() {
-    try {
-      const volumeSettingsStr = localStorage.getItem('audioDeviceVolumes')
-      if (!volumeSettingsStr) return {}
-      
-      return JSON.parse(volumeSettingsStr)
-    } catch (error) {
-      console.error('加载设备音量设置失败:', error)
-      return {}
-    }
-  }
-  
-  /**
-   * 启动音频电平监测
-   */
-  function startLevelMonitoring() {
-    // 如果已经在监测中，先停止
-    if (levelMonitorTimer !== null) {
-      stopLevelMonitoring()
-    }
-    
-    // 每100ms更新一次音频电平
-    levelMonitorTimer = window.setInterval(async () => {
-      // 只监测激活的设备
-      for (const device of activeDevices.value) {
-        try {
-          // 获取设备当前音频电平
-          const level = await audioDeviceManager.getDeviceLevel(device.id)
-          
-          // 更新设备列表中的设备电平，但不修改音量
-          devices.value = devices.value.map(d => {
-            if (d.id === device.id) {
-              return { 
-                ...d, 
-                level
-                // 不再更新音量，只更新电平
-              }
-            }
-            return d
-          })
-          
-          // 更新激活设备列表中的设备电平，但不修改音量
-          activeDevices.value = activeDevices.value.map(d => {
-            if (d.id === device.id) {
-              return { 
-                ...d, 
-                level
-                // 不再更新音量，只更新电平
-              }
-            }
-            return d
-          })
-        } catch (error) {
-          console.error(`获取设备 ${device.id} 音频电平失败:`, error)
-        }
-      }
-    }, 100)
-  }
-  
-  /**
-   * 停止音频电平监测
-   */
-  function stopLevelMonitoring() {
-    if (levelMonitorTimer !== null) {
-      window.clearInterval(levelMonitorTimer)
-      levelMonitorTimer = null
-    }
-  }
-  
-  /**
-   * 刷新设备列表
+   * 刷新麦克风设备列表
    */
   async function refreshDevices() {
-    const allDevices = await audioDeviceManager.getAllAudioDevices()
-    
-    // 为新设备添加默认音量和电平值，保留已有设备的音量设置
-    devices.value = allDevices.map(newDevice => {
-      const existingDevice = devices.value.find(d => d.id === newDevice.id)
-      return {
-        ...newDevice,
-        volume: existingDevice?.volume ?? 100,
-        level: existingDevice?.level ?? 0
+    try {
+      // 使用导出的刷新设备函数，将同时刷新麦克风和音频输出设备列表
+      await refreshMicrophoneDevices();
+      
+      // 更新Store中的设备列表
+      microphoneDevices.value = getMicrophoneDevices();
+      audioOutputDevices.value = getAudioOutputDevices();
+      
+      console.log('[audioStore.ts] 已刷新所有音频设备列表');
+      
+      // 如果当前选中设备不在列表中，尝试选择新的默认设备
+      if (audioSettings.selectedMicrophoneId) {
+        const deviceExists = microphoneDevices.value.some(
+          device => device.deviceId === audioSettings.selectedMicrophoneId
+        );
+        
+        if (!deviceExists) {
+          const defaultDevice = microphoneDevices.value.find(device => device.isDefault);
+          if (defaultDevice) {
+            audioSettings.selectedMicrophoneId = defaultDevice.deviceId;
+          } else if (microphoneDevices.value.length > 0) {
+            audioSettings.selectedMicrophoneId = microphoneDevices.value[0].deviceId;
+          } else {
+            audioSettings.selectedMicrophoneId = null;
+          }
+        }
       }
-    })
-    
-    // 更新激活设备列表，保留已激活的设备
-    activeDevices.value = activeDevices.value
-      .filter(activeDevice => devices.value.some(d => d.id === activeDevice.id))
-      .map(activeDevice => {
-        const updatedDevice = devices.value.find(d => d.id === activeDevice.id)
-        return updatedDevice ? { ...updatedDevice, isActive: true } : activeDevice
-      })
+      
+      // 如果当前选中的输出设备不在列表中，尝试选择新的默认设备
+      if (audioSettings.selectedOutputDeviceId) {
+        const outputDeviceExists = audioOutputDevices.value.some(
+          device => device.id === audioSettings.selectedOutputDeviceId
+        );
+        
+        if (!outputDeviceExists) {
+          const defaultOutputDevice = audioOutputDevices.value.find(device => device.isDefault);
+          if (defaultOutputDevice) {
+            audioSettings.selectedOutputDeviceId = defaultOutputDevice.id;
+          } else if (audioOutputDevices.value.length > 0) {
+            audioSettings.selectedOutputDeviceId = audioOutputDevices.value[0].id;
+          } else {
+            audioSettings.selectedOutputDeviceId = null;
+          }
+        }
+      }
+    } catch (error) {
+      console.error('[audioStore.ts] 刷新设备列表失败', error);
+    }
   }
   
   /**
-   * 计算属性：是否有可用的麦克风
+   * 选择麦克风设备
+   * @param deviceId 麦克风设备ID
    */
-  const hasMicrophone = computed(() => {
-    return devices.value.some(device => device.type === AudioSourceType.MICROPHONE)
-  })
+  async function selectMicrophoneDevice(deviceId: string | null) {
+    audioSettings.selectedMicrophoneId = deviceId;
+    
+    if (deviceId) {
+      try {
+        const success = await openMicrophone(deviceId);
+        if (success) {
+          // 设置麦克风音量和静音状态
+          setMicrophoneMuted(audioSettings.microphoneMuted);
+          setMicrophoneVolume(audioSettings.microphoneVolume);
+          console.log('[audioStore.ts] 已选择麦克风设备', deviceId);
+        } else {
+          console.error('[audioStore.ts] 打开麦克风设备失败', deviceId);
+        }
+      } catch (error) {
+        console.error('[audioStore.ts] 选择麦克风设备异常', error);
+      }
+    } else {
+      closeMicrophone();
+      console.log('[audioStore.ts] 已关闭麦克风');
+    }
+  }
   
   /**
-   * 计算属性：是否有可用的系统音频
+   * 选择音频输出设备（用于系统音频捕获）
+   * @param deviceId 输出设备ID
    */
-  const hasSystemAudio = computed(() => {
-    return devices.value.some(device => device.type === AudioSourceType.SYSTEM_AUDIO)
-  })
+  async function selectAudioOutputDevice(deviceId: string | null) {
+    audioSettings.selectedOutputDeviceId = deviceId;
+    
+    // 如果当前正在使用WASAPI捕获系统音频，则需要重新打开
+    if (systemAudioState.enabled && systemAudioState.captureMethod === 'wasapi') {
+      try {
+        await openSystemAudio(deviceId || undefined);
+        console.log('[audioStore.ts] 已切换系统音频捕获设备', deviceId);
+      } catch (error) {
+        console.error('[audioStore.ts] 切换系统音频捕获设备失败', error);
+      }
+    }
+  }
   
   /**
-   * 计算属性：是否有激活的麦克风
+   * 设置麦克风音量
+   * @param volume 音量值 (0-100)
    */
-  const hasActiveMicrophone = computed(() => {
-    return activeDevices.value.some(device => device.type === AudioSourceType.MICROPHONE)
-  })
+  function setMicVolume(volume: number) {
+    audioSettings.microphoneVolume = Math.max(0, Math.min(100, volume));
+    setMicrophoneVolume(audioSettings.microphoneVolume);
+    console.log('[audioStore.ts] 设置麦克风音量', volume);
+  }
   
   /**
-   * 计算属性：是否有激活的系统音频
+   * 设置麦克风静音状态
+   * @param muted 是否静音
    */
-  const hasActiveSystemAudio = computed(() => {
-    return activeDevices.value.some(device => device.type === AudioSourceType.SYSTEM_AUDIO)
-  })
+  function setMicMuted(muted: boolean) {
+    audioSettings.microphoneMuted = muted;
+    setMicrophoneMuted(muted);
+    console.log('[audioStore.ts] 设置麦克风静音状态', muted);
+  }
+  
+  /**
+   * 切换麦克风静音状态
+   */
+  function toggleMicMuted() {
+    setMicMuted(!audioSettings.microphoneMuted);
+  }
+  
+  /**
+   * 打开系统音频捕获
+   */
+  async function startSystemAudio() {
+    try {
+      const success = await openSystemAudio(audioSettings.selectedOutputDeviceId || undefined);
+      
+      if (success) {
+        // 设置系统音频音量和静音状态
+        setSystemAudioMuted(audioSettings.systemAudioMuted);
+        setSystemAudioVolume(audioSettings.systemAudioVolume);
+        console.log('[audioStore.ts] 成功启动系统音频捕获');
+      } else {
+        console.error('[audioStore.ts] 启动系统音频捕获失败');
+      }
+    } catch (error) {
+      console.error('[audioStore.ts] 启动系统音频捕获异常', error);
+    }
+  }
+  
+  /**
+   * 关闭系统音频捕获
+   */
+  function stopSystemAudio() {
+    closeSystemAudio();
+    console.log('[audioStore.ts] 已关闭系统音频捕获');
+  }
+  
+  /**
+   * 设置系统音频音量
+   * @param volume 音量值 (0-100)
+   */
+  function setSystemVolume(volume: number) {
+    audioSettings.systemAudioVolume = Math.max(0, Math.min(100, volume));
+    setSystemAudioVolume(audioSettings.systemAudioVolume);
+    console.log('[audioStore.ts] 设置系统音频音量', volume);
+  }
+  
+  /**
+   * 设置系统音频静音状态
+   * @param muted 是否静音
+   */
+  function setSystemMuted(muted: boolean) {
+    audioSettings.systemAudioMuted = muted;
+    setSystemAudioMuted(muted);
+    console.log('[audioStore.ts] 设置系统音频静音状态', muted);
+  }
+  
+  /**
+   * 切换系统音频静音状态
+   */
+  function toggleSystemMuted() {
+    setSystemMuted(!audioSettings.systemAudioMuted);
+  }
+  
+  /**
+   * 更新音频编码配置
+   * @param newConfig 新的音频编码配置
+   */
+  function updateAudioConfig(newConfig: {
+    codec?: AudioCodecType;
+    sampleRate?: AudioSampleRate;
+    bitrate?: AudioBitrate;
+    channels?: number;
+  }) {
+    if (newConfig.codec !== undefined) {
+      config.codec = newConfig.codec;
+    }
+    
+    if (newConfig.sampleRate !== undefined) {
+      config.sampleRate = newConfig.sampleRate;
+    }
+    
+    if (newConfig.bitrate !== undefined) {
+      config.bitrate = newConfig.bitrate;
+    }
+    
+    if (newConfig.channels !== undefined) {
+      config.channels = newConfig.channels;
+    }
+    
+    console.log('[audioStore.ts] 更新音频配置', config);
+  }
+  
+  /**
+   * 清理资源
+   */
+  function cleanup() {
+    cleanupAudioDeviceManager();
+    console.log('[audioStore.ts] 音频系统资源已清理');
+  }
+  
+  /**
+   * 判断是否支持捕获系统音频
+   */
+  const canCaptureSystemAudio = computed(() => {
+    // 在Electron环境下，通过以下任一方式可以捕获系统音频：
+    // 1. Windows下的WASAPI捕获
+    // 2. macOS下安装了BlackHole插件
+    // 3. 使用desktopCapturer API (兼容性不太好，可能在某些平台上不工作)
+    return (
+      captureSupport.isWasapiSupported ||
+      captureSupport.isBlackholeInstalled ||
+      window.electronAPI !== undefined // 在Electron环境中至少可以尝试使用desktopCapturer
+    );
+  });
+  
+  /**
+   * 判断当前可用的捕获方式
+   */
+  const availableCaptureMethod = computed(() => {
+    // Windows平台优先使用desktop-capturer
+    if (isWindows.value && window.electronAPI !== undefined) {
+      return 'desktop-capturer';
+    } else if (captureSupport.isBlackholeInstalled) {
+      return 'blackhole';
+    } else if (captureSupport.isWasapiSupported) {
+      return 'wasapi';
+    } else if (window.electronAPI !== undefined) {
+      return 'desktop-capturer';
+    } else {
+      return 'none';
+    }
+  });
   
   return {
-    devices,
-    activeDevices,
+    // 状态
+    initialized,
+    microphoneDevices,
+    audioOutputDevices,
+    captureSupport,
+    microphoneState,
+    systemAudioState,
+    audioSettings,
     config,
-    systemAudioStatus,
-    isMuted,
-    volume,
-    hasMicrophone,
-    hasSystemAudio,
-    hasActiveMicrophone,
-    hasActiveSystemAudio,
-    initAudioDevices,
-    activateDevice,
-    deactivateDevice,
-    toggleDevice,
-    updateConfig,
-    toggleMute,
-    setVolume,
-    setDeviceVolume,
+    canCaptureSystemAudio,
+    availableCaptureMethod,
+    
+    // 方法
+    initialize,
     refreshDevices,
-    startLevelMonitoring,
-    stopLevelMonitoring
-  }
-}) 
+    selectMicrophoneDevice,
+    selectAudioOutputDevice,
+    setMicVolume,
+    setMicMuted,
+    toggleMicMuted,
+    startSystemAudio,
+    stopSystemAudio,
+    setSystemVolume,
+    setSystemMuted,
+    toggleSystemMuted,
+    updateAudioConfig,
+    cleanup
+  };
+});

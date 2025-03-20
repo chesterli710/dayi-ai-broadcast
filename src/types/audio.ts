@@ -1,19 +1,92 @@
 /**
- * 音频设备相关类型定义
+ * 音频类型声明
+ * 定义系统中使用的音频相关类型
  */
 
 /**
- * 音频源类型
+ * 音频编码类型枚举
  */
-export enum AudioSourceType {
-  MICROPHONE = 'microphone', // 麦克风
-  SYSTEM_AUDIO = 'system_audio', // 系统音频
+export enum AudioCodecType {
+  /**
+   * AAC编码，适用于大多数平台
+   */
+  AAC = 'aac',
+  
+  /**
+   * MP3编码，历史悠久的音频编码
+   */
+  MP3 = 'mp3',
+  
+  /**
+   * Opus编码，开源且高效的音频编码
+   */
+  OPUS = 'opus'
 }
 
 /**
- * 音频设备接口
+ * 音频采样率枚举
  */
-export interface AudioDevice {
+export enum AudioSampleRate {
+  /**
+   * 44.1kHz采样率
+   */
+  RATE_44100 = 44100,
+  
+  /**
+   * 48kHz采样率
+   */
+  RATE_48000 = 48000
+}
+
+/**
+ * 音频比特率枚举
+ */
+export enum AudioBitrate {
+  /**
+   * 128Kbps
+   */
+  BITRATE_128 = 128,
+  
+  /**
+   * 192Kbps
+   */
+  BITRATE_192 = 192,
+  
+  /**
+   * 256Kbps
+   */
+  BITRATE_256 = 256,
+  
+  /**
+   * 320Kbps
+   */
+  BITRATE_320 = 320
+}
+
+/**
+ * 麦克风设备信息
+ */
+export interface MicrophoneDeviceInfo {
+  /**
+   * 设备ID
+   */
+  deviceId: string;
+  
+  /**
+   * 设备标签/名称
+   */
+  label: string;
+  
+  /**
+   * 是否是默认设备
+   */
+  isDefault?: boolean;
+}
+
+/**
+ * 音频输出设备信息
+ */
+export interface AudioOutputDeviceInfo {
   /**
    * 设备ID
    */
@@ -25,93 +98,101 @@ export interface AudioDevice {
   name: string;
   
   /**
-   * 设备类型
-   */
-  type: AudioSourceType;
-  
-  /**
-   * 是否为默认设备
+   * 是否是默认设备
    */
   isDefault: boolean;
-  
+}
+
+/**
+ * 音频设备状态
+ */
+export interface AudioDeviceState {
   /**
-   * 是否激活
+   * 设备ID
    */
-  isActive: boolean;
+  deviceId: string;
   
   /**
-   * 设备音量 (0-100)
+   * 音量级别 (0-100)
    */
   volume: number;
   
   /**
-   * 音频电平 (0-100)
+   * 是否静音
+   */
+  muted: boolean;
+  
+  /**
+   * 当前音频电平 (0-100)
    */
   level: number;
+}
 
+/**
+ * 系统音频状态类型
+ */
+export interface SystemAudioState {
   /**
-   * 最后一次设置音量的时间戳
-   * 用于防止电平监测覆盖音量设置
+   * 是否已启用
    */
-  lastVolumeSetTime?: number;
+  enabled: boolean;
+  
+  /**
+   * 音量级别 (0-100)
+   */
+  volume: number;
+  
+  /**
+   * 是否静音
+   */
+  muted: boolean;
+  
+  /**
+   * 当前音频电平 (0-100)
+   */
+  level: number;
+  
+  /**
+   * 捕获方式
+   * - 'blackhole': 使用BlackHole插件捕获 (macOS)
+   * - 'wasapi': 使用WASAPI捕获 (Windows)
+   * - 'desktop-capturer': 使用Electron的desktopCapturer捕获
+   * - 'none': 无法捕获
+   */
+  captureMethod: 'blackhole' | 'wasapi' | 'desktop-capturer' | 'none';
 }
 
 /**
- * 音频编码器类型
+ * 应用音频设置
  */
-export enum AudioCodecType {
-  AAC = 'aac',          // AAC编码
-  MP3 = 'mp3',          // MP3编码
-  OPUS = 'opus',        // OPUS编码
+export interface AudioSettings {
+  /**
+   * 选中的麦克风设备ID
+   */
+  selectedMicrophoneId: string | null;
+  
+  /**
+   * 选中的系统音频输出设备ID（用于WASAPI捕获）
+   */
+  selectedOutputDeviceId: string | null;
+  
+  /**
+   * 麦克风音量 (0-100)
+   */
+  microphoneVolume: number;
+  
+  /**
+   * 麦克风是否静音
+   */
+  microphoneMuted: boolean;
+  
+  /**
+   * 系统音频音量 (0-100)
+   */
+  systemAudioVolume: number;
+  
+  /**
+   * 系统音频是否静音
+   */
+  systemAudioMuted: boolean;
 }
-
-/**
- * 音频采样率
- */
-export enum AudioSampleRate {
-  RATE_44100 = 44100,   // 44.1kHz
-  RATE_48000 = 48000,   // 48kHz
-  RATE_96000 = 96000,   // 96kHz
-}
-
-/**
- * 音频码率
- */
-export enum AudioBitrate {
-  BITRATE_96K = 96000,   // 96kbps
-  BITRATE_128K = 128000, // 128kbps
-  BITRATE_192K = 192000, // 192kbps
-  BITRATE_256K = 256000, // 256kbps
-  BITRATE_320K = 320000, // 320kbps
-}
-
-/**
- * 音频配置
- */
-export interface AudioConfig {
-  codec: AudioCodecType;       // 编码器类型
-  sampleRate: AudioSampleRate; // 采样率
-  bitrate: AudioBitrate;       // 码率
-  channels: number;            // 声道数
-}
-
-/**
- * 系统音频状态
- */
-export interface SystemAudioStatus {
-  isAvailable: boolean;        // 系统音频是否可用
-  isBlackholeInstalled?: boolean; // MacOS: Blackhole是否已安装
-  isStereoMixEnabled?: boolean;   // Windows: 立体声混音是否已启用
-}
-
-/**
- * 音频存储状态
- */
-export interface AudioState {
-  devices: AudioDevice[];      // 可用的音频设备列表
-  activeDevices: AudioDevice[]; // 当前激活的音频设备
-  config: AudioConfig;         // 音频配置
-  systemAudioStatus: SystemAudioStatus; // 系统音频状态
-  isMuted: boolean;            // 是否静音
-  volume: number;              // 音量 (0-100)
-} 

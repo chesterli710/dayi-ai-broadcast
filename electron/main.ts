@@ -440,6 +440,231 @@ Electron版本: ${process.versions.electron}
           return false
         }
       })
+      
+      // 检查Windows上WASAPI捕获是否可用
+      ipcMain.handle('check-wasapi-available', async () => {
+        try {
+          if (process.platform !== 'win32') return false;
+          
+          // WASAPI捕获基于Node.js的audio-stream模块，检查是否可用
+          try {
+            // 尝试加载audio-stream模块
+            // 如果不存在则会抛出异常
+            require.resolve('audio-stream');
+            this.logger.info(`WASAPI捕获模块可用`);
+            return true;
+          } catch (error) {
+            // 如果模块不存在，则检查是否可以使用其他方式
+            // 这里简单返回false，表示WASAPI方式不可用
+            this.logger.warn(`WASAPI捕获模块不可用`, error);
+            return false;
+          }
+        } catch (error) {
+          this.logger.error('检查WASAPI捕获状态失败', error);
+          return false;
+        }
+      });
+      
+      // WASAPI捕获实例
+      let wasapiCapture = null;
+      let wasapiAudioLevel = 0;
+      let wasapiAudioLevelTimer = null;
+      
+      // 启动WASAPI音频捕获
+      ipcMain.handle('start-wasapi-capture', async (event, deviceId) => {
+        try {
+          if (process.platform !== 'win32') return null;
+          
+          // 尝试加载audio-stream模块
+          let AudioStream;
+          try {
+            AudioStream = require('audio-stream');
+          } catch (error) {
+            this.logger.error('加载WASAPI捕获模块失败', error);
+            return null;
+          }
+          
+          // 停止现有的捕获
+          if (wasapiCapture) {
+            try {
+              wasapiCapture.stop();
+              wasapiCapture = null;
+            } catch (error) {
+              this.logger.error('停止现有WASAPI捕获失败', error);
+            }
+          }
+          
+          // 停止现有的电平监测
+          if (wasapiAudioLevelTimer) {
+            clearInterval(wasapiAudioLevelTimer);
+            wasapiAudioLevelTimer = null;
+          }
+          
+          // 配置捕获选项
+          const options = {
+            sampleRate: 48000,
+            channels: 2,
+            exitOnSilence: -1, // 不自动退出
+            device: deviceId || 'default', // 使用指定设备或默认设备
+            type: 'loopback' // 捕获输出音频
+          };
+          
+          // 创建捕获实例
+          wasapiCapture = new AudioStream(options);
+          
+          // 设置音频电平监测
+          wasapiAudioLevel = 0;
+          const bufferSize = 2048;
+          const buffer = new Float32Array(bufferSize);
+          
+          wasapiAudioLevelTimer = setInterval(() => {
+            if (wasapiCapture && wasapiCapture.read) {
+              // 读取音频数据
+              const bytesRead = wasapiCapture.read(buffer);
+              
+              if (bytesRead > 0) {
+                // 计算音频电平
+                let sum = 0;
+                for (let i = 0; i < bytesRead; i++) {
+                  sum += Math.abs(buffer[i]);
+                }
+                const average = sum / bytesRead;
+                
+                // 将平均值转换为0-100范围
+                wasapiAudioLevel = Math.min(100, Math.round((average * 5) * 100));
+              } else {
+                wasapiAudioLevel = 0;
+              }
+            } else {
+              wasapiAudioLevel = 0;
+            }
+          }, 100);
+          
+          this.logger.info('启动WASAPI捕获成功', { deviceId: deviceId || 'default' });
+          
+          // 返回一个模拟的MediaStream对象
+          // 注意：由于无法直接创建和传递MediaStream对象，这里返回一个特殊标记
+          // 实际的音频处理将在主进程中进行
+          return { wasapiStarted: true };
+        } catch (error) {
+          this.logger.error('启动WASAPI捕获失败', error);
+          return null;
+        }
+      });
+      
+      // 停止WASAPI音频捕获
+      ipcMain.handle('stop-wasapi-capture', async () => {
+        try {
+          if (wasapiCapture) {
+            wasapiCapture.stop();
+            wasapiCapture = null;
+            this.logger.info('停止WASAPI捕获成功');
+          }
+          
+          if (wasapiAudioLevelTimer) {
+            clearInterval(wasapiAudioLevelTimer);
+            wasapiAudioLevelTimer = null;
+          }
+          
+          return true;
+        } catch (error) {
+          this.logger.error('停止WASAPI捕获失败', error);
+          return false;
+        }
+      });
+      
+      // 获取WASAPI音频电平
+      ipcMain.handle('get-wasapi-audio-level', async () => {
+        return wasapiAudioLevel;
+      });
+      
+      // 获取Windows上默认音频输出设备
+      ipcMain.handle('get-default-audio-output', async () => {
+        try {
+          if (process.platform !== 'win32') return null;
+          
+          // 使用PowerShell获取默认音频播放设备
+          const result = execSync('powershell -command "Get-AudioDevice -Playback | Where-Object {$_.Default -eq $true} | Select-Object Name | Format-List"').toString();
+          
+          // 解析结果
+          const match = result.match(/Name\s*:\s*(.*)/i);
+          const defaultDevice = match ? match[1].trim() : null;
+          
+          this.logger.info(`当前默认音频输出设备: ${defaultDevice}`);
+          return defaultDevice;
+        } catch (error) {
+          // 如果上面的命令执行失败，可能是因为AudioDeviceCmdlets模块未安装
+          // 尝试使用另一种方法
+          try {
+            // 使用更基本的PowerShell命令
+            const result = execSync('powershell -command "(Get-CimInstance -Class Win32_SoundDevice | Where-Object {$_.Status -eq \'OK\' -and $_.ConfigManagerErrorCode -eq 0 -and ($_.Name -like \'*speaker*\' -or $_.Name -like \'*耳机*\' -or $_.Name -like \'*headphone*\' -or $_.Name -like \'*headset*\')} | Select-Object Name | Format-List).Name"').toString();
+            
+            if (result.trim()) {
+              const defaultDevice = result.trim();
+              this.logger.info(`使用备用方法获取的默认音频输出设备: ${defaultDevice}`);
+              return defaultDevice;
+            }
+          } catch (fallbackError) {
+            this.logger.error('备用方法获取默认音频输出设备失败', fallbackError);
+          }
+          
+          this.logger.error('获取默认音频输出设备失败', error);
+          return null;
+        }
+      });
+      
+      // 获取Windows上所有音频输出设备
+      ipcMain.handle('get-audio-output-devices', async () => {
+        try {
+          if (process.platform !== 'win32') return [];
+          
+          // 尝试使用AudioDeviceCmdlets模块
+          try {
+            const result = execSync('powershell -command "Get-AudioDevice -Playback | Select-Object Name,Default | ConvertTo-Json"').toString();
+            const devices = JSON.parse(result);
+            
+            // 格式化结果
+            const formattedDevices = Array.isArray(devices) ? devices : [devices];
+            const outputDevices = formattedDevices.map(device => ({
+              id: device.ID || device.Name, // 有些版本可能使用不同的属性
+              name: device.Name,
+              isDefault: device.Default === true
+            }));
+            
+            this.logger.info(`获取到 ${outputDevices.length} 个音频输出设备`);
+            return outputDevices;
+          } catch (cmdletError) {
+            // 如果AudioDeviceCmdlets模块未安装，尝试使用基本命令
+            const result = execSync('powershell -command "Get-CimInstance -Class Win32_SoundDevice | Where-Object {$_.Status -eq \'OK\' -and $_.ConfigManagerErrorCode -eq 0 -and ($_.Name -like \'*speaker*\' -or $_.Name -like \'*耳机*\' -or $_.Name -like \'*headphone*\' -or $_.Name -like \'*headset*\' -or $_.Name -like \'*output*\')} | Select-Object Name | Format-List"').toString();
+            
+            // 解析结果
+            const devices = result.split('\r\n\r\n')
+              .filter(block => block.trim())
+              .map(block => {
+                const match = block.match(/Name\s*:\s*(.*)/i);
+                return match ? match[1].trim() : null;
+              })
+              .filter(name => name);
+            
+            // 获取默认设备
+            const defaultDeviceResult = await ipcMain.handle('get-default-audio-output', {}); 
+            const defaultDevice = typeof defaultDeviceResult === 'function' ? await defaultDeviceResult() : defaultDeviceResult;
+            
+            // 创建设备列表
+            const outputDevices = devices.map(name => ({
+              id: name,
+              name: name,
+              isDefault: name === defaultDevice
+            }));
+            
+            this.logger.info(`使用备用方法获取到 ${outputDevices.length} 个音频输出设备`);
+            return outputDevices;
+          }
+        } catch (error) {
+          this.logger.error('获取音频输出设备失败', error);
+          return [];
+        }
+      });
 
       // 设置设备音量
       ipcMain.handle('set-device-volume', async (event, deviceId, volume) => {

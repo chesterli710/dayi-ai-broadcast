@@ -242,14 +242,26 @@ export default {
     microphone: '麦克风',
     systemAudio: '系统音频',
     selectMicrophone: '选择麦克风',
+    selectOutputDevice: '选择输出设备',
     volume: '音量',
     mute: '静音',
+    unmute: '取消静音',
     globalVolume: '全局音量',
     globalSettings: '全局设置',
     enableSystemAudio: '启用系统音频',
+    stopCapture: '停止捕获',
+    default: '默认',
+    systemAudioNotSupported: '系统音频不支持',
     systemAudioNotAvailable: '系统音频不可用',
+    notCapturing: '未在捕获',
     systemAudioGuide: '请检查系统音频设置，确保已安装并启用相关驱动程序。',
     noSignalDetected: '未检测到音频信号',
-    refreshDevices: '刷新设备'
+    refreshDevices: '刷新设备',
+    headphoneNotCapturedTitle: '外置耳机音频可能无法被捕获',
+    headphoneCaptureGuide: '在Windows系统中，立体声混音通常只能捕获默认音频输出设备的声音。要捕获耳机音频，需要将耳机设置为默认输出设备。',
+    showSetupGuide: '显示设置指南',
+    wasapiNotSupported: 'Windows平台WASAPI音频捕获不可用',
+    wasapiGuide: '使用WASAPI捕获系统音频需要Windows 7或更高版本，并且需要管理员权限',
+    desktopCapture: '系统声音捕获'
   }
 } 

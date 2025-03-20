@@ -242,14 +242,26 @@ export default {
     microphone: 'Microphone',
     systemAudio: 'System Audio',
     selectMicrophone: 'Select Microphone',
+    selectOutputDevice: 'Select Output Device',
     volume: 'Volume',
     mute: 'Mute',
+    unmute: 'Unmute',
     globalVolume: 'Global Volume',
     globalSettings: 'Global Settings',
     enableSystemAudio: 'Enable System Audio',
+    stopCapture: 'Stop Capture',
+    default: 'Default',
+    systemAudioNotSupported: 'System Audio Not Supported',
     systemAudioNotAvailable: 'System Audio Not Available',
+    notCapturing: 'Not Capturing',
     systemAudioGuide: 'Please check your system audio settings and ensure the required drivers are installed and enabled.',
     noSignalDetected: 'No audio signal detected',
-    refreshDevices: 'Refresh Devices'
+    refreshDevices: 'Refresh Devices',
+    headphoneNotCapturedTitle: 'External Headphone Audio May Not Be Captured',
+    headphoneCaptureGuide: 'In Windows, Stereo Mix typically only captures audio from the default output device. To capture headphone audio, set your headphones as the default output device.',
+    showSetupGuide: 'Show Setup Guide',
+    wasapiNotSupported: 'Windows WASAPI Audio Capture Not Available',
+    wasapiGuide: 'WASAPI Audio Capture requires Windows 7 or later, and administrative privileges',
+    desktopCapture: 'Desktop Audio Capture'
   }
 } 

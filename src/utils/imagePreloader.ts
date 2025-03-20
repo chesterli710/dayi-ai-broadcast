@@ -164,7 +164,10 @@ class ImageLoader {
       
       // 确保iframe有效
       if (!iframe.contentWindow || !iframe.contentDocument) {
-        document.body.removeChild(iframe);
+        // 安全地移除iframe
+        if (document.body.contains(iframe)) {
+          document.body.removeChild(iframe);
+        }
         // 回退到直接创建Image
         const img = new Image();
         img.crossOrigin = 'anonymous';
@@ -218,6 +221,18 @@ class ImageLoader {
           console.warn = originalConsoleWarn;
         }
         
+        // 安全地移除iframe的函数
+        function safeRemoveIframe() {
+          // 检查iframe是否仍然是document.body的子节点
+          if (document.body.contains(iframe)) {
+            try {
+              document.body.removeChild(iframe);
+            } catch (e) {
+              console.warn('[imagePreloader.ts] 移除iframe失败，可能已被移除', e);
+            }
+          }
+        }
+        
         // 加载前屏蔽控制台错误
         suppressConsoleForImageLoad();
         
@@ -227,13 +242,13 @@ class ImageLoader {
         
         img.onload = () => {
           restoreConsole();
-          document.body.removeChild(iframe); // 清理iframe
+          safeRemoveIframe(); // 使用安全移除函数
           resolve(img);
         };
         
         img.onerror = () => {
           restoreConsole();
-          document.body.removeChild(iframe); // 清理iframe
+          safeRemoveIframe(); // 使用安全移除函数
           reject(new Error('图片加载失败'));
         };
         
@@ -241,7 +256,7 @@ class ImageLoader {
         const timeoutId = setTimeout(() => {
           if (!img.complete) {
             restoreConsole();
-            document.body.removeChild(iframe); // 清理iframe
+            safeRemoveIframe(); // 使用安全移除函数
             reject(new Error('图片加载超时'));
           }
         }, timeout);
@@ -253,12 +268,18 @@ class ImageLoader {
         if (img.complete) {
           clearTimeout(timeoutId);
           restoreConsole();
-          document.body.removeChild(iframe); // 清理iframe
+          safeRemoveIframe(); // 使用安全移除函数
           resolve(img);
         }
       } catch (e) {
         // 确保iframe被移除
-        document.body.removeChild(iframe);
+        if (document.body.contains(iframe)) {
+          try {
+            document.body.removeChild(iframe);
+          } catch (removeError) {
+            console.warn('[imagePreloader.ts] 在捕获异常处理中移除iframe失败', removeError);
+          }
+        }
         reject(new Error('图片加载器内部错误'));
       }
     });
