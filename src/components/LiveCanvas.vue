@@ -278,25 +278,14 @@ watch(liveLayoutEditedEvent, (newValue) => {
       elementsCount: (liveLayout.value as any).elements?.length || 0
     });
     
-    // 检查布局是否有元素数据
-    const layoutWithElements = liveLayout.value as any;
-    if (layoutWithElements.elements && layoutWithElements.elements.length > 0) {
-      // 如果渲染器支持updateLayoutElements方法，直接更新元素
-      if (typeof (renderer.value as any).updateLayoutElements === 'function') {
-        console.log('[LiveCanvas.vue 直播画布] 使用updateLayoutElements方法更新布局元素');
-        (renderer.value as any).updateLayoutElements(layoutWithElements.elements);
-      } else if (typeof (renderer.value as any).onLayoutEdited === 'function') {
-        // 调用渲染器的onLayoutEdited方法通知布局已编辑
-        console.log('[LiveCanvas.vue 直播画布] 使用onLayoutEdited方法通知布局已编辑');
-        (renderer.value as any).onLayoutEdited();
-      } else {
-        // 如果渲染器没有上述方法，则重新设置布局
-        console.log('[LiveCanvas.vue 直播画布] 重新设置布局');
-        renderer.value.setLayout(liveLayout.value);
-      }
+    // 直接调用渲染器的onLayoutEdited方法通知布局已编辑
+    // 该方法会优化处理布局更新，避免不必要的视频流重建
+    if (typeof (renderer.value as any).onLayoutEdited === 'function') {
+      console.log('[LiveCanvas.vue 直播画布] 使用onLayoutEdited方法通知布局已编辑');
+      (renderer.value as any).onLayoutEdited();
     } else {
-      console.warn('[LiveCanvas.vue 直播画布] 布局没有元素数据，无法更新');
-      // 重新设置布局，确保渲染器使用最新的布局数据
+      // 如果渲染器没有onLayoutEdited方法，则重新设置布局
+      console.log('[LiveCanvas.vue 直播画布] 渲染器不支持onLayoutEdited方法，重新设置布局');
       renderer.value.setLayout(liveLayout.value);
     }
   }

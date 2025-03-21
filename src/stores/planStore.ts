@@ -4,7 +4,7 @@
  */
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import type { Channel, Plan, Branch, Layout, LayoutTemplate, Schedule, LayoutElement } from '../types/broadcast'
+import type { Channel, Plan, Branch, Layout, LayoutTemplate, Schedule, LayoutElement, MediaLayoutElement } from '../types/broadcast'
 import { initializeApp } from '../utils/initializeApp'
 import planApi from '../api/plan'
 import { ElMessage } from 'element-plus'
@@ -568,11 +568,33 @@ export const usePlanStore = defineStore('plan', () => {
   
   /**
    * 将预览切换到直播
-   * 将当前预览的日程和布局设置为直播的日程和布局
+   * 当直播内容为空时，直接将预览设置为直播并保留预览；当直播内容不为空时，交换预览和直播内容
    */
   function switchPreviewToLive() {
     if (previewingSchedule.value && previewingLayout.value) {
-      setLiveScheduleAndLayout(previewingSchedule.value, previewingLayout.value)
+      // 保存当前直播的日程和布局
+      const currentLiveSchedule = liveSchedule.value;
+      const currentLiveLayout = liveLayout.value;
+      
+      // 检查是否有直播中的布局
+      if (currentLiveSchedule && currentLiveLayout) {
+        // 有直播布局，执行交换操作
+        
+        // 1. 临时保存预览布局的引用
+        const tempPreviewSchedule = JSON.parse(JSON.stringify(previewingSchedule.value));
+        const tempPreviewLayout = JSON.parse(JSON.stringify(previewingLayout.value));
+        
+        // 2. 将直播布局设置为预览
+        setPreviewingScheduleAndLayout(currentLiveSchedule, currentLiveLayout);
+        
+        // 3. 将预览布局设置为直播
+        setLiveScheduleAndLayout(tempPreviewSchedule, tempPreviewLayout);
+      } else {
+        // 没有直播布局，执行单向设置，同时保留预览布局
+        
+        // 将预览布局复制到直播布局
+        setLiveScheduleAndLayout(previewingSchedule.value, previewingLayout.value);
+      }
     }
   }
   
@@ -598,35 +620,57 @@ export const usePlanStore = defineStore('plan', () => {
    * @param updatedLayout 可选的更新后的布局数据，如果提供则会更新当前预览的布局
    */
   function notifyPreviewLayoutEdited(updatedLayout?: Layout) {
-    console.log('[planStore.ts 计划存储] 通知预览布局已编辑')
+    console.log('[planStore.ts 计划存储] 通知预览布局已编辑');
     
     // 如果提供了更新后的布局数据，则更新当前预览的布局
     if (updatedLayout && previewingLayout.value && updatedLayout.id === previewingLayout.value.id) {
       console.log('[planStore.ts 计划存储] 更新预览布局数据', {
         layoutId: updatedLayout.id,
         elementsCount: updatedLayout.elements?.length || 0
-      })
+      });
       
       // 创建深拷贝以确保触发响应式更新
-      const layoutCopy = JSON.parse(JSON.stringify(updatedLayout))
+      const layoutCopy = JSON.parse(JSON.stringify(updatedLayout));
       
-      // 先设置为 null 再设置新值，确保触发监听器
-      const oldLayout = previewingLayout.value
-      previewingLayout.value = null
-      
-      // 使用 nextTick 确保视图更新后再设置新布局
-      setTimeout(() => {
-        previewingLayout.value = layoutCopy
-        console.log('[planStore.ts 计划存储] 预览布局已更新', {
-          layoutId: layoutCopy.id,
-          elementsCount: layoutCopy.elements?.length || 0
-        })
-      }, 10)
+      // 安全地更新布局属性，保留现有视频元素引用
+      if (previewingLayout.value && previewingLayout.value.elements) {
+        // 保留现有视频元素的引用
+        const existingElements = previewingLayout.value.elements;
+        
+        // 更新布局的其他属性
+        Object.keys(layoutCopy).forEach(key => {
+          if (key !== 'elements') {
+            (previewingLayout.value as any)[key] = layoutCopy[key];
+          }
+        });
+        
+        // 更新元素，同时保留视频元素的引用
+        if (layoutCopy.elements) {
+          previewingLayout.value.elements = layoutCopy.elements.map((newElement: LayoutElement) => {
+            if (newElement.type === 'media') {
+              // 查找对应的现有元素
+              const existingElement = existingElements.find(e => 
+                e.id === newElement.id && e.type === 'media'
+              );
+              
+              // 如果找到现有元素且有相同的sourceId，则保留现有元素的引用
+              if (existingElement && existingElement.type === 'media' && 
+                  (existingElement as MediaLayoutElement).sourceId === (newElement as MediaLayoutElement).sourceId) {
+                return { ...newElement, ...existingElement };
+              }
+            }
+            return newElement;
+          });
+        }
+      } else {
+        // 如果当前没有布局或元素，直接设置
+        previewingLayout.value = layoutCopy;
+      }
     }
     
     // 触发事件通知
-    previewLayoutEditedEvent.value = Date.now()
-    layoutEditedEvent.value = Date.now()
+    previewLayoutEditedEvent.value = Date.now();
+    layoutEditedEvent.value = Date.now();
   }
   
   /**
@@ -635,35 +679,57 @@ export const usePlanStore = defineStore('plan', () => {
    * @param updatedLayout 可选的更新后的布局数据，如果提供则会更新当前直播的布局
    */
   function notifyLiveLayoutEdited(updatedLayout?: Layout) {
-    console.log('[planStore.ts 计划存储] 通知直播布局已编辑')
+    console.log('[planStore.ts 计划存储] 通知直播布局已编辑');
     
     // 如果提供了更新后的布局数据，则更新当前直播的布局
     if (updatedLayout && liveLayout.value && updatedLayout.id === liveLayout.value.id) {
       console.log('[planStore.ts 计划存储] 更新直播布局数据', {
         layoutId: updatedLayout.id,
         elementsCount: updatedLayout.elements?.length || 0
-      })
+      });
       
       // 创建深拷贝以确保触发响应式更新
-      const layoutCopy = JSON.parse(JSON.stringify(updatedLayout))
+      const layoutCopy = JSON.parse(JSON.stringify(updatedLayout));
       
-      // 先设置为 null 再设置新值，确保触发监听器
-      const oldLayout = liveLayout.value
-      liveLayout.value = null
-      
-      // 使用 setTimeout 确保视图更新后再设置新布局
-      setTimeout(() => {
-        liveLayout.value = layoutCopy
-        console.log('[planStore.ts 计划存储] 直播布局已更新', {
-          layoutId: layoutCopy.id,
-          elementsCount: layoutCopy.elements?.length || 0
-        })
-      }, 10)
+      // 安全地更新布局属性，保留现有视频元素引用
+      if (liveLayout.value && liveLayout.value.elements) {
+        // 保留现有视频元素的引用
+        const existingElements = liveLayout.value.elements;
+        
+        // 更新布局的其他属性
+        Object.keys(layoutCopy).forEach(key => {
+          if (key !== 'elements') {
+            (liveLayout.value as any)[key] = layoutCopy[key];
+          }
+        });
+        
+        // 更新元素，同时保留视频元素的引用
+        if (layoutCopy.elements) {
+          liveLayout.value.elements = layoutCopy.elements.map((newElement: LayoutElement) => {
+            if (newElement.type === 'media') {
+              // 查找对应的现有元素
+              const existingElement = existingElements.find(e => 
+                e.id === newElement.id && e.type === 'media'
+              );
+              
+              // 如果找到现有元素且有相同的sourceId，则保留现有元素的引用
+              if (existingElement && existingElement.type === 'media' && 
+                  (existingElement as MediaLayoutElement).sourceId === (newElement as MediaLayoutElement).sourceId) {
+                return { ...newElement, ...existingElement };
+              }
+            }
+            return newElement;
+          });
+        }
+      } else {
+        // 如果当前没有布局或元素，直接设置
+        liveLayout.value = layoutCopy;
+      }
     }
     
     // 触发事件通知
-    liveLayoutEditedEvent.value = Date.now()
-    layoutEditedEvent.value = Date.now()
+    liveLayoutEditedEvent.value = Date.now();
+    layoutEditedEvent.value = Date.now();
   }
   
   /**

@@ -45,8 +45,6 @@ import ScheduleManager from '../components/ScheduleManager.vue';
 import LiveControlPanel from '../components/LiveControlPanel.vue';
 import AudioPanel from '../components/AudioPanel.vue';
 import StatusBar from '../components/StatusBar.vue';
-import layoutApi from '../api/layout';
-import { preloadPlanImages, getCacheStatus } from '../utils/imagePreloader';
 import { ElMessage } from 'element-plus';
 
 const planStore = usePlanStore();
@@ -54,41 +52,6 @@ const router = useRouter();
 
 // 引用canvas行元素
 const canvasRowRef = ref<HTMLElement | null>(null);
-
-// 图片预加载状态
-const isPreloading = ref(false);
-const preloadProgress = ref(0);
-
-/**
- * 预加载计划中的所有图片资源
- */
-async function preloadAllImages() {
-  if (!planStore.currentPlan) {
-    console.warn('[MainView.vue 主界面] 当前没有选中计划，无法预加载图片');
-    return;
-  }
-  
-  try {
-    isPreloading.value = true;
-    console.log('[MainView.vue 主界面] 开始预加载计划图片资源');
-    
-    // 预加载计划中的所有图片
-    await preloadPlanImages(planStore.currentPlan);
-    
-    // 获取缓存状态
-    const status = getCacheStatus();
-    console.log('[MainView.vue 主界面] 图片预加载完成', status);
-    
-    // 显示预加载成功消息
-    ElMessage.success(`图片资源预加载完成，共加载 ${status.cached} 张图片`);
-  } catch (error) {
-    console.error('[MainView.vue 主界面] 图片预加载失败:', error);
-    ElMessage.warning('部分图片资源预加载失败，可能会影响显示效果');
-  } finally {
-    isPreloading.value = false;
-    preloadProgress.value = 100;
-  }
-}
 
 /**
  * 调整画布行高度，使画布区域始终保持16:9的比例
@@ -131,31 +94,8 @@ function adjustCanvasHeight() {
 // 创建一个调整大小观察器
 let resizeObserver: ResizeObserver | null = null;
 
-// 组件挂载时加载布局模板并预加载图片
+// 组件挂载时进行初始布局调整
 onMounted(async () => {
-  // 如果没有布局模板或需要更新，则从API获取
-  if (planStore.needsLayoutTemplateUpdate) {
-    try {
-      const templates = await layoutApi.getLayoutTemplates();
-      planStore.setLayoutTemplates(templates);
-    } catch (error) {
-      console.error('获取布局模板失败:', error);
-      
-      // 尝试从本地存储加载
-      const loaded = planStore.loadLayoutTemplatesFromLocalStorage();
-      if (!loaded) {
-        console.error('无法加载布局模板，将跳转到计划选择页面');
-        router.push('/plan-selection');
-        return;
-      }
-    }
-  }
-  
-  // 预加载所有图片资源
-  if (planStore.currentPlan) {
-    preloadAllImages();
-  }
-  
   // 等待DOM更新后再进行初始调整
   nextTick(() => {
     adjustCanvasHeight();

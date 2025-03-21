@@ -142,11 +142,15 @@ export const useVideoStore = defineStore('video', () => {
   /**
    * 初始化视频设备
    * 获取系统可用的视频设备
+   * @param preserveActiveDevices 是否保留已激活的设备流，默认为false
    */
-  async function initVideoDevices() {
+  async function initVideoDevices(preserveActiveDevices = false) {
     isLoading.value = true
     
     try {
+      // 保存当前活跃设备列表（如果需要保留）
+      const currentActiveDevices = preserveActiveDevices ? [...activeDevices.value] : [];
+      
       // 确保视频设备管理器初始化
       // @ts-ignore - 访问内部方法
       if (typeof videoDeviceManager.initialize === 'function') {
@@ -159,6 +163,20 @@ export const useVideoStore = defineStore('video', () => {
       
       // 获取摄像头设备
       const cameras = await videoDeviceManager.getCameraDevices()
+      
+      // 如果需要保留已激活的设备，则合并设备状态
+      if (preserveActiveDevices && currentActiveDevices.length > 0) {
+        // 为新获取的设备设置激活状态和流（如果之前已激活）
+        for (const camera of cameras) {
+          const prevDevice = currentActiveDevices.find(d => d.id === camera.id);
+          if (prevDevice && prevDevice.isActive && prevDevice.stream) {
+            camera.isActive = true;
+            camera.stream = prevDevice.stream;
+            console.log(`[videoStore.ts 视频存储] 保留已激活的摄像头: ${camera.id} (${camera.name})`);
+          }
+        }
+      }
+      
       cameraDevices.value = cameras
       
       // 更新活跃设备列表
@@ -166,11 +184,49 @@ export const useVideoStore = defineStore('video', () => {
       
       // 获取窗口捕获
       const windows = await videoDeviceManager.getWindowDevices()
+      
+      // 如果需要保留已激活的设备，则合并设备状态
+      if (preserveActiveDevices && currentActiveDevices.length > 0) {
+        // 为新获取的设备设置激活状态和流（如果之前已激活）
+        for (const window of windows) {
+          const prevDevice = currentActiveDevices.find(d => d.id === window.id);
+          if (prevDevice && prevDevice.isActive && prevDevice.stream) {
+            window.isActive = true;
+            window.stream = prevDevice.stream;
+            console.log(`[videoStore.ts 视频存储] 保留已激活的窗口: ${window.id} (${window.name})`);
+          }
+        }
+      }
+      
       windowDevices.value = windows
       
       // 获取显示器捕获
       const displays = await videoDeviceManager.getDisplayDevices()
+      
+      // 如果需要保留已激活的设备，则合并设备状态
+      if (preserveActiveDevices && currentActiveDevices.length > 0) {
+        // 为新获取的设备设置激活状态和流（如果之前已激活）
+        for (const display of displays) {
+          const prevDevice = currentActiveDevices.find(d => d.id === display.id);
+          if (prevDevice && prevDevice.isActive && prevDevice.stream) {
+            display.isActive = true;
+            display.stream = prevDevice.stream;
+            console.log(`[videoStore.ts 视频存储] 保留已激活的显示器: ${display.id} (${display.name})`);
+          }
+        }
+      }
+      
       displayDevices.value = displays
+      
+      // 如果需要保留活跃设备，合并活跃设备列表
+      if (preserveActiveDevices) {
+        const allDevices = [...cameras, ...windows, ...displays];
+        const activeDevicesAfterInit = allDevices.filter(device => device.isActive);
+        
+        // 确保活跃设备列表包含所有活跃设备
+        activeDevices.value = activeDevicesAfterInit;
+        console.log(`[videoStore.ts 视频存储] 初始化后保留了 ${activeDevicesAfterInit.length} 个活跃设备`);
+      }
       
       return {
         success: true,
@@ -203,9 +259,10 @@ export const useVideoStore = defineStore('video', () => {
   
   /**
    * 刷新视频设备列表
+   * @param preserveActiveDevices 是否保留已激活的设备流，默认为false
    */
-  async function refreshDevices() {
-    return await initVideoDevices()
+  async function refreshDevices(preserveActiveDevices = false) {
+    return await initVideoDevices(preserveActiveDevices)
   }
   
   /**

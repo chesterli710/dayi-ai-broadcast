@@ -8,12 +8,13 @@ import { useVideoStore } from '../stores/videoStore';
 import { usePlanStore } from '../stores/planStore';
 import { getCachedImage, preloadImage, isDataUrl } from './imagePreloader';
 import { TextLayerRenderer } from './textLayerRenderer';
+import type { VideoDevice } from '../types/video';
+import { VideoSourceType } from '../types/video';
 
-// 扩展VideoDevice接口，添加videoElement属性
-declare module '../types/video' {
-  interface VideoDevice {
-    videoElement?: HTMLVideoElement;
-  }
+// 渲染器类型
+export enum RendererType {
+  PREVIEW = 'preview',
+  LIVE = 'live'
 }
 
 /**
@@ -78,6 +79,15 @@ export class CanvasRenderer {
     scale: { scaleX: number, scaleY: number },
     canvasSize: { width: number, height: number }
   }> = new Map();
+  
+  // 本地Map管理视频元素
+  private videoElements: Map<string, HTMLVideoElement> | null = null;
+  
+  // 设备加载缓冲机制
+  private pendingDevices: Set<string> = new Set();
+  private deviceWarningLastShown: Map<string, number> = new Map();
+  private deviceWarningThrottleTime: number = 5000; // 5 seconds
+  private deviceInitialized: Map<string, boolean> = new Map();
   
   /**
    * 构造函数
@@ -199,6 +209,62 @@ export class CanvasRenderer {
    */
   public setLayout(layout: Layout | null): void {
     console.log(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 设置布局:`, layout?.id);
+    
+    // 获取新布局中使用的所有媒体源ID
+    const newMediaSourceIds = new Set<string>();
+    if (layout && layout.elements) {
+      layout.elements.forEach(element => {
+        if (element.type === LayoutElementType.MEDIA) {
+          const mediaElement = element as MediaLayoutElement;
+          if (mediaElement.sourceId) {
+            newMediaSourceIds.add(mediaElement.sourceId);
+          }
+        }
+      });
+    }
+    
+    // 清理不再使用的视频元素
+    if (this.videoElements) {
+      const unusedSourceIds: string[] = [];
+      
+      this.videoElements.forEach((videoElement, sourceId) => {
+        if (!newMediaSourceIds.has(sourceId)) {
+          unusedSourceIds.push(sourceId);
+          
+          try {
+            // 停止播放
+            if (!videoElement.paused) {
+              videoElement.pause();
+            }
+            
+            // 停止媒体轨道并清除媒体源
+            if (videoElement.srcObject) {
+              const stream = videoElement.srcObject as MediaStream;
+              if (stream) {
+                stream.getTracks().forEach(track => {
+                  try {
+                    track.stop();
+                  } catch (err) {
+                    console.warn(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 停止轨道失败:`, err);
+                  }
+                });
+              }
+              videoElement.srcObject = null;
+            }
+          } catch (error) {
+            console.error(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 释放视频元素时出错:`, error);
+          }
+        }
+      });
+      
+      // 从集合中移除不再使用的视频元素
+      if (unusedSourceIds.length > 0) {
+        console.log(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 清理 ${unusedSourceIds.length} 个不再使用的视频元素:`, unusedSourceIds);
+        unusedSourceIds.forEach(sourceId => {
+          this.videoElements?.delete(sourceId);
+        });
+      }
+    }
     
     // 如果布局发生变化，标记所有图层需要重绘
     if (this.currentLayout?.id !== layout?.id) {
@@ -734,7 +800,7 @@ export class CanvasRenderer {
    * 销毁渲染器
    */
   public destroy(): void {
-    console.log('[canvasRenderer.ts 画布渲染器] 销毁渲染器');
+    console.log(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 销毁渲染器`);
     
     // 停止渲染循环
     this.stopRenderLoop();
@@ -750,6 +816,44 @@ export class CanvasRenderer {
     
     // 销毁文字图层渲染器
     this.textLayerRenderer.destroy();
+    
+    // 释放视频元素资源
+    if (this.videoElements) {
+      console.log(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 释放 ${this.videoElements.size} 个视频元素`);
+      this.videoElements.forEach((videoElement, sourceId) => {
+        try {
+          // 停止播放
+          if (!videoElement.paused) {
+            videoElement.pause();
+          }
+          
+          // 停止媒体轨道
+          if (videoElement.srcObject) {
+            const stream = videoElement.srcObject as MediaStream;
+            if (stream) {
+              stream.getTracks().forEach(track => {
+                // 停止轨道
+                try {
+                  track.stop();
+                  console.log(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 已停止视频轨道 ${track.id} ${track.kind}`);
+                } catch (err) {
+                  console.warn(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 停止轨道失败:`, err);
+                }
+              });
+            }
+            
+            // 清除媒体源
+            videoElement.srcObject = null;
+          }
+        } catch (error) {
+          console.error(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 释放视频元素时出错:`, error);
+        }
+      });
+      
+      // 清空视频元素集合
+      this.videoElements.clear();
+      this.videoElements = null;
+    }
     
     // 移除引用
     this.currentLayout = null;
@@ -767,13 +871,22 @@ export class CanvasRenderer {
     this.foregroundNeedsRedraw = true;
     this.textLayerNeedsRedraw = true;
     
+    // 清除媒体元素坐标缓存
+    this.clearMediaElementCache();
+    
     // 通知文字图层渲染器布局已变更
     this.textLayerRenderer.onLayoutOrScheduleChanged();
     
     // 如果当前有布局，重新设置布局触发渲染
     if (this.currentLayout) {
-      this.setLayout(this.currentLayout);
+      // 创建布局的深拷贝，确保引用变化
+      const layoutCopy = JSON.parse(JSON.stringify(this.currentLayout));
+      // 重新设置布局
+      this.setLayout(layoutCopy);
     }
+    
+    // 立即启动渲染循环确保变化能被立即渲染
+    this.startRenderLoop();
   }
   
   /**
@@ -868,7 +981,19 @@ export class CanvasRenderer {
     }
     
     // 获取视频元素
-    const videoElement = this.getVideoElement(element.sourceId);
+    let videoElement = this.getVideoElement(element.sourceId);
+    
+    // 检查视频元素状态，如果有问题则尝试获取新元素
+    if (videoElement && !this.isVideoElementReady(videoElement, element.sourceId)) {
+      console.warn(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 视频元素状态异常，尝试重新创建: ${element.sourceId}`);
+      // 移除现有元素
+      if (this.videoElements) {
+        this.videoElements.delete(element.sourceId);
+      }
+      // 重新获取视频元素
+      videoElement = this.getVideoElement(element.sourceId);
+    }
+    
     if (!videoElement) {
       return;
     }
@@ -878,7 +1003,11 @@ export class CanvasRenderer {
       console.warn(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 视频元素尚未准备好: ${element.sourceId}, readyState=${videoElement.readyState}`);
       return;
     }
-
+    
+    // 获取视频设备，判断是否为窗口或显示器捕获
+    const device = this.videoStore.activeDevices.find(device => device.id === element.sourceId);
+    const isWindowOrDisplay = device && (device.type === VideoSourceType.WINDOW || device.type === VideoSourceType.DISPLAY);
+    
     // 生成元素唯一缓存键
     const cacheKey = this.generateMediaElementCacheKey(element);
     
@@ -888,19 +1017,52 @@ export class CanvasRenderer {
       // 使用缓存的坐标数据
       coords = this.mediaElementsCache.get(cacheKey)!;
     } else {
-      // 直接使用元素在1920x1080坐标系中的位置和尺寸，无需转换
-      coords = {
-        original: { x: element.x, y: element.y, width: element.width, height: element.height },
-        scaled: { x: element.x, y: element.y, width: element.width, height: element.height },
-        scale: { scaleX: 1, scaleY: 1 },
-        canvasSize: { width: this.width, height: this.height }
-      };
+      if (isWindowOrDisplay) {
+        // 对于窗口和显示器捕获，保持原始宽高比
+        coords = this.calculateMaintainAspectRatioCoords(element, videoElement);
+      } else {
+        // 其他类型媒体元素直接使用元素在1920x1080坐标系中的位置和尺寸，无需转换
+        coords = {
+          original: { x: element.x, y: element.y, width: element.width, height: element.height },
+          scaled: { x: element.x, y: element.y, width: element.width, height: element.height },
+          scale: { scaleX: 1, scaleY: 1 },
+          canvasSize: { width: this.width, height: this.height }
+        };
+      }
       
       // 将计算结果存入缓存
       this.mediaElementsCache.set(cacheKey, coords);
       
       // 仅在首次计算或缓存未命中时输出日志
       console.log(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 媒体元素坐标:`, coords);
+    }
+    
+    // 检查是否需要填充黑色背景（当 transparentBackground 不为 true 时填充）
+    if (element.transparentBackground !== true) {
+      // 保存当前上下文状态
+      ctx.save();
+      
+      // 设置填充颜色为黑色
+      ctx.fillStyle = '#000000';
+      
+      // 填充整个元素区域
+      ctx.fillRect(
+        coords.original.x,
+        coords.original.y,
+        coords.original.width,
+        coords.original.height
+      );
+      
+      // 恢复上下文状态
+      ctx.restore();
+      
+      // 添加日志
+      if (this.frameCount % 60 === 0) { // 每60帧记录一次日志，避免日志过多
+        console.log(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 媒体元素使用黑色背景: ${element.sourceId}`);
+      }
+    } else if (this.frameCount % 60 === 0) { // 每60帧记录一次日志，避免日志过多
+      // 添加日志
+      console.log(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 媒体元素使用透明背景: ${element.sourceId}`);
     }
     
     // 绘制视频帧
@@ -918,6 +1080,104 @@ export class CanvasRenderer {
   }
   
   /**
+   * 计算保持原始宽高比的坐标
+   * @param element 媒体元素
+   * @param videoElement 视频元素
+   * @returns 坐标数据
+   */
+  private calculateMaintainAspectRatioCoords(element: MediaLayoutElement, videoElement: HTMLVideoElement): any {
+    const originalX = element.x;
+    const originalY = element.y;
+    const layoutWidth = element.width;
+    const layoutHeight = element.height;
+    
+    // 获取视频的实际宽高比
+    const videoWidth = videoElement.videoWidth || 1280; // 防止为0
+    const videoHeight = videoElement.videoHeight || 720; // 防止为0
+    const videoAspectRatio = videoWidth / videoHeight;
+    
+    // 计算布局区域的宽高比
+    const layoutAspectRatio = layoutWidth / layoutHeight;
+    
+    // 计算适应布局区域的宽高
+    let scaledWidth = layoutWidth;
+    let scaledHeight = layoutHeight;
+    let offsetX = 0;
+    let offsetY = 0;
+    
+    // 根据宽高比确定如何缩放
+    if (videoAspectRatio > layoutAspectRatio) {
+      // 视频比例更宽，以宽度为准，居中显示
+      scaledHeight = layoutWidth / videoAspectRatio;
+      offsetY = (layoutHeight - scaledHeight) / 2;
+    } else {
+      // 视频比例更高，以高度为准，居中显示
+      scaledWidth = layoutHeight * videoAspectRatio;
+      offsetX = (layoutWidth - scaledWidth) / 2;
+    }
+    
+    // 添加日志
+    console.log(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 视频实际比例: ${videoAspectRatio.toFixed(3)}, 布局比例: ${layoutAspectRatio.toFixed(3)}, 调整后尺寸: ${scaledWidth.toFixed(0)}x${scaledHeight.toFixed(0)}`);
+    
+    // 返回坐标数据
+    return {
+      original: { x: originalX, y: originalY, width: layoutWidth, height: layoutHeight },
+      scaled: { 
+        x: originalX + offsetX, 
+        y: originalY + offsetY, 
+        width: scaledWidth, 
+        height: scaledHeight 
+      },
+      scale: { scaleX: scaledWidth / videoWidth, scaleY: scaledHeight / videoHeight },
+      canvasSize: { width: this.width, height: this.height }
+    };
+  }
+  
+  /**
+   * 检查视频元素是否处于可用状态
+   * @param videoElement 视频元素
+   * @param sourceId 视频源ID
+   * @returns 视频元素是否可用
+   */
+  private isVideoElementReady(videoElement: HTMLVideoElement, sourceId: string): boolean {
+    // 检查视频元素是否有效
+    if (!videoElement) {
+      return false;
+    }
+    
+    // 检查srcObject是否存在
+    if (!videoElement.srcObject) {
+      return false;
+    }
+    
+    // 检查媒体流是否有效
+    const stream = videoElement.srcObject as MediaStream;
+    if (!stream || !stream.active) {
+      return false;
+    }
+    
+    // 检查是否有视频轨道
+    const videoTracks = stream.getVideoTracks();
+    if (videoTracks.length === 0) {
+      return false;
+    }
+    
+    // 检查视频轨道是否有效
+    for (const track of videoTracks) {
+      if (!track || track.readyState !== 'live') {
+        return false;
+      }
+    }
+    
+    // 检查元素是否已加载
+    if (videoElement.readyState < 1) { // HAVE_METADATA
+      return false;
+    }
+    
+    return true;
+  }
+  
+  /**
    * 获取视频元素
    * @param sourceId 视频源ID
    * @returns 视频元素
@@ -925,53 +1185,238 @@ export class CanvasRenderer {
   private getVideoElement(sourceId: string): HTMLVideoElement | null {
     // 从视频存储中获取视频设备
     const device = this.videoStore.activeDevices.find(device => device.id === sourceId);
+    
+    // 如果设备不存在
     if (!device) {
-      console.warn(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 未找到ID为 ${sourceId} 的视频设备`);
+      // 检查是否是首次请求该设备，避免重复警告
+      if (!this.pendingDevices.has(sourceId)) {
+        // 如果不在等待队列中，添加到等待队列
+        this.pendingDevices.add(sourceId);
+        
+        // 定期检查设备是否可用
+        this.scheduleDeviceCheck(sourceId);
+        
+        // 仅在设备首次请求或距上次警告已过指定时间才输出警告
+        const now = Date.now();
+        const lastWarningTime = this.deviceWarningLastShown.get(sourceId) || 0;
+        if (now - lastWarningTime > this.deviceWarningThrottleTime) {
+          console.warn(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 未找到ID为 ${sourceId} 的视频设备，已加入等待队列`);
+          this.deviceWarningLastShown.set(sourceId, now);
+        }
+      }
       return null;
+    }
+    
+    // 设备已找到，从等待队列中移除
+    if (this.pendingDevices.has(sourceId)) {
+      this.pendingDevices.delete(sourceId);
+      console.log(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 设备 ${sourceId} 已加载，从等待队列中移除`);
     }
     
     // 检查设备是否有视频流
     if (!device.stream || !device.stream.active) {
-      console.warn(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 设备 ${sourceId} 没有活跃的视频流`);
+      // 仅在设备首次请求或距上次警告已过指定时间才输出警告
+      const now = Date.now();
+      const lastWarningTime = this.deviceWarningLastShown.get(sourceId) || 0;
+      if (now - lastWarningTime > this.deviceWarningThrottleTime) {
+        console.warn(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 设备 ${sourceId} 没有活跃的视频流`);
+        this.deviceWarningLastShown.set(sourceId, now);
+      }
       
       // 尝试重新激活设备
       if (this.videoStore.autoRecoverStreams) {
-        console.log(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 尝试重新激活设备 ${sourceId}`);
-        this.videoStore.activateDevice(sourceId, device.type);
+        // 避免频繁重试激活设备
+        if (now - lastWarningTime > this.deviceWarningThrottleTime) {
+          console.log(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 尝试重新激活设备 ${sourceId}`);
+          this.videoStore.activateDevice(sourceId, device.type);
+        }
       }
       
       return null;
     }
     
-    // 如果设备没有videoElement属性，创建一个
-    if (!device.videoElement) {
+    // 使用本地Map管理视频元素，为每个sourceId创建单独的视频元素
+    if (!this.videoElements) {
+      this.videoElements = new Map<string, HTMLVideoElement>();
+    }
+    
+    // 检查本地是否已有该sourceId的视频元素，并且检查其状态
+    const existingElement = this.videoElements.get(sourceId);
+    const needNewElement = !existingElement || 
+                           !existingElement.srcObject || 
+                           !(existingElement.srcObject as MediaStream).active ||
+                           existingElement.readyState === 0;
+    
+    if (needNewElement) {
       try {
         console.log(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 为设备 ${sourceId} 创建视频元素`);
+        // 移除旧元素（如果存在）
+        if (existingElement) {
+          try {
+            if (existingElement.srcObject) {
+              existingElement.srcObject = null;
+            }
+            if (!existingElement.paused) {
+              existingElement.pause();
+            }
+          } catch (err) {
+            console.warn(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 清理旧视频元素出错:`, err);
+          }
+        }
+        
+        // 创建新的视频元素
         const videoElement = document.createElement('video');
-        videoElement.srcObject = device.stream;
+        
+        // 为视频元素设置流对象
+        if (device.stream) {
+          try {
+            // 尝试克隆流以避免与其他实例共享同一个MediaStream对象
+            const streamClone = new MediaStream();
+            
+            // 尝试克隆轨道，如果不支持则直接使用原轨道
+            device.stream.getTracks().forEach(track => {
+              try {
+                // 尝试克隆轨道
+                const clonedTrack = track.clone();
+                streamClone.addTrack(clonedTrack);
+              } catch (error) {
+                // 如果克隆失败，直接使用原始轨道
+                console.warn(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 轨道克隆失败，使用原始轨道:`, error);
+                streamClone.addTrack(track);
+              }
+            });
+            
+            videoElement.srcObject = streamClone;
+          } catch (error) {
+            // 如果上述方法失败，直接使用原始流
+            console.warn(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 流克隆失败，使用原始流:`, error);
+            videoElement.srcObject = device.stream;
+          }
+        }
+        
         videoElement.autoplay = true;
         videoElement.muted = true;
         videoElement.playsInline = true;
         
-        // 设置视频元素属性
-        device.videoElement = videoElement;
+        // 存储到本地Map中
+        this.videoElements.set(sourceId, videoElement);
+        
+        // 标记设备已初始化
+        this.deviceInitialized.set(sourceId, true);
+        
+        // 添加额外的调试信息
+        console.log(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 视频元素创建完成，分辨率: ${
+          device.stream.getVideoTracks()[0]?.getSettings().width || 'unknown'
+        }x${
+          device.stream.getVideoTracks()[0]?.getSettings().height || 'unknown'
+        }`);
         
         // 监听视频元素错误事件
         videoElement.onerror = (error) => {
           console.error(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 视频元素错误:`, error);
         };
         
-        // 确保视频元素开始播放
-        videoElement.play().catch(error => {
-          console.error(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 无法播放视频:`, error);
-        });
-    } catch (error) {
+        // 改进视频播放逻辑，使用事件和延迟机制
+        const startPlaying = () => {
+          // 确保视频元素开始播放，添加重试机制
+          const attemptPlay = (retries = 3) => {
+            if (retries <= 0) {
+              console.error(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 视频播放失败，已达到最大重试次数`);
+              return;
+            }
+            
+            videoElement.play()
+              .then(() => {
+                console.log(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 视频元素播放成功: ${sourceId}`);
+              })
+              .catch(error => {
+                if (error.name === 'AbortError') {
+                  console.warn(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 播放请求被中断，重试中 (${retries}次): ${error.message}`);
+                  // 如果是AbortError，延迟后重试
+                  setTimeout(() => attemptPlay(retries - 1), 100);
+                } else if (error.name === 'NotAllowedError') {
+                  console.warn(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 自动播放被浏览器阻止，请设置 muted=true: ${error.message}`);
+                  // 确保静音
+                  videoElement.muted = true;
+                  setTimeout(() => attemptPlay(retries - 1), 100);
+                } else {
+                  console.error(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 视频播放错误: ${error.name} - ${error.message}`);
+                }
+              });
+          };
+          
+          // 开始尝试播放
+          attemptPlay();
+        };
+
+        // 当元数据加载完成时开始播放
+        if (videoElement.readyState >= 1) { // HAVE_METADATA
+          // 元数据已加载，可以立即播放
+          startPlaying();
+        } else {
+          // 监听元数据加载事件
+          videoElement.addEventListener('loadedmetadata', () => {
+            startPlaying();
+          }, { once: true });
+          
+          // 添加超时保护，防止元数据加载事件未触发
+          setTimeout(() => {
+            if (videoElement.readyState < 1) {
+              console.warn(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 元数据加载超时，尝试强制播放`);
+              startPlaying();
+            }
+          }, 1000);
+        }
+      } catch (error) {
         console.error(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 创建视频元素时出错:`, error);
         return null;
       }
     }
     
-    return device.videoElement;
+    return this.videoElements.get(sourceId) || null;
+  }
+  
+  /**
+   * 定期检查设备是否可用
+   * @param sourceId 设备ID
+   */
+  private scheduleDeviceCheck(sourceId: string): void {
+    // 每500毫秒检查一次设备是否可用，最多检查10次
+    let checkCount = 0;
+    const maxChecks = 10;
+    
+    const checkDevice = () => {
+      // 如果设备已不在等待队列中，停止检查
+      if (!this.pendingDevices.has(sourceId)) {
+        return;
+      }
+      
+      // 检查计数递增
+      checkCount++;
+      
+      // 查找设备
+      const device = this.videoStore.activeDevices.find(device => device.id === sourceId);
+      
+      if (device) {
+        // 设备已找到，从等待队列中移除
+        this.pendingDevices.delete(sourceId);
+        console.log(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 设备 ${sourceId} 现已可用，第 ${checkCount} 次检查`);
+        
+        // 如果设备有活跃流，标记为初始化完成
+        if (device.stream && device.stream.active) {
+          this.deviceInitialized.set(sourceId, true);
+        }
+      } else if (checkCount < maxChecks) {
+        // 继续检查
+        setTimeout(checkDevice, 500);
+      } else {
+        // 达到最大检查次数，发出最终警告
+        console.warn(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 设备 ${sourceId} 在 ${maxChecks} 次检查后仍未找到`);
+      }
+    };
+    
+    // 开始检查
+    setTimeout(checkDevice, 500);
   }
 
   /**
@@ -1177,6 +1622,68 @@ export class CanvasRenderer {
     this.textLayerNeedsRedraw = true;
     
     console.log(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 布局或尺寸变化，已清除坐标缓存`);
+  }
+
+  /**
+   * 处理视频源
+   * @param sourceId 视频源ID
+   * @param x 坐标X
+   * @param y 坐标Y
+   * @param width 宽度
+   * @param height 高度
+   */
+  private processVideoSource(sourceId: string, x: number, y: number, width: number, height: number): void {
+    try {
+      // 如果设备在等待队列中，避免处理
+      if (this.pendingDevices.has(sourceId)) {
+        // 不需要重复记录警告，已在getVideoElement中处理
+        return;
+      }
+      
+      const videoElement = this.getVideoElement(sourceId);
+      
+      if (!videoElement) {
+        // 警告已经在getVideoElement方法中处理
+        return;
+      }
+      
+      // 检查视频元素的准备情况
+      // readyState: 0 = HAVE_NOTHING, 1 = HAVE_METADATA, 2 = HAVE_CURRENT_DATA, 3 = HAVE_FUTURE_DATA, 4 = HAVE_ENOUGH_DATA
+      if (videoElement.readyState < 2) { // 至少需要HAVE_CURRENT_DATA才能绘制
+        // 视频尚未准备好，但进展中，使用节流减少警告
+        const now = Date.now();
+        const lastWarningTime = this.deviceWarningLastShown.get(sourceId) || 0;
+        if (now - lastWarningTime > this.deviceWarningThrottleTime) {
+          console.warn(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 视频元素尚未准备好渲染 (readyState=${videoElement.readyState})`);
+          this.deviceWarningLastShown.set(sourceId, now);
+        }
+        return;
+      }
+      
+      // 视频宽高
+      const videoWidth = videoElement.videoWidth;
+      const videoHeight = videoElement.videoHeight;
+      
+      if (videoWidth === 0 || videoHeight === 0) {
+        // 视频尺寸无效，可能还未完全准备好
+        const now = Date.now();
+        const lastWarningTime = this.deviceWarningLastShown.get(sourceId) || 0;
+        if (now - lastWarningTime > this.deviceWarningThrottleTime) {
+          console.warn(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 视频尺寸无效: ${videoWidth}x${videoHeight}`);
+          this.deviceWarningLastShown.set(sourceId, now);
+        }
+        return;
+      }
+      
+      // 绘制视频
+      if (this.ctx) {
+        this.ctx.drawImage(videoElement, x, y, width, height);
+      } else {
+        console.error(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 画布上下文为空，无法绘制视频`);
+      }
+    } catch (error) {
+      console.error(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 处理视频源出错:`, error);
+    }
   }
 }
 

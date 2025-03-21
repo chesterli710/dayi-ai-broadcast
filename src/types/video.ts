@@ -13,16 +13,43 @@ export enum VideoSourceType {
 }
 
 /**
- * 视频设备信息
+ * 视频设备接口
  */
 export interface VideoDevice {
-  id: string;                  // 设备ID
-  name: string;                // 设备名称
-  type: VideoSourceType;       // 设备类型
-  isActive: boolean;           // 是否激活
-  thumbnail?: string;          // 缩略图URL
-  stream?: MediaStream;        // 媒体流
-  sourceId?: string;           // 媒体源ID，用于获取实时流
+  /**
+   * 设备ID
+   */
+  id: string;
+  
+  /**
+   * 设备名称
+   */
+  name: string;
+  
+  /**
+   * 设备类型
+   */
+  type: VideoSourceType;
+  
+  /**
+   * 设备是否活跃
+   */
+  isActive: boolean;
+  
+  /**
+   * 视频流
+   */
+  stream?: MediaStream;
+  
+  /**
+   * 缩略图
+   */
+  thumbnail?: string;
+  
+  /**
+   * 源ID (可选，用于窗口和显示器捕获)
+   */
+  sourceId?: string;
 }
 
 /**

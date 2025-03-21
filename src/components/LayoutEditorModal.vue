@@ -367,14 +367,14 @@ async function initializeVideoSources() {
       await videoDeviceManager.initialize();
     }
     
-    // 初始化视频设备
-    await videoStore.initVideoDevices();
+    // 初始化视频设备，但不重新创建已经活跃的设备流
+    console.log('[LayoutEditorModal.vue 布局编辑器] 初始化视频设备，保留已活跃的流');
+    // 获取当前活跃设备，用于后续比较
+    const activeDevicesBeforeInit = [...videoStore.activeDevices];
+    const activeDeviceIds = activeDevicesBeforeInit.map(d => d.id);
     
-    // 自动激活所有摄像头设备并设置视频流
-    for (const device of videoStore.cameraDevices) {
-      // 调用previewSource函数激活设备并设置视频流
-      await previewSource(device);
-    }
+    // 初始化视频设备，但不影响已有的活跃设备
+    await videoStore.initVideoDevices(false);
     
     // 获取当前布局的媒体元素
     const currentMediaElements = getMediaElements();
@@ -387,11 +387,65 @@ async function initializeVideoSources() {
       }))
     );
     
-    // 只有当布局中的媒体元素有sourceId时才激活它们
-    // 激活已有的媒体源（仅在布局预览区域）
+    // 过滤出需要激活的设备（排除已经活跃的设备）
+    const elementsNeedActivation = currentMediaElements.filter(element => 
+      element.sourceId && 
+      element.sourceType && 
+      !activeDeviceIds.includes(element.sourceId)
+    );
+    
+    if (elementsNeedActivation.length > 0) {
+      console.log(`[LayoutEditorModal.vue 布局编辑器] 需要激活 ${elementsNeedActivation.length} 个新设备`);
+      
+      // 收集需要激活的设备ID
+      const deviceActivationPromises = [];
+      
+      for (const element of elementsNeedActivation) {
+        if (element.sourceId && element.sourceType) {
+          console.log(`[LayoutEditorModal.vue 布局编辑器] 准备激活媒体元素: ID=${element.id}, 源=${element.sourceId}, 类型=${element.sourceType}`);
+          
+          // 检查当前设备是否已激活
+          const isActive = videoStore.activeDevices.some(d => d.id === element.sourceId);
+          if (!isActive) {
+            switch (element.sourceType) {
+              case VideoSourceType.CAMERA:
+                deviceActivationPromises.push(videoStore.activateDevice(element.sourceId, VideoSourceType.CAMERA));
+                break;
+              case VideoSourceType.WINDOW:
+                deviceActivationPromises.push(videoStore.activateDevice(element.sourceId, VideoSourceType.WINDOW));
+                break;
+              case VideoSourceType.DISPLAY:
+                deviceActivationPromises.push(videoStore.activateDevice(element.sourceId, VideoSourceType.DISPLAY));
+                break;
+            }
+          }
+        }
+      }
+      
+      // 等待所有新设备激活完成
+      if (deviceActivationPromises.length > 0) {
+        console.log(`[LayoutEditorModal.vue 布局编辑器] 等待 ${deviceActivationPromises.length} 个设备激活`);
+        await Promise.all(deviceActivationPromises);
+        console.log('[LayoutEditorModal.vue 布局编辑器] 所有设备激活完成');
+      }
+    }
+    
+    // 等待DOM更新
+    await nextTick();
+    
+    // 为布局中的媒体元素设置视频流
+    console.log('[LayoutEditorModal.vue 布局编辑器] 为布局媒体元素设置视频流');
     for (const element of currentMediaElements) {
       if (element.sourceId && element.sourceType) {
-        console.log(`[LayoutEditorModal.vue 布局编辑器] 激活布局中的媒体元素: ID=${element.id}, 源=${element.sourceId}, 类型=${element.sourceType}`);
+        // 检查设备是否已经有活跃流
+        const isAlreadyActive = videoStore.activeDevices.some(d => d.id === element.sourceId && d.stream);
+        
+        if (isAlreadyActive) {
+          console.log(`[LayoutEditorModal.vue 布局编辑器] 设备已有活跃流，复用: ID=${element.sourceId}, 类型=${element.sourceType}`);
+        } else {
+          console.log(`[LayoutEditorModal.vue 布局编辑器] 为媒体元素设置新流: ID=${element.id}, 源=${element.sourceId}, 类型=${element.sourceType}`);
+        }
+        
         switch (element.sourceType) {
           case VideoSourceType.CAMERA:
             await activateCamera(element.sourceId);
@@ -406,11 +460,19 @@ async function initializeVideoSources() {
       }
     }
     
+    // 为媒体源列表的摄像头设置视频流
+    for (const device of videoStore.cameraDevices) {
+      // 只为未激活的摄像头设置视频流
+      if (!device.isActive) {
+        await previewSource(device);
+      }
+    }
+    
     // 确保所有视频元素都在播放
     await ensureAllVideosPlaying();
     
-    // 为摄像头设备添加额外的处理，确保它们在布局预览区域中显示
-    await ensureCameraStreamsInPreview();
+    // 确保媒体源列表中的预览元素也能播放
+    await ensureSourcePreviewsPlaying();
   } catch (error) {
     console.error('[LayoutEditorModal.vue 布局编辑器] 初始化视频源失败:', error);
   } finally {
@@ -428,18 +490,87 @@ async function ensureAllVideosPlaying() {
     
     // 获取所有视频元素
     const videoElements = document.querySelectorAll('video') as NodeListOf<HTMLVideoElement>;
+    console.log(`[LayoutEditorModal.vue 布局编辑器] 检查 ${videoElements.length} 个视频元素的播放状态`);
+    
+    const playPromises = [];
     
     // 确保每个视频都在播放
     for (const video of videoElements) {
-      if (video.paused && video.srcObject) {
+      // 跳过没有srcObject的视频元素
+      if (!video.srcObject) {
+        continue;
+      }
+      
+      // 检查视频是否已加载元数据
+      if (video.readyState < 1) {
+        console.log('[LayoutEditorModal.vue 布局编辑器] 等待视频元素加载元数据');
+        // 创建一个Promise来等待元数据加载
+        const metadataPromise = new Promise<void>((resolve) => {
+          const onMetadataLoaded = () => {
+            video.removeEventListener('loadedmetadata', onMetadataLoaded);
+            resolve();
+          };
+          
+          // 设置超时，避免无限等待
+          const timeout = setTimeout(() => {
+            video.removeEventListener('loadedmetadata', onMetadataLoaded);
+            console.warn('[LayoutEditorModal.vue 布局编辑器] 等待视频元数据加载超时');
+            resolve();
+          }, 2000);
+          
+          video.addEventListener('loadedmetadata', onMetadataLoaded, { once: true });
+        });
+        
+        playPromises.push(metadataPromise);
+      }
+      
+      // 检查视频是否暂停，需要播放
+      if (video.paused) {
+        console.log('[LayoutEditorModal.vue 布局编辑器] 尝试播放暂停的视频');
         try {
-          await video.play().catch(error => {
-            console.warn('[LayoutEditorModal.vue 布局编辑器] 播放视频失败:', error);
-          });
+          // 确保视频是静音的，以避免自动播放问题
+          video.muted = true;
+          
+          // 使用retry机制尝试播放
+          const maxRetries = 3;
+          let retryCount = 0;
+          
+          const attemptPlay = async (): Promise<void> => {
+            try {
+              await video.play();
+              console.log('[LayoutEditorModal.vue 布局编辑器] 视频播放成功');
+            } catch (error) {
+              retryCount++;
+              
+              if (error instanceof DOMException && error.name === 'AbortError') {
+                console.warn(`[LayoutEditorModal.vue 布局编辑器] 视频播放被中止，重试 (${retryCount}/${maxRetries})`);
+                if (retryCount <= maxRetries) {
+                  // 添加延迟，避免立即重试
+                  await new Promise(resolve => setTimeout(resolve, 300));
+                  return attemptPlay();
+                }
+              } else if (error instanceof DOMException && error.name === 'NotAllowedError') {
+                // 确保视频是静音的
+                video.muted = true;
+                return attemptPlay();
+              } else {
+                console.warn('[LayoutEditorModal.vue 布局编辑器] 播放视频失败:', error);
+              }
+            }
+          };
+          
+          const playPromise = attemptPlay();
+          playPromises.push(playPromise);
         } catch (error) {
           console.warn('[LayoutEditorModal.vue 布局编辑器] 播放视频时出错:', error);
         }
       }
+    }
+    
+    // 等待所有播放操作完成
+    if (playPromises.length > 0) {
+      await Promise.all(playPromises);
+      console.log(`[LayoutEditorModal.vue 布局编辑器] 完成 ${playPromises.length} 个视频播放操作`);
     }
   } catch (error) {
     console.error('[LayoutEditorModal.vue 布局编辑器] 确保视频播放失败:', error);
@@ -454,16 +585,101 @@ async function refreshSources() {
   
   try {
     console.log('[LayoutEditorModal.vue 布局编辑器] 开始刷新媒体源');
-    const result = await videoStore.refreshDevices();
+    
+    // 保留当前激活的设备流
+    const result = await videoStore.refreshDevices(true);
     console.log('[LayoutEditorModal.vue 布局编辑器] 刷新媒体源结果:', result);
     
-    // 自动激活所有摄像头设备
+    // 获取当前布局的媒体元素
+    const currentMediaElements = getMediaElements();
+    console.log('[LayoutEditorModal.vue 布局编辑器] 当前布局媒体元素数量:', currentMediaElements.length);
+    
+    // 获取当前活跃设备ID列表
+    const activeDeviceIds = videoStore.activeDevices.map(d => d.id);
+    console.log('[LayoutEditorModal.vue 布局编辑器] 当前活跃设备:', activeDeviceIds);
+    
+    // 收集需要激活的设备（排除已经活跃的设备）
+    const elementsNeedActivation = currentMediaElements.filter(element => 
+      element.sourceId && 
+      element.sourceType && 
+      !activeDeviceIds.includes(element.sourceId)
+    );
+    
+    if (elementsNeedActivation.length > 0) {
+      console.log(`[LayoutEditorModal.vue 布局编辑器] 需要激活 ${elementsNeedActivation.length} 个新设备`);
+      
+      // 逐个激活需要的设备
+      for (const element of elementsNeedActivation) {
+        if (element.sourceId && element.sourceType) {
+          // 检查设备是否存在
+          let deviceExists = false;
+          switch (element.sourceType) {
+            case VideoSourceType.CAMERA:
+              deviceExists = videoStore.cameraDevices.some(d => d.id === element.sourceId);
+              break;
+            case VideoSourceType.WINDOW:
+              deviceExists = videoStore.windowDevices.some(d => d.id === element.sourceId);
+              break;
+            case VideoSourceType.DISPLAY:
+              deviceExists = videoStore.displayDevices.some(d => d.id === element.sourceId);
+              break;
+          }
+          
+          if (deviceExists) {
+            console.log(`[LayoutEditorModal.vue 布局编辑器] 激活媒体元素: ID=${element.id}, 源=${element.sourceId}, 类型=${element.sourceType}`);
+            switch (element.sourceType) {
+              case VideoSourceType.CAMERA:
+                await activateCamera(element.sourceId);
+                break;
+              case VideoSourceType.WINDOW:
+                await activateWindow(element.sourceId);
+                break;
+              case VideoSourceType.DISPLAY:
+                await activateDisplay(element.sourceId);
+                break;
+            }
+          } else {
+            console.warn(`[LayoutEditorModal.vue 布局编辑器] 设备 ${element.sourceId} 不存在，已从布局移除`);
+            // 清除不存在的设备
+            element.sourceId = '';
+            element.sourceName = '';
+            element.sourceType = undefined;
+          }
+        }
+      }
+    } else {
+      console.log('[LayoutEditorModal.vue 布局编辑器] 所有必要设备已经处于活跃状态');
+    }
+    
+    // 等待DOM更新
+    await nextTick();
+    
+    // 为布局中的媒体元素设置视频流（已有流的元素将复用流）
+    for (const element of currentMediaElements) {
+      if (element.sourceId && element.sourceType) {
+        // 检查设备是否已经有活跃流
+        const isAlreadyActive = videoStore.activeDevices.some(d => d.id === element.sourceId && d.stream);
+        
+        if (isAlreadyActive) {
+          console.log(`[LayoutEditorModal.vue 布局编辑器] 设备已有活跃流，复用: ID=${element.sourceId}, 类型=${element.sourceType}`);
+        } else {
+          console.log(`[LayoutEditorModal.vue 布局编辑器] 为媒体元素设置新流: ID=${element.id}, 源=${element.sourceId}, 类型=${element.sourceType}`);
+        }
+      }
+    }
+    
+    // 只为未激活的摄像头设置视频流（用于媒体源列表的预览）
     for (const device of videoStore.cameraDevices) {
-      await previewSource(device);
+      if (!device.isActive) {
+        await previewSource(device);
+      }
     }
     
     // 确保布局预览区域中的视频元素都在播放
     await ensureAllVideosPlaying();
+    
+    // 确保媒体源列表中的视频元素都在播放
+    await ensureSourcePreviewsPlaying();
   } catch (error) {
     console.error('[LayoutEditorModal.vue 布局编辑器] 刷新媒体源失败:', error);
   } finally {
@@ -473,10 +689,42 @@ async function refreshSources() {
 
 /**
  * 停止所有视频流
+ * 仅停止布局编辑器内部使用的视频流，保留预览和直播画布中的媒体源
  */
 function stopAllVideoStreams() {
-  // 清理视频存储中的资源
-  videoStore.cleanup();
+  try {
+    console.log('[LayoutEditorModal.vue 布局编辑器] 清理编辑器使用的视频流');
+    
+    // 获取当前布局的媒体元素
+    const currentMediaElements = getMediaElements();
+    
+    // 对于每个媒体元素，安全地清除视频引用
+    for (const element of currentMediaElements) {
+      if (element.sourceId) {
+        // 获取视频元素
+        const videoElement = document.getElementById(`video-preview-${element.sourceId}`) as HTMLVideoElement | null;
+        if (videoElement && videoElement.srcObject) {
+          // 不停止流，只清除视频元素的引用
+          videoElement.srcObject = null;
+          console.log(`[LayoutEditorModal.vue 布局编辑器] 已清除视频元素引用: ID=${element.sourceId}`);
+        }
+      }
+    }
+    
+    // 清理媒体源列表中的摄像头预览元素
+    for (const device of videoStore.cameraDevices) {
+      const videoElement = document.getElementById(`video-source-${device.id}`) as HTMLVideoElement | null;
+      if (videoElement && videoElement.srcObject) {
+        videoElement.srcObject = null;
+        console.log(`[LayoutEditorModal.vue 布局编辑器] 已清除媒体源列表视频引用: ID=${device.id}`);
+      }
+    }
+    
+    // 注意：这里不调用videoStore.cleanup()，因为它会停止所有流
+    // 包括可能正在预览或直播中使用的流
+  } catch (error) {
+    console.error('[LayoutEditorModal.vue 布局编辑器] 停止视频流时出错:', error);
+  }
 }
 
 /**
@@ -526,9 +774,14 @@ function getSourceIcon(type: string) {
  * 设置视频元素样式
  * @param videoElement 视频元素
  * @param sourceType 媒体源类型
- * @param isPreview 是否为预览元素
+ * @param isPreview 是否是媒体源列表中的预览
  */
 function setVideoElementStyle(videoElement: HTMLVideoElement, sourceType: string, isPreview = false) {
+  if (!videoElement) {
+    console.warn('[LayoutEditorModal.vue 布局编辑器] 无法设置视频元素样式：视频元素不存在');
+    return;
+  }
+  
   // 基础样式设置
   videoElement.autoplay = true;
   videoElement.muted = true;
@@ -538,9 +791,25 @@ function setVideoElementStyle(videoElement: HTMLVideoElement, sourceType: string
   videoElement.style.objectFit = 'contain';
   videoElement.style.width = '100%';
   videoElement.style.height = '100%';
+  videoElement.style.display = 'block'; // 确保显示
   
-  // 窗口和显示器捕获需要特殊处理
-  if (sourceType === VideoSourceType.WINDOW || sourceType === VideoSourceType.DISPLAY) {
+  // 根据媒体源类型设置特定样式
+  if (sourceType === VideoSourceType.CAMERA) {
+    // 摄像头预览特定样式
+    videoElement.style.backgroundColor = '#000';
+    
+    // 如果是媒体源列表中的预览，进行特殊处理
+    if (isPreview && videoElement.id.startsWith('video-source-')) {
+      videoElement.style.borderRadius = '4px';
+      videoElement.style.maxHeight = '80px';
+      
+      // 添加类以便CSS样式应用
+      if (videoElement.parentElement) {
+        videoElement.parentElement.classList.add('camera-capture');
+      }
+    }
+  } else if (sourceType === VideoSourceType.WINDOW || sourceType === VideoSourceType.DISPLAY) {
+    // 窗口和显示器捕获需要特殊处理
     videoElement.style.backgroundColor = '#000';
     videoElement.style.maxWidth = '100%';
     videoElement.style.maxHeight = '100%';
@@ -548,9 +817,19 @@ function setVideoElementStyle(videoElement: HTMLVideoElement, sourceType: string
     // 如果是媒体源列表中的预览，限制高度
     if (isPreview && videoElement.id.startsWith('video-source-')) {
       videoElement.style.maxHeight = '80px';
-      videoElement.parentElement?.classList.add(sourceType === VideoSourceType.WINDOW ? 'window-capture' : 'display-capture');
+      
+      // 添加类以便CSS样式应用
+      if (videoElement.parentElement) {
+        videoElement.parentElement.classList.add(
+          sourceType === VideoSourceType.WINDOW ? 'window-capture' : 'display-capture'
+        );
+      }
     }
   }
+  
+  // 确保视频元素可见
+  videoElement.style.opacity = '1';
+  videoElement.style.visibility = 'visible';
 }
 
 /**
@@ -559,13 +838,82 @@ function setVideoElementStyle(videoElement: HTMLVideoElement, sourceType: string
  * @param deviceId 设备ID
  */
 async function playVideoElement(videoElement: HTMLVideoElement, deviceId: string) {
-  if (videoElement && videoElement.paused) {
-    try {
-      await videoElement.play();
-      console.log(`[LayoutEditorModal.vue 布局编辑器] 播放视频元素 ${videoElement.id} 成功`);
-    } catch (error) {
-      console.error(`[LayoutEditorModal.vue 布局编辑器] 播放视频元素 ${videoElement.id} 失败:`, error);
+  if (!videoElement) {
+    console.warn(`[LayoutEditorModal.vue 布局编辑器] 视频元素不存在，无法播放设备 ${deviceId}`);
+    return;
+  }
+  
+  if (!videoElement.srcObject) {
+    console.warn(`[LayoutEditorModal.vue 布局编辑器] 视频元素没有流，无法播放设备 ${deviceId}`);
+    return;
+  }
+  
+  // 添加静音以确保自动播放
+  videoElement.muted = true;
+  
+  // 检查是否已经在播放
+  if (!videoElement.paused) {
+    console.log(`[LayoutEditorModal.vue 布局编辑器] 视频元素 ${videoElement.id} 已经在播放中`);
+    return;
+  }
+  
+  try {
+    console.log(`[LayoutEditorModal.vue 布局编辑器] 尝试播放视频元素 ${videoElement.id}`);
+    
+    // 确保视频元素已加载元数据
+    if (videoElement.readyState < 1) {
+      console.log(`[LayoutEditorModal.vue 布局编辑器] 等待视频元素 ${videoElement.id} 加载元数据`);
+      await new Promise<void>((resolve) => {
+        const onMetadataLoaded = () => {
+          videoElement.removeEventListener('loadedmetadata', onMetadataLoaded);
+          resolve();
+        };
+        
+        // 设置超时，避免无限等待
+        const timeout = setTimeout(() => {
+          videoElement.removeEventListener('loadedmetadata', onMetadataLoaded);
+          console.warn(`[LayoutEditorModal.vue 布局编辑器] 等待视频元素 ${videoElement.id} 元数据加载超时`);
+          resolve();
+        }, 2000);
+        
+        videoElement.addEventListener('loadedmetadata', onMetadataLoaded, { once: true });
+      });
     }
+    
+    // 使用retry机制播放视频
+    const maxRetries = 3;
+    let retryCount = 0;
+    
+    const attemptPlay = async (): Promise<void> => {
+      try {
+        await videoElement.play();
+        console.log(`[LayoutEditorModal.vue 布局编辑器] 播放视频元素 ${videoElement.id} 成功`);
+      } catch (error) {
+        retryCount++;
+        
+        if (error instanceof DOMException) {
+          if (error.name === 'AbortError') {
+            console.warn(`[LayoutEditorModal.vue 布局编辑器] 视频元素 ${videoElement.id} 播放被中止，重试 (${retryCount}/${maxRetries})`);
+            if (retryCount <= maxRetries) {
+              // 添加延迟，避免立即重试
+              await new Promise(resolve => setTimeout(resolve, 300));
+              return attemptPlay();
+            }
+          } else if (error.name === 'NotAllowedError') {
+            console.warn(`[LayoutEditorModal.vue 布局编辑器] 视频元素 ${videoElement.id} 播放未被允许，确保已静音`);
+            // 确保视频是静音的
+            videoElement.muted = true;
+            return attemptPlay();
+          }
+        }
+        
+        console.error(`[LayoutEditorModal.vue 布局编辑器] 播放视频元素 ${videoElement.id} 失败:`, error);
+      }
+    };
+    
+    await attemptPlay();
+  } catch (error) {
+    console.error(`[LayoutEditorModal.vue 布局编辑器] 播放视频元素 ${videoElement.id} 时发生异常:`, error);
   }
 }
 
@@ -639,9 +987,44 @@ async function activateDeviceAndSetStream(deviceId: string, sourceType: VideoSou
 async function previewSource(source: VideoDevice) {
   console.log(`[LayoutEditorModal.vue 布局编辑器] 预览媒体源: ${source.name} (ID: ${source.id}, 类型: ${source.type})`);
   
-  // 只为摄像头设备设置视频流，窗口和显示器设备不设置视频流
-  if (source.type === VideoSourceType.CAMERA) {
-    await activateDeviceAndSetStream(source.id, source.type, `video-source-${source.id}`);
+  try {
+    // 查找视频预览元素
+    const videoElement = document.getElementById(`video-source-${source.id}`) as HTMLVideoElement | null;
+    
+    if (!videoElement) {
+      console.warn(`[LayoutEditorModal.vue 布局编辑器] 未找到媒体源预览元素: ${source.id}`);
+      return;
+    }
+    
+    // 检查设备是否已激活
+    const isActive = videoStore.activeDevices.some(d => d.id === source.id && d.stream);
+    
+    if (isActive) {
+      // 设备已激活，直接使用其流
+      const activeDevice = videoStore.activeDevices.find(d => d.id === source.id);
+      if (activeDevice && activeDevice.stream) {
+        console.log(`[LayoutEditorModal.vue 布局编辑器] 设备已激活，复用现有流: ${source.id}`);
+        
+        // 设置视频元素的流
+        videoElement.srcObject = activeDevice.stream;
+        videoElement.muted = true;
+        
+        // 设置视频元素样式
+        setVideoElementStyle(videoElement, source.type, true);
+        
+        // 尝试播放视频
+        await playVideoElement(videoElement, source.id);
+      }
+    } else if (source.type === VideoSourceType.CAMERA) {
+      // 只为摄像头设备自动激活并设置视频流
+      console.log(`[LayoutEditorModal.vue 布局编辑器] 激活摄像头并设置流: ${source.id}`);
+      await activateDeviceAndSetStream(source.id, source.type, `video-source-${source.id}`);
+    } else {
+      // 对于其他类型的设备（窗口/显示器），点击后只显示缩略图，不激活流
+      console.log(`[LayoutEditorModal.vue 布局编辑器] ${source.type}类型设备不自动激活流，等待用户拖放: ${source.id}`);
+    }
+  } catch (error) {
+    console.error(`[LayoutEditorModal.vue 布局编辑器] 预览媒体源失败 (ID: ${source.id}):`, error);
   }
 }
 
@@ -682,11 +1065,59 @@ async function activateCamera(deviceId: string) {
  * @param deviceId 设备ID
  */
 async function activateWindow(deviceId: string) {
-  // 检查设备是否已激活
-  const isActive = videoStore.activeDevices.some(d => d.id === deviceId);
-  
-  if (!isActive) {
-    await activateDeviceAndSetStream(deviceId, VideoSourceType.WINDOW, `video-preview-${deviceId}`);
+  try {
+    // 检查设备是否已激活
+    const isActive = videoStore.activeDevices.some(d => d.id === deviceId);
+    
+    if (!isActive) {
+      // 如果设备未激活，先激活设备
+      await activateDeviceAndSetStream(deviceId, VideoSourceType.WINDOW, `video-preview-${deviceId}`);
+    } else {
+      // 如果设备已激活，获取活跃设备的流并设置到预览视频元素
+      const activeDevice = videoStore.activeDevices.find(d => d.id === deviceId);
+      if (activeDevice && activeDevice.stream) {
+        const videoElement = document.getElementById(`video-preview-${deviceId}`) as HTMLVideoElement | null;
+        if (videoElement) {
+          // 如果视频元素存在但没有视频流或已暂停，设置流并播放
+          if (!videoElement.srcObject || videoElement.paused) {
+            console.log(`[LayoutEditorModal.vue 布局编辑器] 为已激活的窗口捕获设置视频流: ${deviceId}`);
+            
+            try {
+              // 尝试克隆活跃设备的流
+              const streamClone = new MediaStream();
+              
+              // 逐个克隆轨道
+              activeDevice.stream.getTracks().forEach(track => {
+                try {
+                  const cloneTrack = track.clone();
+                  streamClone.addTrack(cloneTrack);
+                } catch (cloneError) {
+                  console.warn(`[LayoutEditorModal.vue 布局编辑器] 克隆轨道失败，使用原始轨道:`, cloneError);
+                  streamClone.addTrack(track);
+                }
+              });
+              
+              // 设置视频元素源为克隆流
+              videoElement.srcObject = streamClone;
+              
+              // 设置视频元素样式
+              setVideoElementStyle(videoElement, VideoSourceType.WINDOW, false);
+              
+              // 尝试播放视频
+              await playVideoElement(videoElement, deviceId);
+            } catch (streamError) {
+              console.error(`[LayoutEditorModal.vue 布局编辑器] 设置窗口捕获视频流失败: ${streamError}`);
+              
+              // 如果克隆失败，尝试直接使用原始流
+              videoElement.srcObject = activeDevice.stream;
+              await playVideoElement(videoElement, deviceId);
+            }
+          }
+        }
+      }
+    }
+  } catch (error) {
+    console.error(`[LayoutEditorModal.vue 布局编辑器] 激活窗口捕获失败 (ID: ${deviceId}):`, error);
   }
 }
 
@@ -695,11 +1126,59 @@ async function activateWindow(deviceId: string) {
  * @param deviceId 设备ID
  */
 async function activateDisplay(deviceId: string) {
-  // 检查设备是否已激活
-  const isActive = videoStore.activeDevices.some(d => d.id === deviceId);
-  
-  if (!isActive) {
-    await activateDeviceAndSetStream(deviceId, VideoSourceType.DISPLAY, `video-preview-${deviceId}`);
+  try {
+    // 检查设备是否已激活
+    const isActive = videoStore.activeDevices.some(d => d.id === deviceId);
+    
+    if (!isActive) {
+      // 如果设备未激活，先激活设备
+      await activateDeviceAndSetStream(deviceId, VideoSourceType.DISPLAY, `video-preview-${deviceId}`);
+    } else {
+      // 如果设备已激活，获取活跃设备的流并设置到预览视频元素
+      const activeDevice = videoStore.activeDevices.find(d => d.id === deviceId);
+      if (activeDevice && activeDevice.stream) {
+        const videoElement = document.getElementById(`video-preview-${deviceId}`) as HTMLVideoElement | null;
+        if (videoElement) {
+          // 如果视频元素存在但没有视频流或已暂停，设置流并播放
+          if (!videoElement.srcObject || videoElement.paused) {
+            console.log(`[LayoutEditorModal.vue 布局编辑器] 为已激活的显示器捕获设置视频流: ${deviceId}`);
+            
+            try {
+              // 尝试克隆活跃设备的流
+              const streamClone = new MediaStream();
+              
+              // 逐个克隆轨道
+              activeDevice.stream.getTracks().forEach(track => {
+                try {
+                  const cloneTrack = track.clone();
+                  streamClone.addTrack(cloneTrack);
+                } catch (cloneError) {
+                  console.warn(`[LayoutEditorModal.vue 布局编辑器] 克隆轨道失败，使用原始轨道:`, cloneError);
+                  streamClone.addTrack(track);
+                }
+              });
+              
+              // 设置视频元素源为克隆流
+              videoElement.srcObject = streamClone;
+              
+              // 设置视频元素样式
+              setVideoElementStyle(videoElement, VideoSourceType.DISPLAY, false);
+              
+              // 尝试播放视频
+              await playVideoElement(videoElement, deviceId);
+            } catch (streamError) {
+              console.error(`[LayoutEditorModal.vue 布局编辑器] 设置显示器捕获视频流失败: ${streamError}`);
+              
+              // 如果克隆失败，尝试直接使用原始流
+              videoElement.srcObject = activeDevice.stream;
+              await playVideoElement(videoElement, deviceId);
+            }
+          }
+        }
+      }
+    }
+  } catch (error) {
+    console.error(`[LayoutEditorModal.vue 布局编辑器] 激活显示器捕获失败 (ID: ${deviceId}):`, error);
   }
 }
 
@@ -1089,128 +1568,59 @@ function saveSimilarLayouts() {
  * 当布局被编辑后保存时，通知预览和直播画布更新
  */
 function notifyRenderersLayoutChanged() {
+  console.log('[LayoutEditorModal.vue 布局编辑器] 布局已保存，正在检查更新路径');
+  
+  // 获取当前正在编辑的布局副本
+  const editedLayout = JSON.parse(JSON.stringify(layoutCopy.value));
+  
   // 获取当前预览和直播布局
   const currentPreviewLayout = planStore.previewingLayout;
   const currentLiveLayout = planStore.liveLayout;
   
-  // 检查当前编辑的布局是否是正在预览或直播的布局
-  // 注意：这里只检查id，确保只有完全匹配的布局才会被更新
-  const isEditingPreviewLayout = currentPreviewLayout && 
-    currentPreviewLayout.id === layoutCopy.value.id;
+  // 检查是否是正在预览的布局
+  const isPreviewLayout = currentPreviewLayout && 
+    currentPreviewLayout.id === editedLayout.id;
   
-  const isEditingLiveLayout = currentLiveLayout && 
-    currentLiveLayout.id === layoutCopy.value.id;
+  // 检查是否是正在直播的布局
+  const isLiveLayout = currentLiveLayout && 
+    currentLiveLayout.id === editedLayout.id;
   
-  console.log(`[LayoutEditorModal.vue 布局编辑器] 布局已保存，检查是否需要更新渲染器:`, {
-    isEditingPreviewLayout,
-    isEditingLiveLayout,
+  // 为便于调试，记录当前状态
+  console.log('[LayoutEditorModal.vue 布局编辑器] 布局更新路径分析:', {
+    isPreviewLayout,
+    isLiveLayout,
     previewLayoutId: currentPreviewLayout?.id,
-    editingLayoutId: layoutCopy.value.id,
+    liveLayoutId: currentLiveLayout?.id,
+    editedLayoutId: editedLayout.id,
     scheduleId: props.scheduleId
   });
   
-  // 如果正在编辑的是预览布局，更新预览布局并通知预览画布更新
-  if (isEditingPreviewLayout && currentPreviewLayout) {
-    // 创建布局的深拷贝，确保引用变化
-    const updatedLayout = JSON.parse(JSON.stringify(layoutCopy.value));
+  // 1. 如果是正在预览的布局，更新预览
+  if (isPreviewLayout) {
+    console.log('[LayoutEditorModal.vue 布局编辑器] 编辑的是当前预览布局，直接通知预览画布重绘');
     
     // 使用completeLayoutInfo方法补全布局信息
-    const completedLayout = planStore.completeLayoutInfo(updatedLayout);
+    const completedLayout = planStore.completeLayoutInfo(editedLayout);
     
-    // 直接更新预览布局 - 使用setPreviewingScheduleAndLayout方法
-    if (planStore.previewingSchedule) {
-      planStore.setPreviewingScheduleAndLayout(planStore.previewingSchedule, completedLayout);
-    }
-    
-    // 触发planStore中的布局更新事件
+    // 仅触发通知事件，预览布局实例保持不变
     planStore.notifyPreviewLayoutEdited();
-    
-    console.log('[LayoutEditorModal.vue 布局编辑器] 已更新预览布局:', completedLayout);
-  } else if (props.scheduleId) {
-    // 如果不是当前预览的布局，但有scheduleId，则检查是否需要更新预览
-    // 这种情况下，用户可能编辑了一个布局，但没有在预览它
-    const schedule = planStore.currentBranch?.schedules.find(s => s.id === props.scheduleId);
-    
-    if (schedule) {
-      // 查找更新后的布局
-      const updatedLayout = schedule.layouts.find(l => l.id === layoutCopy.value.id);
-      
-      if (updatedLayout) {
-        console.log('[LayoutEditorModal.vue 布局编辑器] 尝试更新预览布局:', {
-          scheduleId: props.scheduleId,
-          layoutId: updatedLayout.id
-        });
-        
-        // 如果当前预览的是同一个日程的其他布局，则自动切换到编辑的布局
-        if (planStore.previewingSchedule && planStore.previewingSchedule.id === props.scheduleId) {
-          // 创建布局的深拷贝，确保引用变化
-          const layoutToPreview = JSON.parse(JSON.stringify(updatedLayout));
-          
-          // 使用completeLayoutInfo方法补全布局信息
-          const completedLayout = planStore.completeLayoutInfo(layoutToPreview);
-          
-          // 设置为预览布局
-          planStore.setPreviewingScheduleAndLayout(schedule, completedLayout);
-          
-          // 触发planStore中的布局更新事件
-          planStore.notifyPreviewLayoutEdited();
-          
-          console.log('[LayoutEditorModal.vue 布局编辑器] 已自动切换预览到编辑的布局:', completedLayout);
-        }
-      }
-    }
   }
   
-  // 如果正在编辑的是直播布局，更新直播布局并通知直播画布更新
-  if (isEditingLiveLayout && currentLiveLayout) {
-    // 创建布局的深拷贝，确保引用变化
-    const updatedLayout = JSON.parse(JSON.stringify(layoutCopy.value));
+  // 2. 如果是正在直播的布局，更新直播
+  if (isLiveLayout) {
+    console.log('[LayoutEditorModal.vue 布局编辑器] 编辑的是当前直播布局，直接通知直播画布重绘');
     
     // 使用completeLayoutInfo方法补全布局信息
-    const completedLayout = planStore.completeLayoutInfo(updatedLayout);
+    const completedLayout = planStore.completeLayoutInfo(editedLayout);
     
-    // 直接更新直播布局 - 使用setLiveScheduleAndLayout方法
-    if (planStore.liveSchedule) {
-      planStore.setLiveScheduleAndLayout(planStore.liveSchedule, completedLayout);
-    }
-    
-    // 触发planStore中的布局更新事件
+    // 仅触发通知事件，直播布局实例保持不变
     planStore.notifyLiveLayoutEdited();
-    
-    console.log('[LayoutEditorModal.vue 布局编辑器] 已更新直播布局:', completedLayout);
-  } else if (props.scheduleId) {
-    // 如果不是当前直播的布局，但有scheduleId，则检查是否需要更新直播
-    // 这种情况下，用户可能编辑了一个布局，但没有在直播它
-    const schedule = planStore.currentBranch?.schedules.find(s => s.id === props.scheduleId);
-    
-    if (schedule) {
-      // 查找更新后的布局
-      const updatedLayout = schedule.layouts.find(l => l.id === layoutCopy.value.id);
-      
-      if (updatedLayout) {
-        console.log('[LayoutEditorModal.vue 布局编辑器] 尝试更新直播布局:', {
-          scheduleId: props.scheduleId,
-          layoutId: updatedLayout.id
-        });
-        
-        // 如果当前直播的是同一个日程的其他布局，则自动切换到编辑的布局
-        if (planStore.liveSchedule && planStore.liveSchedule.id === props.scheduleId) {
-          // 创建布局的深拷贝，确保引用变化
-          const layoutToLive = JSON.parse(JSON.stringify(updatedLayout));
-          
-          // 使用completeLayoutInfo方法补全布局信息
-          const completedLayout = planStore.completeLayoutInfo(layoutToLive);
-          
-          // 设置为直播布局
-          planStore.setLiveScheduleAndLayout(schedule, completedLayout);
-          
-          // 触发planStore中的布局更新事件
-          planStore.notifyLiveLayoutEdited();
-          
-          console.log('[LayoutEditorModal.vue 布局编辑器] 已自动切换直播到编辑的布局:', completedLayout);
-        }
-      }
-    }
+  }
+  
+  // 如果既不是预览也不是直播布局，则无需额外操作
+  // 因为布局已通过updateLayoutInSchedule方法更新到日程中
+  if (!isPreviewLayout && !isLiveLayout) {
+    console.log('[LayoutEditorModal.vue 布局编辑器] 编辑的布局当前未在预览或直播中，无需额外通知');
   }
 }
 
@@ -1218,7 +1628,9 @@ function notifyRenderersLayoutChanged() {
  * 处理关闭
  */
 function handleClose() {
-  // 停止所有视频流
+  console.log('[LayoutEditorModal.vue 布局编辑器] 关闭布局编辑器');
+  
+  // 停止布局编辑器内使用的视频流引用，不影响预览和直播
   stopAllVideoStreams();
   
   // 发送关闭事件
@@ -1350,35 +1762,59 @@ async function clearMediaElement(element: MediaLayoutElement) {
     
     // 如果视频元素存在且有视频流，停止视频流
     if (videoElement && videoElement.srcObject) {
-      // 对于摄像头设备，不停止视频流，只清除视频元素的引用
-      if (element.sourceType === VideoSourceType.CAMERA) {
-        // 只清除视频元素的引用，不停止流
+      console.log(`[LayoutEditorModal.vue 布局编辑器] 清除媒体元素: ID=${element.id}, 源=${element.sourceId}, 类型=${element.sourceType || '未知'}`);
+      
+      try {
+        // 针对不同类型设备的处理
+        if (element.sourceType === VideoSourceType.CAMERA) {
+          // 对于摄像头设备，不停止视频流，只清除视频元素的引用
+          // 因为摄像头可能还在媒体源列表中被使用
+          videoElement.srcObject = null;
+          console.log(`[LayoutEditorModal.vue 布局编辑器] 已清除摄像头元素 ${element.id} 的视频引用，保留流`);
+        } else if (element.sourceType === VideoSourceType.WINDOW || element.sourceType === VideoSourceType.DISPLAY) {
+          // 对于窗口和显示器捕获，检查是否在预览或直播中使用
+          // 如果在预览或直播中使用，则只清除视频元素的引用，不停止流
+          const isUsedInPreviewOrLive = videoStore.activeDevices.some(d => 
+            d.id === element.sourceId && 
+            d.stream && 
+            d.isActive
+          );
+          
+          if (isUsedInPreviewOrLive) {
+            // 如果在预览或直播中使用，只清除视频元素的引用
+            console.log(`[LayoutEditorModal.vue 布局编辑器] 检测到设备 ${element.sourceId} 在预览或直播中使用，只清除视频引用`);
+            videoElement.srcObject = null;
+          } else {
+            // 如果不在预览或直播中使用，可以安全停止流
+            const mediaStream = videoElement.srcObject as MediaStream;
+            if (mediaStream) {
+              const trackCount = mediaStream.getTracks().length;
+              mediaStream.getTracks().forEach(track => track.stop());
+              console.log(`[LayoutEditorModal.vue 布局编辑器] 已停止 ${element.sourceType} 捕获的 ${trackCount} 个轨道`);
+            }
+            
+            // 清除视频源
+            videoElement.srcObject = null;
+          }
+        } else {
+          // 其他未知类型的设备，为安全起见只清除引用
+          videoElement.srcObject = null;
+          console.log(`[LayoutEditorModal.vue 布局编辑器] 已清除未知类型设备 ${element.id} 的视频引用`);
+        }
+      } catch (error) {
+        console.error(`[LayoutEditorModal.vue 布局编辑器] 清除媒体元素时出错:`, error);
+        // 即使出错，也尝试清除视频引用
         videoElement.srcObject = null;
-        console.log(`[LayoutEditorModal.vue 布局编辑器] 已清除摄像头元素 ${element.id} 的视频引用，保留流`);
-      } else {
-        // 对于非摄像头设备，停止所有轨道
-        const mediaStream = videoElement.srcObject as MediaStream;
-        mediaStream.getTracks().forEach(track => track.stop());
-        
-        // 清除视频源
-        videoElement.srcObject = null;
-        
-        console.log(`[LayoutEditorModal.vue 布局编辑器] 已停止媒体元素 ${element.id} 的视频流`);
       }
-    }
-    
-    // 如果是窗口或显示器，从videoStore中停止流
-    if (element.sourceType === VideoSourceType.WINDOW || element.sourceType === VideoSourceType.DISPLAY) {
-      videoStore.deactivateDevice(element.sourceId);
     }
   }
   
-  // 清除元素属性
-  element.sourceId = undefined;
-  element.sourceName = undefined;
+  // 清除媒体元素的属性
+  element.sourceId = '';
+  element.sourceName = '';
   element.sourceType = undefined;
   
-  console.log(`[LayoutEditorModal.vue 布局编辑器] 已清除媒体元素 ${element.id}`);
+  console.log(`[LayoutEditorModal.vue 布局编辑器] 媒体元素 ${element.id} 已完全清除`);
 }
 
 /**
@@ -1444,6 +1880,54 @@ function getBackgroundImageUrl(backgroundUrl: string | undefined): string {
   
   // 如果没有缓存或图片未加载完成，直接使用URL
   return `url(${backgroundUrl})`;
+}
+
+/**
+ * 初始化摄像头预览元素
+ * 此方法在组件挂载后调用，用于确保媒体源列表中的视频能正常播放
+ */
+async function ensureSourcePreviewsPlaying() {
+  try {
+    // 等待DOM更新
+    await nextTick();
+    
+    console.log('[LayoutEditorModal.vue 布局编辑器] 确保摄像头预览元素播放');
+    
+    // 为活跃的摄像头设备设置视频流
+    for (const device of videoStore.activeDevices) {
+      if (device.type === VideoSourceType.CAMERA && device.stream) {
+        const videoElement = document.getElementById(`video-source-${device.id}`) as HTMLVideoElement | null;
+        
+        if (videoElement) {
+          console.log(`[LayoutEditorModal.vue 布局编辑器] 为已激活的摄像头设置预览流: ${device.id}`);
+          
+          // 设置视频元素的流
+          videoElement.srcObject = device.stream;
+          videoElement.muted = true;
+          
+          // 设置视频元素样式
+          setVideoElementStyle(videoElement, device.type, true);
+          
+          // 尝试播放视频
+          await playVideoElement(videoElement, device.id);
+        }
+      }
+    }
+    
+    // 设置定时器，延迟 500ms 再次尝试播放未播放的视频
+    setTimeout(async () => {
+      const videoElements = document.querySelectorAll('video[id^="video-source-"]') as NodeListOf<HTMLVideoElement>;
+      
+      for (const videoElement of videoElements) {
+        if (videoElement.paused && videoElement.srcObject) {
+          console.log(`[LayoutEditorModal.vue 布局编辑器] 再次尝试播放视频元素: ${videoElement.id}`);
+          await playVideoElement(videoElement, videoElement.id.replace('video-source-', ''));
+        }
+      }
+    }, 500);
+  } catch (error) {
+    console.error('[LayoutEditorModal.vue 布局编辑器] 确保摄像头预览元素播放失败:', error);
+  }
 }
 </script>
 
