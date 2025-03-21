@@ -7,7 +7,7 @@ import { LayoutElementType, ScheduleType } from '../types/broadcast';
 import { useVideoStore } from '../stores/videoStore';
 import { usePlanStore } from '../stores/planStore';
 import { getCachedImage, preloadImage, isDataUrl } from './imagePreloader';
-import { TextLayerRenderer } from './textLayerRenderer';
+import { getTextLayerDispatcher } from './textLayerDispatcher';
 import type { VideoDevice } from '../types/video';
 import { VideoSourceType } from '../types/video';
 
@@ -51,8 +51,8 @@ export class CanvasRenderer {
   // 图像缓存
   private imageCache: Map<string, HTMLImageElement> = new Map();
   
-  // 文字图层缓存
-  private textLayerCache: Map<string, ImageBitmap | ImageData> = new Map();
+  // 文字图层缓存，null值表示正在加载中
+  private textLayerCache: Map<string, ImageBitmap | ImageData | null> = new Map();
   
   // 背景图层是否需要重绘
   private backgroundNeedsRedraw: boolean = true;
@@ -68,9 +68,6 @@ export class CanvasRenderer {
   
   // 帧计数
   private frameCount: number = 0;
-  
-  // 文字图层渲染器
-  private textLayerRenderer: TextLayerRenderer;
   
   // 缓存元素坐标转换结果
   private mediaElementsCache: Map<string, {
@@ -89,6 +86,9 @@ export class CanvasRenderer {
   private deviceWarningThrottleTime: number = 5000; // 5 seconds
   private deviceInitialized: Map<string, boolean> = new Map();
   
+  // 文字图层调度器
+  private textLayerDispatcher = getTextLayerDispatcher();
+  
   /**
    * 构造函数
    * @param canvas 画布元素
@@ -105,9 +105,6 @@ export class CanvasRenderer {
       type: this.rendererType
     });
     
-    // 初始化文字图层渲染器
-    this.textLayerRenderer = new TextLayerRenderer(this.rendererType);
-    
     this.initCanvas();
     this.initOffscreenCanvas();
     
@@ -119,10 +116,8 @@ export class CanvasRenderer {
           console.log(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 检测到预览布局编辑事件，标记文字图层需要重绘`);
           this.textLayerNeedsRedraw = true;
           
-          // 通知文字渲染器布局已变更
-          if (this.textLayerRenderer) {
-            this.onLayoutOrSizeChanged();
-          }
+          // 布局已变更
+          this.onLayoutOrSizeChanged();
           
           // 启动渲染循环确保立即渲染
           this.startRenderLoop();
@@ -135,10 +130,8 @@ export class CanvasRenderer {
           console.log(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 检测到直播布局编辑事件，标记文字图层需要重绘`);
           this.textLayerNeedsRedraw = true;
           
-          // 通知文字渲染器布局已变更
-          if (this.textLayerRenderer) {
-            this.onLayoutOrSizeChanged();
-          }
+          // 布局已变更
+          this.onLayoutOrSizeChanged();
           
           // 启动渲染循环确保立即渲染
           this.startRenderLoop();
@@ -149,16 +142,17 @@ export class CanvasRenderer {
   
   /**
    * 初始化画布
+   * 设置固定渲染尺寸为1920x1080，样式尺寸通过CSS控制
    */
   private initCanvas(): void {
     console.log('[canvasRenderer.ts 画布渲染器] 开始初始化画布');
     
     try {
-      // 设置画布尺寸固定为1920*1080
+      // 设置画布渲染尺寸固定为1920*1080
       this.canvas.width = this.width;
       this.canvas.height = this.height;
       
-      // 设置初始样式尺寸
+      // 设置初始样式尺寸，通过CSS控制显示大小
       this.canvas.style.width = '100%';
       this.canvas.style.height = '100%';
       this.canvas.style.display = 'block';
@@ -174,7 +168,7 @@ export class CanvasRenderer {
         return;
       }
       
-      console.log('[canvasRenderer.ts 画布渲染器] 画布初始化完成');
+      console.log('[canvasRenderer.ts 画布渲染器] 画布初始化完成，渲染尺寸：1920x1080');
     } catch (error) {
       console.error('[canvasRenderer.ts 画布渲染器] 初始化画布时出错:', error);
     }
@@ -182,6 +176,7 @@ export class CanvasRenderer {
   
   /**
    * 初始化离屏画布
+   * 创建与主画布相同尺寸(1920x1080)的离屏画布用于优化性能
    */
   private initOffscreenCanvas(): void {
     try {
@@ -194,7 +189,7 @@ export class CanvasRenderer {
         return;
       }
       
-      console.log('[canvasRenderer.ts 画布渲染器] 离屏画布初始化完成');
+      console.log('[canvasRenderer.ts 画布渲染器] 离屏画布初始化完成，尺寸：1920x1080');
     } catch (error) {
       console.error('[canvasRenderer.ts 画布渲染器] 初始化离屏画布时出错:', error);
       // 如果不支持OffscreenCanvas，则不使用离屏渲染
@@ -272,10 +267,10 @@ export class CanvasRenderer {
       this.foregroundNeedsRedraw = true;
       this.textLayerNeedsRedraw = true;
       
-      // 清除媒体元素坐标缓存
+      // 清除媒体元素坐标缓存和通知布局变更
       this.onLayoutOrSizeChanged();
       
-      console.log(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 布局已变更，标记所有图层需要重绘`);
+      console.log(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 布局ID已变更，标记所有图层需要重绘`);
       
       // 启动渲染循环确保立即渲染
       this.startRenderLoop();
@@ -291,7 +286,7 @@ export class CanvasRenderer {
         this.textLayerNeedsRedraw = true;
         
         // 清除媒体元素坐标缓存
-        this.onLayoutOrSizeChanged();
+        this.clearMediaElementCache();
         
         console.log(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 布局元素数量变化，标记所有图层需要重绘`);
         
@@ -341,7 +336,7 @@ export class CanvasRenderer {
           
           // 如果媒体元素变化，清除媒体元素坐标缓存
           if (mediaElementsChanged) {
-            this.onLayoutOrSizeChanged();
+            this.clearMediaElementCache();
           }
           
           // 启动渲染循环确保立即渲染
@@ -352,12 +347,6 @@ export class CanvasRenderer {
     
     // 更新当前布局
     this.currentLayout = layout;
-    
-    // 使用新布局初始化文字渲染器
-    if (this.textLayerRenderer) {
-      // 如果布局变化，传递给文字渲染器，触发文字重新排版
-      this.textLayerRenderer.setLayout(layout);
-    }
   }
   
   /**
@@ -509,6 +498,10 @@ export class CanvasRenderer {
   
   /**
    * 渲染画面
+   * 按照流程图:
+   * 1. 生成各个1920*1080的图层(背景、视频源、前景、文字)
+   * 2. 合并为主画布
+   * 3. 主画布通过CSS适应窗口大小
    */
   public render(): void {
     // 记录渲染开始时间
@@ -538,7 +531,7 @@ export class CanvasRenderer {
     const layerTimes: Record<string, number> = {};
     let layersRendered = 0;
     
-    // 渲染各图层
+    // 1. 渲染背景图层 (1920*1080)
     try {
       const bgStart = performance.now();
       this.renderBackgroundLayer(this.ctx);
@@ -548,6 +541,7 @@ export class CanvasRenderer {
       console.error(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 渲染背景图层时出错:`, e);
     }
     
+    // 2. 渲染视频图层 (1920*1080)
     try {
       const videoStart = performance.now();
       this.renderVideoLayers(this.ctx);
@@ -557,6 +551,7 @@ export class CanvasRenderer {
       console.error(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 渲染视频图层时出错:`, e);
     }
     
+    // 3. 渲染前景图层 (1920*1080)
     try {
       const fgStart = performance.now();
       this.renderForegroundLayer(this.ctx);
@@ -566,6 +561,7 @@ export class CanvasRenderer {
       console.error(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 渲染前景图层时出错:`, e);
     }
     
+    // 4. 渲染文字图层 (1920*1080)
     try {
       const textStart = performance.now();
       this.renderTextLayer(this.ctx);
@@ -583,18 +579,6 @@ export class CanvasRenderer {
     
     // 计算总渲染时间
     const totalTime = performance.now() - startTime;
-    
-    // // 每10帧记录一次渲染性能
-    // if (this.frameCount % 10 === 0) {
-    //   console.log(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 渲染性能:`, {
-    //     total: totalTime.toFixed(2) + 'ms',
-    //     background: layerTimes.background?.toFixed(2) + 'ms',
-    //     video: layerTimes.video?.toFixed(2) + 'ms',
-    //     foreground: layerTimes.foreground?.toFixed(2) + 'ms',
-    //     text: layerTimes.text?.toFixed(2) + 'ms',
-    //     layersRendered
-    //   });
-    // }
     
     // 增加帧计数
     this.frameCount++;
@@ -731,53 +715,108 @@ export class CanvasRenderer {
    * @param targetCtx 可选的目标渲染上下文，用于直接渲染到指定上下文
    */
   private renderTextLayer(targetCtx?: CanvasRenderingContext2D): void {
-    if (!this.currentLayout || !this.currentLayout.elements) {
+    if (!this.currentLayout) {
       return;
     }
-    
+
     const ctx = targetCtx || this.offscreenCtx || this.ctx;
     if (!ctx) return;
+
+    const { elements } = this.currentLayout;
+    if (!elements || elements.length === 0) {
+      return;
+    }
+
+    // 获取当前日程ID
+    const scheduleId = this.rendererType === 'preview' 
+      ? this.planStore.previewingSchedule?.id 
+      : this.planStore.liveSchedule?.id;
     
-    // 检查是否已有缓存的文字图层
-    const cacheKey = `${this.currentLayout.id}_${this.planStore.previewingSchedule?.id || this.planStore.liveSchedule?.id}`;
-    const cachedLayer = this.textLayerCache.get(cacheKey);
+    if (!scheduleId) {
+      console.warn(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 无法渲染文字图层：当前没有活跃的日程安排`);
+      return;
+    }
+
+    // 流程图实现：首先检查是否有本地缓存
+    // 缓存键现在仅依赖scheduleId和layoutId，与渲染模式无关，使预览和直播共享同一份文字图层缓存
+    const cacheKey = `${scheduleId}_${this.currentLayout.id}`;
     
-    if (cachedLayer && !this.textLayerNeedsRedraw) {
-      // 如果有缓存且不需要重绘，直接使用缓存
-      if (cachedLayer instanceof ImageBitmap) {
-        ctx.drawImage(cachedLayer, 0, 0, this.width, this.height);
-        return;
-      } else if (cachedLayer instanceof ImageData) {
-        ctx.putImageData(cachedLayer, 0, 0);
-        return;
+    // 1. 检查本地缓存是否有效且不需要重绘
+    if (!this.textLayerNeedsRedraw && this.textLayerCache.has(cacheKey)) {
+      const cachedLayer = this.textLayerCache.get(cacheKey);
+      if (cachedLayer) {
+        if (cachedLayer instanceof ImageBitmap) {
+          // 2. 如果有缓存，直接使用缓存绘制
+          ctx.drawImage(cachedLayer, 0, 0, this.width, this.height);
+          if (this.frameCount % 300 === 0) { // 每300帧输出一次日志，避免日志过多
+            console.log(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 从本地缓存绘制文字图层 (cacheKey=${cacheKey})`);
+          }
+          return; // 缓存有效，直接返回
+        } else if (cachedLayer instanceof ImageData) {
+          ctx.putImageData(cachedLayer, 0, 0);
+          if (this.frameCount % 300 === 0) {
+            console.log(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 从本地缓存(ImageData)绘制文字图层`);
+          }
+          return; // 缓存有效，直接返回
+        }
       }
     }
-    
-    // 如果需要重绘或没有缓存，使用文字图层渲染器渲染文字
-    this.textLayerRenderer.renderTextLayer(this.currentLayout)
-      .then(imageBitmap => {
-        if (imageBitmap) {
-          // 将渲染后的文字图层绘制到画布上
-          ctx.drawImage(imageBitmap, 0, 0, this.width, this.height);
-          
-          // 缓存渲染结果
-          this.textLayerCache.set(cacheKey, imageBitmap);
-          
-          // 标记文字图层不再需要重绘
-          this.textLayerNeedsRedraw = false;
-          
-          console.log(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 文字图层已渲染并缓存`);
-        }
-      })
-      .catch(error => {
-        console.error(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 渲染文字图层时出错:`, error);
-      });
-  }
 
+    // 3. 如果没有有效缓存或需要重绘，只有在第一次或需要重新渲染时才请求新的图层
+    // 使用标志防止重复请求，避免每帧都发起异步调用
+    if (this.textLayerNeedsRedraw || !this.textLayerCache.has(cacheKey)) {
+      console.log(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 缓存无效或需要重绘，从调度器获取文字图层 (cacheKey=${cacheKey})`);
+      
+      // 临时设置标志位，防止下一帧重复请求
+      // 在异步请求完成前，这个标志会阻止重复发起请求
+      this.textLayerCache.set(cacheKey, null);
+      
+      // 从调度器获取文字图层（调度器内部会优先使用自己的缓存）
+      // 注意：这里使用的scheduleId和layoutId参数与缓存键生成逻辑保持一致
+      this.textLayerDispatcher.getTextLayer(
+        this.rendererType,
+        String(scheduleId), 
+        String(this.currentLayout.id)
+      )
+        .then((imageBitmap: ImageBitmap | null) => {
+          if (imageBitmap) {
+            // 如果成功获取到图层，立即绘制
+            if (ctx) {
+              ctx.drawImage(imageBitmap, 0, 0, this.width, this.height);
+            }
+            
+            // 4. 更新缓存
+            this.textLayerCache.set(cacheKey, imageBitmap);
+            
+            // 重置重绘标志
+            this.textLayerNeedsRedraw = false;
+            
+            console.log(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 文字图层已渲染并缓存 (cacheKey=${cacheKey})`);
+          } else {
+            // 如果没有获取到图层，移除临时null值，允许下一帧重试
+            this.textLayerCache.delete(cacheKey);
+            console.warn(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 未能获取文字图层 (cacheKey=${cacheKey})`);
+          }
+        })
+        .catch((error: Error) => {
+          // 出错时移除临时null值，允许下一帧重试
+          this.textLayerCache.delete(cacheKey);
+          console.error(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 渲染文字图层时出错:`, error);
+        });
+    } else if (this.textLayerCache.get(cacheKey) === null) {
+      // 如果缓存值为null，表示正在加载中，这一帧不做任何渲染
+      if (this.frameCount % 60 === 0) { // 每60帧输出一次日志，避免日志过多
+        console.log(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 文字图层正在加载中... (cacheKey=${cacheKey})`);
+      }
+    }
+    // 如果既不需要重绘，也不是正在加载中，但缓存中没有，说明是首次渲染或者缓存被清除
+    // 这种情况在下一帧会通过上面的条件判断请求新的图层
+  }
   
   /**
    * 调整画布大小
-   * 注意：此方法不再改变画布的实际渲染尺寸(1920x1080)，而是通过CSS缩放来适应显示
+   * 仅调整CSS样式以适应窗口，不改变画布实际渲染尺寸(1920x1080)
+   * 窗口尺寸变更时不会触发图层重新渲染
    * @param width 显示宽度
    * @param height 显示高度
    */
@@ -788,12 +827,10 @@ export class CanvasRenderer {
     this.canvas.style.width = `${width}px`;
     this.canvas.style.height = `${height}px`;
     
-    // 以下逻辑不再执行
-    // 不再调整实际画布尺寸
-    // 不再调整离屏画布尺寸
-    // 不再调整文字图层渲染器尺寸
+    // 不再标记任何图层需要重绘，因为尺寸变化不影响渲染结果
+    // 不再调用onLayoutOrSizeChanged，避免清除缓存和触发重新渲染
     
-    console.log(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 画布显示尺寸调整完成，实际渲染尺寸保持1920x1080不变`);
+    console.log(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 画布显示尺寸调整完成，四个图层不重新渲染`);
   }
   
   /**
@@ -813,9 +850,6 @@ export class CanvasRenderer {
     
     // 清除文字图层缓存
     this.textLayerCache.clear();
-    
-    // 销毁文字图层渲染器
-    this.textLayerRenderer.destroy();
     
     // 释放视频元素资源
     if (this.videoElements) {
@@ -873,10 +907,7 @@ export class CanvasRenderer {
     
     // 清除媒体元素坐标缓存
     this.clearMediaElementCache();
-    
-    // 通知文字图层渲染器布局已变更
-    this.textLayerRenderer.onLayoutOrScheduleChanged();
-    
+
     // 如果当前有布局，重新设置布局触发渲染
     if (this.currentLayout) {
       // 创建布局的深拷贝，确保引用变化
@@ -901,6 +932,7 @@ export class CanvasRenderer {
     
     // 检查是否有媒体元素位置/尺寸变化
     let mediaElementsChanged = false;
+    let textElementsChanged = false;
     
     // 检查原有元素
     const oldElements = this.currentLayout.elements || [];
@@ -920,26 +952,69 @@ export class CanvasRenderer {
             oldElement.sourceId !== (newElement as MediaLayoutElement).sourceId
           ) {
             mediaElementsChanged = true;
-            break;
           }
         } else {
           // 新增媒体元素
           mediaElementsChanged = true;
-          break;
+        }
+      } else if (
+        newElement.type === LayoutElementType.HOST_LABEL ||
+        newElement.type === LayoutElementType.HOST_INFO ||
+        newElement.type === LayoutElementType.SUBJECT_LABEL ||
+        newElement.type === LayoutElementType.SUBJECT_INFO ||
+        newElement.type === LayoutElementType.GUEST_LABEL ||
+        newElement.type === LayoutElementType.GUEST_INFO
+      ) {
+        // 检查文本元素是否有变化
+        const oldElement = oldElements.find(e => e.id === newElement.id);
+        if (oldElement && JSON.stringify(oldElement) !== JSON.stringify(newElement)) {
+          textElementsChanged = true;
+        } else if (!oldElement) {
+          // 新增文本元素
+          textElementsChanged = true;
         }
       }
     }
     
     // 如果媒体元素位置或尺寸变化，清除坐标缓存
     if (mediaElementsChanged) {
-      this.onLayoutOrSizeChanged();
+      this.clearMediaElementCache();
+    }
+    
+    // 如果文本元素有变化，标记文字图层需要重绘并清除缓存
+    if (textElementsChanged) {
+      this.textLayerNeedsRedraw = true;
+      
+      // 获取当前日程ID
+      const scheduleId = this.rendererType === 'preview' 
+        ? this.planStore.previewingSchedule?.id 
+        : this.planStore.liveSchedule?.id;
+      
+      if (scheduleId) {
+        // 生成缓存键，与renderTextLayer保持一致
+        const cacheKey = `${scheduleId}_${this.currentLayout.id}`;
+        
+        // 清除该布局的文字图层缓存
+        if (this.textLayerCache.has(cacheKey)) {
+          this.textLayerCache.delete(cacheKey);
+          console.log(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 文本元素变化，清除文字图层缓存 (cacheKey=${cacheKey})`);
+        }
+        
+        // 通知文字层调度器数据已变更
+        this.textLayerDispatcher.onDataChanged(
+          String(scheduleId), 
+          String(this.currentLayout.id)
+        );
+      }
     }
     
     // 更新布局元素
     this.currentLayout.elements = elements;
     
-    // 标记文字图层需要重绘
-    this.textLayerNeedsRedraw = true;
+    // 如有任何变化，启动渲染循环确保变化能立即体现
+    if (mediaElementsChanged || textElementsChanged) {
+      this.startRenderLoop();
+    }
   }
   
   /**
@@ -1612,16 +1687,42 @@ export class CanvasRenderer {
 
   /**
    * 当布局或画布尺寸变化时调用
-   * 用于清除坐标转换缓存
+   * 用于清除坐标转换缓存，但不清除文字图层缓存
    */
   public onLayoutOrSizeChanged(): void {
-    // 清除所有坐标缓存
+    // 清除媒体元素坐标缓存
     this.clearMediaElementCache();
     
-    // 标记文字图层需要重绘
-    this.textLayerNeedsRedraw = true;
-    
-    console.log(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 布局或尺寸变化，已清除坐标缓存`);
+    // 获取当前日程ID
+    const scheduleId = this.rendererType === 'preview' 
+      ? this.planStore.previewingSchedule?.id 
+      : this.planStore.liveSchedule?.id;
+      
+    // 如果当前有布局和有效的日程
+    if (this.currentLayout && scheduleId) {
+      // 生成缓存键，与renderTextLayer中保持一致
+      const cacheKey = `${scheduleId}_${this.currentLayout.id}`;
+      
+      // 检查缓存是否存在
+      if (this.textLayerCache.has(cacheKey)) {
+        // 如果缓存存在，不需要重新渲染
+        this.textLayerNeedsRedraw = false;
+        console.log(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 布局变更，但文字图层缓存已存在，无需重新渲染 (cacheKey=${cacheKey})`);
+      } else {
+        // 只有在缓存不存在时才标记需要重绘
+        this.textLayerNeedsRedraw = true;
+        console.log(`[canvasRenderer.ts ${this.rendererType}画布渲染器] 布局变更，文字图层缓存不存在，需要渲染 (cacheKey=${cacheKey})`);
+        
+        // 仅当需要渲染新的文字图层时通知调度器数据变更
+        this.textLayerDispatcher.onDataChanged(
+          String(scheduleId), 
+          String(this.currentLayout.id)
+        );
+      }
+    } else {
+      // 如果没有布局或日程，标记需要重绘（以备将来设置）
+      this.textLayerNeedsRedraw = true;
+    }
   }
 
   /**
