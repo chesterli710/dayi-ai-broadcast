@@ -4,7 +4,6 @@
  */
 import { createPinia } from 'pinia'
 import { usePlanStore } from './planStore'
-import { useVideoStore } from './videoStore'
 import { useAudioStore } from './audioStore'
 import { useUserStore } from './userStore'
 import { useAppStore } from './appStore'
@@ -18,7 +17,6 @@ export default pinia
 // 导出所有store模块
 export {
   usePlanStore,
-  useVideoStore,
   useAudioStore,
   useUserStore,
   useAppStore

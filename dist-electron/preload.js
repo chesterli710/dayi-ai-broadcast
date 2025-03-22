@@ -110,5 +110,49 @@ contextBridge.exposeInMainWorld("electronAPI", {
    */
   getDisplays: () => {
     return ipcRenderer.invoke("get-displays");
+  },
+  /**
+   * 获取系统摄像头列表
+   * @returns Promise<CameraInfo[]> 摄像头列表
+   */
+  getCameras: () => {
+    return ipcRenderer.invoke("get-cameras");
+  },
+  /**
+   * 获取媒体源缩略图
+   * @param sourceId 媒体源ID
+   * @param sourceType 媒体源类型 ('window'|'screen'|'camera')
+   * @param width 缩略图宽度
+   * @param height 缩略图高度
+   * @returns Promise<string> base64编码的缩略图
+   */
+  getSourceThumbnail: (sourceId, sourceType, width = 320, height = 180) => {
+    return ipcRenderer.invoke("get-source-thumbnail", sourceId, sourceType, width, height);
+  },
+  /**
+   * 捕获窗口
+   * @param windowId 窗口ID
+   * @param options 捕获选项
+   * @returns 捕获结果
+   */
+  captureWindow: (windowId, options) => {
+    return ipcRenderer.invoke("capture-window", { windowId, ...options });
+  },
+  /**
+   * 捕获屏幕
+   * @param displayId 显示器ID
+   * @param options 捕获选项
+   * @returns 捕获结果
+   */
+  captureScreen: (displayId, options) => {
+    return ipcRenderer.invoke("capture-screen", { displayId, ...options });
+  },
+  /**
+   * 停止捕获媒体流
+   * @param sourceId 媒体源ID
+   * @returns Promise<boolean> 是否成功停止
+   */
+  stopCapture: (sourceId) => {
+    return ipcRenderer.invoke("stop-capture", sourceId);
   }
 });

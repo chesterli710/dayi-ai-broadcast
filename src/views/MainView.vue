@@ -39,8 +39,6 @@ import { onMounted, ref, onBeforeUnmount, nextTick } from 'vue';
 import { usePlanStore } from '../stores/planStore';
 import { useRouter } from 'vue-router';
 import TitleBar from '../components/TitleBar.vue';
-import PreviewCanvas from '../components/PreviewCanvas.vue';
-import LiveCanvas from '../components/LiveCanvas.vue';
 import ScheduleManager from '../components/ScheduleManager.vue';
 import LiveControlPanel from '../components/LiveControlPanel.vue';
 import AudioPanel from '../components/AudioPanel.vue';

@@ -141,7 +141,14 @@ export default {
   },
   layoutEditor: {
     title: '布局编辑器',
+    previewTitle: '布局预览',
     mediaSources: '媒体源',
+    noMediaSources: '暂无可用媒体源',
+    saveSuccess: '布局保存成功',
+    saveFailed: '布局保存失败',
+    deleteElement: '删除元素',
+    addElement: '添加元素',
+    configureElement: '配置元素',
     refreshing: '刷新中...',
     refresh: '刷新',
     dragHint: '拖放媒体源到此处',
@@ -162,7 +169,22 @@ export default {
     saveCurrentDesc: '将编辑应用到当前布局，其他布局不受影响',
     saveSimilar: '保存到相似布局',
     saveSimilarDesc: '将编辑应用到所有相同类型和模板的布局',
-    noAvailableSources: '没有可用的{type}'
+    saveSingle: '单独保存',
+    saveSingleDesc: '只保存当前布局',
+    saveAll: '批量保存相似',
+    saveAllDesc: '同一类型日程的相同布局模板都将被更新',
+    saveSingleSuccess: '布局保存成功',
+    saveAllSuccess: '已成功更新{count}个布局',
+    saveError: '保存布局失败，请稍后重试',
+    noAvailableSources: '没有可用的{type}',
+    refreshSources: '刷新媒体源',
+    loadingSources: '正在加载媒体源...',
+    deviceCaptures: '设备捕获',
+    windowCaptures: '窗口捕获',
+    screenCaptures: '桌面捕获',
+    active: '已激活',
+    inactive: '未激活',
+    primary: '主屏幕'
   },
   statusBar: {
     network: '正常',
@@ -263,5 +285,17 @@ export default {
     wasapiNotSupported: 'Windows平台WASAPI音频捕获不可用',
     wasapiGuide: '使用WASAPI捕获系统音频需要Windows 7或更高版本，并且需要管理员权限',
     desktopCapture: '系统声音捕获'
-  }
+  },
+  mediaSourceList: {
+    noMediaSources: '没有可用的媒体源',
+    refreshSources: '刷新媒体源',
+    loadingSources: '正在加载媒体源...',
+    deviceCaptures: '设备捕获',
+    windowCaptures: '窗口捕获',
+    screenCaptures: '桌面捕获',
+    active: '已激活',
+    inactive: '未激活',
+    primary: '主屏幕',
+    dragHere: '将媒体源拖拽到此处',
+  },
 } 

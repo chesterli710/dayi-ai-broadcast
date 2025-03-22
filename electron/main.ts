@@ -441,143 +441,6 @@ Electron版本: ${process.versions.electron}
         }
       })
       
-      // 检查Windows上WASAPI捕获是否可用
-      ipcMain.handle('check-wasapi-available', async () => {
-        try {
-          if (process.platform !== 'win32') return false;
-          
-          // WASAPI捕获基于Node.js的audio-stream模块，检查是否可用
-          try {
-            // 尝试加载audio-stream模块
-            // 如果不存在则会抛出异常
-            require.resolve('audio-stream');
-            this.logger.info(`WASAPI捕获模块可用`);
-            return true;
-          } catch (error) {
-            // 如果模块不存在，则检查是否可以使用其他方式
-            // 这里简单返回false，表示WASAPI方式不可用
-            this.logger.warn(`WASAPI捕获模块不可用`, error);
-            return false;
-          }
-        } catch (error) {
-          this.logger.error('检查WASAPI捕获状态失败', error);
-          return false;
-        }
-      });
-      
-      // WASAPI捕获实例
-      let wasapiCapture = null;
-      let wasapiAudioLevel = 0;
-      let wasapiAudioLevelTimer = null;
-      
-      // 启动WASAPI音频捕获
-      ipcMain.handle('start-wasapi-capture', async (event, deviceId) => {
-        try {
-          if (process.platform !== 'win32') return null;
-          
-          // 尝试加载audio-stream模块
-          let AudioStream;
-          try {
-            AudioStream = require('audio-stream');
-          } catch (error) {
-            this.logger.error('加载WASAPI捕获模块失败', error);
-            return null;
-          }
-          
-          // 停止现有的捕获
-          if (wasapiCapture) {
-            try {
-              wasapiCapture.stop();
-              wasapiCapture = null;
-            } catch (error) {
-              this.logger.error('停止现有WASAPI捕获失败', error);
-            }
-          }
-          
-          // 停止现有的电平监测
-          if (wasapiAudioLevelTimer) {
-            clearInterval(wasapiAudioLevelTimer);
-            wasapiAudioLevelTimer = null;
-          }
-          
-          // 配置捕获选项
-          const options = {
-            sampleRate: 48000,
-            channels: 2,
-            exitOnSilence: -1, // 不自动退出
-            device: deviceId || 'default', // 使用指定设备或默认设备
-            type: 'loopback' // 捕获输出音频
-          };
-          
-          // 创建捕获实例
-          wasapiCapture = new AudioStream(options);
-          
-          // 设置音频电平监测
-          wasapiAudioLevel = 0;
-          const bufferSize = 2048;
-          const buffer = new Float32Array(bufferSize);
-          
-          wasapiAudioLevelTimer = setInterval(() => {
-            if (wasapiCapture && wasapiCapture.read) {
-              // 读取音频数据
-              const bytesRead = wasapiCapture.read(buffer);
-              
-              if (bytesRead > 0) {
-                // 计算音频电平
-                let sum = 0;
-                for (let i = 0; i < bytesRead; i++) {
-                  sum += Math.abs(buffer[i]);
-                }
-                const average = sum / bytesRead;
-                
-                // 将平均值转换为0-100范围
-                wasapiAudioLevel = Math.min(100, Math.round((average * 5) * 100));
-              } else {
-                wasapiAudioLevel = 0;
-              }
-            } else {
-              wasapiAudioLevel = 0;
-            }
-          }, 100);
-          
-          this.logger.info('启动WASAPI捕获成功', { deviceId: deviceId || 'default' });
-          
-          // 返回一个模拟的MediaStream对象
-          // 注意：由于无法直接创建和传递MediaStream对象，这里返回一个特殊标记
-          // 实际的音频处理将在主进程中进行
-          return { wasapiStarted: true };
-        } catch (error) {
-          this.logger.error('启动WASAPI捕获失败', error);
-          return null;
-        }
-      });
-      
-      // 停止WASAPI音频捕获
-      ipcMain.handle('stop-wasapi-capture', async () => {
-        try {
-          if (wasapiCapture) {
-            wasapiCapture.stop();
-            wasapiCapture = null;
-            this.logger.info('停止WASAPI捕获成功');
-          }
-          
-          if (wasapiAudioLevelTimer) {
-            clearInterval(wasapiAudioLevelTimer);
-            wasapiAudioLevelTimer = null;
-          }
-          
-          return true;
-        } catch (error) {
-          this.logger.error('停止WASAPI捕获失败', error);
-          return false;
-        }
-      });
-      
-      // 获取WASAPI音频电平
-      ipcMain.handle('get-wasapi-audio-level', async () => {
-        return wasapiAudioLevel;
-      });
-      
       // 获取Windows上默认音频输出设备
       ipcMain.handle('get-default-audio-output', async () => {
         try {
@@ -817,6 +680,113 @@ Electron版本: ${process.versions.electron}
           return []
         }
       })
+
+      // 获取系统摄像头列表
+      ipcMain.handle('get-cameras', async () => {
+        try {
+          this.logger.info('开始获取摄像头列表');
+          
+          // 摄像头需要在渲染进程获取，我们在这里只返回一个标记
+          // 实际获取将在渲染进程通过navigator.mediaDevices.enumerateDevices()完成
+          return {
+            success: true,
+            message: '摄像头需要在渲染进程中获取'
+          };
+        } catch (error) {
+          this.logger.error('获取摄像头列表失败', error);
+          return {
+            success: false,
+            error: error.message || '未知错误'
+          }
+        }
+      });
+
+      // 获取媒体源缩略图
+      ipcMain.handle('get-source-thumbnail', async (event, sourceId, sourceType, width = 320, height = 180) => {
+        try {
+          this.logger.info(`获取媒体源缩略图`, { sourceId, sourceType, width, height });
+          
+          if (sourceType === 'window' || sourceType === 'screen') {
+            // 使用desktopCapturer获取缩略图
+            const sources = await desktopCapturer.getSources({
+              types: [sourceType],
+              thumbnailSize: { width, height },
+              fetchWindowIcons: sourceType === 'window'
+            });
+            
+            const source = sources.find(s => s.id === sourceId);
+            if (source && source.thumbnail) {
+              return toDataURL(source.thumbnail);
+            }
+          }
+          
+          // 摄像头缩略图需要在渲染进程获取
+          return null;
+        } catch (error) {
+          this.logger.error('获取媒体源缩略图失败', error);
+          return null;
+        }
+      });
+
+      // 捕获窗口
+      ipcMain.handle('capture-window', async (_, args) => {
+        const { windowId, frameRate, audio } = args;
+        console.log(`[electron/main.ts] 捕获窗口: ${windowId}, 帧率: ${frameRate}, 音频: ${audio}`);
+        
+        try {
+          // 这里只返回成功状态，实际的捕获在渲染进程中通过getUserMedia完成
+          return {
+            success: true
+          };
+        } catch (error) {
+          console.error('[electron/main.ts] 捕获窗口错误:', error);
+          return {
+            success: false,
+            error: error instanceof Error ? error.message : '未知错误'
+          };
+        }
+      });
+
+      // 捕获屏幕
+      ipcMain.handle('capture-screen', async (_, args) => {
+        const { displayId, frameRate, audio } = args;
+        console.log(`[electron/main.ts] 捕获屏幕: ${displayId}, 帧率: ${frameRate}, 音频: ${audio}`);
+        
+        try {
+          // 这里只返回成功状态，实际的捕获在渲染进程中通过getUserMedia完成
+          return {
+            success: true
+          };
+        } catch (error) {
+          console.error('[electron/main.ts] 捕获屏幕错误:', error);
+          return {
+            success: false,
+            error: error instanceof Error ? error.message : '未知错误'
+          };
+        }
+      });
+
+      // 停止捕获媒体流
+      ipcMain.handle('stop-capture', async (event, sourceId) => {
+        try {
+          this.logger.info(`处理停止捕获请求`, { sourceId });
+          
+          // 停止捕获的具体实现在渲染进程中
+          // 我们在这里只做一些记录
+          return {
+            success: true,
+            sourceId,
+            message: '停止捕获请求已处理'
+          };
+        } catch (error) {
+          this.logger.error('停止捕获失败', error);
+          return {
+            success: false,
+            sourceId,
+            error: error.message || '未知错误'
+          };
+        }
+      });
       
       this.logger.info('IPC通信设置完成');
     } catch (err) {

@@ -89,33 +89,33 @@ interface IElectronAPI {
    */
   getDisplays: () => Promise<DisplayInfo[]>;
 
-  // 注意：以下两个方法在当前应用中未被使用，已从main.ts和preload.ts中移除
-  /*
   /**
-   * 捕获窗口缩略图
+   * 捕获窗口
    * @param windowId - 窗口ID
-   * @returns Promise<{success: boolean, dataUrl?: string, error?: string}> 捕获结果
+   * @param options - 捕获选项
+   * @returns Promise<{success: boolean, error?: string}> 捕获结果
    */
-  /*
-  captureWindow: (windowId: string) => Promise<{
+  captureWindow: (windowId: string, options?: {
+    frameRate?: number;
+    audio?: boolean;
+  }) => Promise<{
     success: boolean;
-    dataUrl?: string;
     error?: string;
   }>;
-  */
 
   /**
-   * 捕获显示器缩略图
+   * 捕获显示器
    * @param displayId - 显示器ID
-   * @returns Promise<{success: boolean, dataUrl?: string, error?: string}> 捕获结果
+   * @param options - 捕获选项
+   * @returns Promise<{success: boolean, error?: string}> 捕获结果
    */
-  /*
-  captureDisplay: (displayId: string) => Promise<{
+  captureScreen: (displayId: string, options?: {
+    frameRate?: number;
+    audio?: boolean;
+  }) => Promise<{
     success: boolean;
-    dataUrl?: string;
     error?: string;
   }>;
-  */
 }
 
 declare global {

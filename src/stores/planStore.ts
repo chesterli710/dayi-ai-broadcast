@@ -4,7 +4,7 @@
  */
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import type { Channel, Plan, Branch, Layout, LayoutTemplate, Schedule, LayoutElement, MediaLayoutElement } from '../types/broadcast'
+import type { Channel, Plan, Branch, Layout, LayoutTemplate, Schedule, LayoutElement, MediaLayoutElement, TextLayoutElement } from '../types/broadcast'
 import { initializeApp } from '../utils/initializeApp'
 import planApi from '../api/plan'
 import { ElMessage } from 'element-plus'
@@ -301,11 +301,118 @@ export const usePlanStore = defineStore('plan', () => {
         // 合并现有元素和模板元素
         const mergedElements = elementsCopy.map((templateElement: LayoutElement) => {
           const existingElement = completedLayout.elements?.find(e => e.id === templateElement.id)
-          return existingElement ? { ...templateElement, ...existingElement } : templateElement
+          
+          // 根据元素类型补全特定属性
+          let mergedElement = existingElement ? { ...templateElement, ...existingElement } : templateElement
+          
+          // 补全 TextLayoutElement 类型的元素
+          if (mergedElement.type && ['host-label', 'host-info', 'subject-label', 'subject-info', 'guest-label', 'guest-info'].includes(mergedElement.type)) {
+            // 使用类型断言处理TextLayoutElement特定属性
+            const textElement = mergedElement as TextLayoutElement;
+            
+            // 确保 fontStyle 属性存在
+            if (!textElement.fontStyle) {
+              textElement.fontStyle = {
+                fontSize: 16, // 默认字体大小
+                fontWeight: 'regular', // 默认字体粗细
+                fontColor: completedLayout.textColor || '#FFFFFF' // 默认使用布局文字颜色或白色
+              }
+            }
+            
+            // 确保 orientation 属性存在（可选）
+            if (!('orientation' in textElement)) {
+              textElement.orientation = 'horizontal' // 默认水平方向
+            }
+            
+            mergedElement = textElement;
+          }
+          
+          // 补全 MediaLayoutElement 类型的元素
+          if (mergedElement.type === 'media') {
+            // 使用类型断言处理MediaLayoutElement特定属性
+            const mediaElement = mergedElement as MediaLayoutElement;
+            
+            // 确保 MediaLayoutElement 特有属性存在
+            if (!('sourceId' in mediaElement)) {
+              mediaElement.sourceId = undefined;
+            }
+            
+            if (!('sourceName' in mediaElement)) {
+              mediaElement.sourceName = undefined;
+            }
+            
+            if (!('sourceType' in mediaElement)) {
+              mediaElement.sourceType = undefined;
+            }
+            
+            if (!('transparentBackground' in mediaElement)) {
+              mediaElement.transparentBackground = false; // 默认非透明背景
+            }
+            
+            mergedElement = mediaElement;
+          }
+          
+          return mergedElement
         })
         completedLayout.elements = mergedElements
       } else {
-        completedLayout.elements = elementsCopy
+        // 无现有元素，直接使用模板元素但确保每种类型的元素都有完整的属性
+        completedLayout.elements = elementsCopy.map((element: LayoutElement) => {
+          let completeElement = { ...element };
+          
+          // 补全 TextLayoutElement 类型的元素
+          if (element.type && ['host-label', 'host-info', 'subject-label', 'subject-info', 'guest-label', 'guest-info'].includes(element.type)) {
+            // 使用类型断言处理TextLayoutElement特定属性
+            const textElement = completeElement as TextLayoutElement;
+            
+            // 确保 fontStyle 属性存在
+            if (!textElement.fontStyle) {
+              textElement.fontStyle = {
+                fontSize: 16, // 默认字体大小
+                fontWeight: 'regular', // 默认字体粗细
+                fontColor: completedLayout.textColor || '#FFFFFF' // 默认使用布局文字颜色或白色
+              };
+            }
+            
+            // 确保 orientation 属性存在（可选）
+            if (!('orientation' in textElement)) {
+              textElement.orientation = 'horizontal'; // 默认水平方向
+            }
+            
+            completeElement = textElement;
+          }
+          
+          // 补全 MediaLayoutElement 类型的元素
+          if (element.type === 'media') {
+            // 使用类型断言处理MediaLayoutElement特定属性
+            const mediaElement = completeElement as MediaLayoutElement;
+            
+            // 确保 MediaLayoutElement 特有属性存在
+            if (!('sourceId' in mediaElement)) {
+              mediaElement.sourceId = undefined;
+            }
+            
+            if (!('sourceName' in mediaElement)) {
+              mediaElement.sourceName = undefined;
+            }
+            
+            if (!('sourceType' in mediaElement)) {
+              mediaElement.sourceType = undefined;
+            }
+            
+            if (!('resolution' in mediaElement)) {
+              mediaElement.resolution = undefined; // 媒体元素分辨率默认为未定义
+            }
+            
+            if (!('transparentBackground' in mediaElement)) {
+              mediaElement.transparentBackground = false; // 默认非透明背景
+            }
+            
+            completeElement = mediaElement;
+          }
+          
+          return completeElement;
+        });
       }
       
       // 确保elements存在后再访问其length属性
@@ -782,6 +889,70 @@ export const usePlanStore = defineStore('plan', () => {
     return true;
   }
   
+  /**
+   * 更新相似布局
+   * 在布局编辑器中修改布局后，更新所有同类型日程中使用相同布局模板的布局
+   * @param scheduleId - 当前日程ID
+   * @param updatedLayout - 更新后的布局
+   * @param scheduleType - 日程类型
+   * @returns 更新的布局数量
+   */
+  function updateSimilarLayouts(scheduleId: string, updatedLayout: Layout, scheduleType: string): number {
+    console.log(`[planStore.ts 计划存储] 开始批量更新相似布局，模板：${updatedLayout.template}，日程类型：${scheduleType}`);
+    
+    if (!currentBranch.value) {
+      console.error('[planStore.ts 计划存储] 更新相似布局失败：当前没有选中分支');
+      return 0;
+    }
+    
+    let updateCount = 0;
+    
+    // 遍历所有日程
+    currentBranch.value.schedules.forEach(schedule => {
+      // 跳过当前日程
+      if (schedule.id === scheduleId) {
+        return;
+      }
+      
+      // 只处理同类型的日程
+      if (schedule.type !== scheduleType) {
+        return;
+      }
+      
+      // 查找该日程中使用相同模板的布局
+      schedule.layouts.forEach((layout, layoutIndex) => {
+        if (layout.template === updatedLayout.template) {
+          // 创建布局的深拷贝
+          const newLayout = JSON.parse(JSON.stringify(updatedLayout));
+          
+          // 保持原有布局ID不变
+          newLayout.id = layout.id;
+          
+          // 更新布局
+          schedule.layouts[layoutIndex] = newLayout;
+          updateCount++;
+          
+          console.log(`[planStore.ts 计划存储] 已更新日程 ${schedule.id} 中的布局 ${layout.id}`);
+          
+          // 如果更新的是当前正在预览的布局，同时更新预览布局
+          if (previewingSchedule.value?.id === schedule.id && 
+              previewingLayout.value?.id === layout.id) {
+            notifyPreviewLayoutEdited(newLayout);
+          }
+          
+          // 如果更新的是当前正在直播的布局，同时更新直播布局
+          if (liveSchedule.value?.id === schedule.id && 
+              liveLayout.value?.id === layout.id) {
+            notifyLiveLayoutEdited(newLayout);
+          }
+        }
+      });
+    });
+    
+    console.log(`[planStore.ts 计划存储] 批量更新完成，共更新 ${updateCount} 个布局`);
+    return updateCount;
+  }
+  
   return {
     currentChannel,
     currentPlan,
@@ -820,6 +991,7 @@ export const usePlanStore = defineStore('plan', () => {
     stopStreaming,
     notifyPreviewLayoutEdited,
     notifyLiveLayoutEdited,
-    updateLayoutInSchedule
+    updateLayoutInSchedule,
+    updateSimilarLayouts
   }
 }) 
