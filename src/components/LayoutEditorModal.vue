@@ -457,6 +457,7 @@ function updateCanvasScale() {
 
 /**
  * 刷新媒体源列表
+ * @returns 返回Promise，以便后续处理
  */
 async function refreshSources() {
   try {
@@ -495,8 +496,13 @@ async function refreshSources() {
       const activatedCount = mediaSourceStore.cameraSources.filter((c: MediaSource) => c.isActive).length;
       console.log(`[LayoutEditorModal.vue 布局编辑器] 成功激活 ${activatedCount}/${cameras.length} 个摄像头`);
     }
+    
+    // 返回成功完成的Promise
+    return Promise.resolve();
   } catch (error) {
     console.error('[LayoutEditorModal.vue 布局编辑器] 刷新媒体源失败:', error);
+    // 返回失败的Promise，以便调用者可以处理错误
+    return Promise.reject(error);
   }
 }
 
@@ -624,7 +630,10 @@ watch(() => props.visible, (newValue) => {
       updateCanvasScale();
       
       // 初始化并刷新媒体源
-      refreshSources();
+      refreshSources().then(() => {
+        // 刷新完成后，激活布局中已保存的窗口和桌面捕获源
+        activateSavedMediaSources();
+      });
     });
   }
 });
@@ -673,9 +682,49 @@ onMounted(() => {
   
   // 如果对话框可见，刷新媒体源
   if (dialogVisible.value) {
-    refreshSources();
+    refreshSources().then(() => {
+      // 刷新完成后，激活布局中已保存的窗口和桌面捕获源
+      activateSavedMediaSources();
+    });
   }
 });
+
+/**
+ * 激活布局中已保存的窗口和桌面捕获源
+ */
+async function activateSavedMediaSources() {
+  console.log('[LayoutEditorModal.vue 布局编辑器] 开始激活布局中已保存的媒体源');
+  
+  if (!editingLayout.value.elements) return;
+  
+  // 获取所有媒体元素
+  const mediaElements = editingLayout.value.elements.filter(
+    element => element.type === 'media'
+  ) as MediaLayoutElement[];
+  
+  // 创建激活任务队列
+  const activationPromises = mediaElements
+    .filter(element => 
+      // 筛选出窗口和桌面捕获类型的元素
+      element.sourceId && 
+      (element.sourceType === 'window' || element.sourceType === 'screen')
+    )
+    .map(async (element) => {
+      // 查找对应的媒体源
+      const source = mediaSourceStore.sources.find((s: MediaSource) => s.id === element.sourceId);
+      if (source && !source.isActive) {
+        console.log(`[LayoutEditorModal.vue 布局编辑器] 激活布局中已保存的媒体源: ${source.id}, 类型: ${source.type}`);
+        await activateSource(source);
+      }
+    });
+  
+  // 并行执行所有激活任务
+  if (activationPromises.length > 0) {
+    console.log(`[LayoutEditorModal.vue 布局编辑器] 需要激活 ${activationPromises.length} 个媒体源`);
+    await Promise.all(activationPromises);
+    console.log('[LayoutEditorModal.vue 布局编辑器] 布局中已保存媒体源激活完成');
+  }
+}
 
 /**
  * 组件卸载前清理
