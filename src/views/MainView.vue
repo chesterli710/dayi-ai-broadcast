@@ -43,6 +43,8 @@ import ScheduleManager from '../components/ScheduleManager.vue';
 import LiveControlPanel from '../components/LiveControlPanel.vue';
 import AudioPanel from '../components/AudioPanel.vue';
 import StatusBar from '../components/StatusBar.vue';
+import PreviewCanvas from '../components/PreviewCanvas.vue';
+import LiveCanvas from '../components/LiveCanvas.vue';
 import { ElMessage } from 'element-plus';
 
 const planStore = usePlanStore();

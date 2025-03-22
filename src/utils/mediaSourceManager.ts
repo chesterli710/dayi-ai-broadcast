@@ -633,11 +633,15 @@ class MediaSourceManager {
       // 增加引用计数
       this.mediaSourceStore.incrementStreamReferenceCount(sourceId);
       
-      // 返回现有的流
+      // 返回流的克隆，而不是原始流，确保每个使用者都有独立的流实例
+      const clonedStream = source.stream.clone();
+      
       return {
         success: true,
-        stream: source.stream,
-        sourceId
+        stream: clonedStream, // 返回克隆的流
+        sourceId,
+        width: source.width,
+        height: source.height
       };
     }
     
@@ -674,6 +678,11 @@ class MediaSourceManager {
         result.height = source.height;
       }
       
+      // 返回流的克隆而不是原始流
+      if (result.stream) {
+        result.stream = result.stream.clone();
+      }
+      
       return result;
     } catch (error) {
       console.error(`[mediaSourceManager.ts 媒体源管理] 捕获媒体源失败: ${sourceId}`, error);
@@ -684,6 +693,29 @@ class MediaSourceManager {
       };
     } finally {
       this.mediaSourceStore.setSourceLoading(sourceId, false);
+    }
+  }
+
+  /**
+   * 获取媒体源存储对象
+   * @returns 媒体源存储对象
+   */
+  public getMediaSourceStore(): ReturnType<typeof useMediaSourceStore> {
+    this.checkInitialized();
+    return this.mediaSourceStore;
+  }
+
+  /**
+   * 重置媒体流引用计数
+   * 用于修复异常状态下的引用计数
+   * @param sourceId 媒体源ID
+   */
+  public resetStreamReferenceCount(sourceId: string): void {
+    this.checkInitialized();
+    const source = this.getSourceById(sourceId);
+    if (source) {
+      console.log(`[mediaSourceManager.ts 媒体源管理] 重置媒体源引用计数: ${sourceId}, 从 ${source.referenceCount} 重置为 0`);
+      source.referenceCount = 0;
     }
   }
 }

@@ -157,7 +157,8 @@ export interface MediaLayoutElement extends LayoutElement {
   sourceId?: string // 如果是media类型的element用来存储媒体源id
   sourceName?: string // 如果是media类型的element用来存储媒体源名称
   sourceType?: string // 如果是media类型的element用来存储媒体源类型
-  transparentBackground?:boolean // 如果是media类型的element true:元素背景透明 false：元素黑色背景
+  transparentBackground?: boolean // 如果是media类型的element true:元素背景透明 false：元素黑色背景
+  scaleMode?: 'fill' | 'fit' | 'stretch' | 'center' // 视频缩放模式：填充/适应/拉伸/居中
 }
 
 /**

@@ -42,7 +42,7 @@ export const useMediaSourceStore = defineStore('mediaSource', () => {
    */
   const selectedSource = computed(() => {
     if (!selectedSourceId.value) return null
-    return sources.value.find(source => source.id === selectedSourceId.value) || null
+    return sources.value.find((source: MediaSource) => source.id === selectedSourceId.value) || null
   })
   
   /**
@@ -50,7 +50,7 @@ export const useMediaSourceStore = defineStore('mediaSource', () => {
    */
   const getSourcesByType = computed(() => {
     return (type: MediaSourceType) => {
-      return sources.value.filter(source => source.type === type)
+      return sources.value.filter((source: MediaSource) => source.type === type)
     }
   })
   
@@ -58,21 +58,21 @@ export const useMediaSourceStore = defineStore('mediaSource', () => {
    * 计算属性：获取所有摄像头媒体源
    */
   const cameraSources = computed(() => {
-    return sources.value.filter(source => source.type === 'camera')
+    return sources.value.filter((source: MediaSource) => source.type === 'camera')
   })
   
   /**
    * 计算属性：获取所有窗口媒体源
    */
   const windowSources = computed(() => {
-    return sources.value.filter(source => source.type === 'window')
+    return sources.value.filter((source: MediaSource) => source.type === 'window')
   })
   
   /**
    * 计算属性：获取所有屏幕媒体源
    */
   const screenSources = computed(() => {
-    return sources.value.filter(source => source.type === 'screen')
+    return sources.value.filter((source: MediaSource) => source.type === 'screen')
   })
   
   /**
@@ -89,7 +89,7 @@ export const useMediaSourceStore = defineStore('mediaSource', () => {
    */
   function addSource(source: MediaSource) {
     // 检查是否已存在相同ID的媒体源
-    const existingIndex = sources.value.findIndex(s => s.id === source.id)
+    const existingIndex = sources.value.findIndex((s: MediaSource) => s.id === source.id)
     
     if (existingIndex >= 0) {
       // 更新现有媒体源
@@ -113,7 +113,7 @@ export const useMediaSourceStore = defineStore('mediaSource', () => {
     releaseSource(sourceId)
     
     // 从列表中移除
-    sources.value = sources.value.filter(source => source.id !== sourceId)
+    sources.value = sources.value.filter((source: MediaSource) => source.id !== sourceId)
     
     // 如果删除的是当前选中的媒体源，清除选中状态
     if (selectedSourceId.value === sourceId) {
@@ -135,7 +135,7 @@ export const useMediaSourceStore = defineStore('mediaSource', () => {
    * @param sourceId 要激活的媒体源ID
    */
   function activateSource(sourceId: string) {
-    if (!sources.value.find(s => s.id === sourceId)) {
+    if (!sources.value.find((s: MediaSource) => s.id === sourceId)) {
       console.error(`[mediaSourceStore.ts 媒体源管理] 无法激活不存在的媒体源: ${sourceId}`)
       return
     }
@@ -174,7 +174,7 @@ export const useMediaSourceStore = defineStore('mediaSource', () => {
    * @param sourceId 媒体源ID
    */
   function incrementStreamReferenceCount(sourceId: string) {
-    const source = sources.value.find(s => s.id === sourceId);
+    const source = sources.value.find((s: MediaSource) => s.id === sourceId);
     if (source) {
       source.referenceCount = (source.referenceCount || 0) + 1;
       console.log(`[mediaSourceStore.ts 媒体源管理] 媒体源 ${sourceId} 引用计数增加至 ${source.referenceCount}`);
@@ -187,7 +187,7 @@ export const useMediaSourceStore = defineStore('mediaSource', () => {
    * @returns 减少后的引用计数
    */
   function decrementStreamReferenceCount(sourceId: string): number {
-    const source = sources.value.find(s => s.id === sourceId);
+    const source = sources.value.find((s: MediaSource) => s.id === sourceId);
     if (!source) {
       return 0;
     }
@@ -208,7 +208,7 @@ export const useMediaSourceStore = defineStore('mediaSource', () => {
    * @returns 引用计数
    */
   function getStreamReferenceCount(sourceId: string): number {
-    const source = sources.value.find(s => s.id === sourceId);
+    const source = sources.value.find((s: MediaSource) => s.id === sourceId);
     return source?.referenceCount || 0;
   }
   
@@ -224,12 +224,12 @@ export const useMediaSourceStore = defineStore('mediaSource', () => {
     loadingSourceIds.value.delete(sourceId)
     
     // 查找媒体源
-    const source = sources.value.find(s => s.id === sourceId)
+    const source = sources.value.find((s: MediaSource) => s.id === sourceId)
     if (!source) return
     
     // 停止并释放视频流
     if (source.stream) {
-      source.stream.getTracks().forEach(track => {
+      source.stream.getTracks().forEach((track: MediaStreamTrack) => {
         track.stop()
       })
       
@@ -259,7 +259,7 @@ export const useMediaSourceStore = defineStore('mediaSource', () => {
    */
   function clearAllSources() {
     // 释放所有媒体源的资源
-    sources.value.forEach(source => {
+    sources.value.forEach((source: MediaSource) => {
       releaseSource(source.id)
     })
     
@@ -274,7 +274,7 @@ export const useMediaSourceStore = defineStore('mediaSource', () => {
    * @returns 媒体源对象，不存在则返回null
    */
   function getSourceById(sourceId: string): MediaSource | null {
-    return sources.value.find(source => source.id === sourceId) || null;
+    return sources.value.find((source: MediaSource) => source.id === sourceId) || null;
   }
 
   return {
