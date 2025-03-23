@@ -220,6 +220,13 @@ export default {
     settingsSaved: 'Settings saved',
     settingsSaveError: 'Failed to save settings'
   },
+  liveCanvas: {
+    title: 'Live'
+  },
+  previewCanvas: {
+    title: 'Preview',
+    switch: 'Switch'
+  },
   audioPanel: {
     title: 'Audio Control',
     noDevices: 'No audio devices available',

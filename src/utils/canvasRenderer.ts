@@ -792,23 +792,11 @@ class CanvasRenderer {
     // 清空画布
     context.ctx.clearRect(0, 0, 1920, 1080);
     
-    // 绘制背景
-    context.ctx.fillStyle = '#222222';
+    // 绘制纯黑色背景
+    context.ctx.fillStyle = '#000000';
     context.ctx.fillRect(0, 0, 1920, 1080);
     
-    // 绘制加载提示
-    context.ctx.fillStyle = '#ffffff';
-    context.ctx.font = '32px Arial';
-    context.ctx.textAlign = 'center';
-    context.ctx.textBaseline = 'middle';
-    
-    if (context.loadError) {
-      // 显示错误信息
-      context.ctx.fillText(`加载失败: ${context.loadError}`, 1920 / 2, 1080 / 2);
-    } else {
-      // 显示加载中提示
-      context.ctx.fillText('正在加载资源，请稍候...', 1920 / 2, 1080 / 2);
-    }
+    // 不再显示加载提示文本
   }
   
   /**

@@ -92,7 +92,7 @@ export function setupLayoutMock() {
               x: 12,
               y: 735,
               width: 402,
-              height: 233,
+              height: 260,
               zIndex: 10004,
               type: LayoutElementType.GUEST_INFO,
               fontStyle: {
@@ -162,7 +162,7 @@ export function setupLayoutMock() {
               x: 12,
               y: 420,
               width: 402,
-              height: 117,
+              height: 120,
               zIndex: 10001,
               type: LayoutElementType.HOST_INFO,
               fontStyle: {
@@ -190,9 +190,9 @@ export function setupLayoutMock() {
             {
               id: 7,
               x: 12,
-              y: 755,
+              y: 805,
               width: 402,
-              height: 233,
+              height: 260,
               zIndex: 10004,
               type: LayoutElementType.GUEST_INFO,
               fontStyle: {
@@ -264,7 +264,7 @@ export function setupLayoutMock() {
     return {
       code: 0,
       data: {
-        lastUpdated: '2023-06-01T12:00:00Z'
+        lastUpdated: '2025-06-01T12:00:00Z'
       },
       message: '获取布局模板最后更新时间成功'
     }
@@ -522,6 +522,21 @@ export function setupLayoutMock() {
             fontStyle: {
               fontSize: 46,
               fontWeight: "bold",
+              fontColor: "#FFFFFF"
+            },
+            orientation: "vertical"
+          } as TextLayoutElement,
+          {
+            id: 7,
+            x: 12,
+            y: 755,
+            width: 402,
+            height: 233,
+            zIndex: 10004,
+            type: LayoutElementType.GUEST_INFO,
+            fontStyle: {
+              fontSize: 26,
+              fontWeight: "regular",
               fontColor: "#FFFFFF"
             },
             orientation: "vertical"

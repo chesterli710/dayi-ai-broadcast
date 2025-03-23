@@ -77,17 +77,27 @@ export function setupPlanMock() {
                       {
                         name: '胡百',
                         title: '教授',
-                        organization: '北京协和医院'
+                        organization: '四川大学华西医院'
                       },
                       {
                         name: '胡千',
                         title: '教授',
-                        organization: '北京协和医院'
+                        organization: '中国医学科学院肿瘤医院廊坊院区'
                       },
                       {
                         name: '胡万',
                         title: '教授',
                         organization: '北京协和医院'
+                      },
+                      {
+                        name: '黄四郎',
+                        title: '教授',
+                        organization: '暨南大学中南医院'
+                      },
+                      {
+                        name: '黄四郎',
+                        title: '教授',
+                        organization: '暨南大学中南医院'
                       }
                     ]
                   },
