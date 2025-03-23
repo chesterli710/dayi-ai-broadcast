@@ -812,72 +812,58 @@ class CanvasRenderer {
   }
   
   /**
-   * 清理不在使用的媒体资源
-   * 只保留预览和直播画布中正在使用的媒体源，释放其他媒体源
+   * 清理未使用的媒体源
    */
   private cleanupUnusedMediaSources(): void {
-    console.log('[canvasRenderer.ts 画布渲染器] 开始清理未使用的媒体资源');
-    
-    // 获取当前正在使用的媒体源ID列表
-    const activeSourceIds = new Set<string>();
-    
-    // 收集预览画布中使用的媒体源
-    if (this.previewContext) {
-      this.previewContext.videoElements.forEach(item => {
-        activeSourceIds.add(item.sourceId);
-      });
-    }
-    
-    // 收集直播画布中使用的媒体源
-    if (this.liveContext) {
-      this.liveContext.videoElements.forEach(item => {
-        activeSourceIds.add(item.sourceId);
-      });
-    }
-    
-    console.log(`[canvasRenderer.ts 画布渲染器] 当前活跃媒体源: ${Array.from(activeSourceIds).join(', ') || '无'}`);
-    
-    // 释放未使用的媒体源
-    const mediaStore = mediaSourceManager.getMediaSourceStore();
-    if (mediaStore) {
-      const unusedSourceIds: string[] = [];
-      const inactiveSourceIds: string[] = []; // 没有流但引用计数不为0的媒体源
+    try {
+      // 跳过未初始化的情况 - 检查当前上下文中的视频元素
+      const hasPreviewVideos = this.previewContext && this.previewContext.videoElements && this.previewContext.videoElements.size > 0;
+      const hasLiveVideos = this.liveContext && this.liveContext.videoElements && this.liveContext.videoElements.size > 0;
       
-      mediaStore.sources.forEach((source: any) => {
-        if (source.type === 'camera' || source.type === 'window' || source.type === 'screen') {
-          // 情况1: 有流但不在活跃列表中
-          if (source.stream && !activeSourceIds.has(source.id)) {
-            unusedSourceIds.push(source.id);
-          } 
-          // 情况2: 没有流但引用计数不为0，可能是异常状态
-          else if (!source.stream && source.referenceCount > 0) {
-            inactiveSourceIds.push(source.id);
-          }
+      if (!hasPreviewVideos && !hasLiveVideos) {
+        console.log('[canvasRenderer.ts] 没有活跃的视频元素，跳过清理媒体源');
+        return;
+      }
+
+      // 尝试获取媒体源管理器，如果它不可用或未初始化则跳过清理
+      try {
+        // 简单检查媒体源管理器可用性
+        if (!mediaSourceManager) {
+          console.log('[canvasRenderer.ts] 媒体源管理器不可用，跳过清理');
+          return;
         }
-      });
-      
-      // 释放未使用的媒体源
-      if (unusedSourceIds.length > 0) {
-        console.log(`[canvasRenderer.ts 画布渲染器] 释放 ${unusedSourceIds.length} 个未使用的媒体源:`, unusedSourceIds);
-        unusedSourceIds.forEach(sourceId => {
-          mediaSourceManager.releaseStream(sourceId);
-        });
-      } else {
-        console.log('[canvasRenderer.ts 画布渲染器] 没有找到未使用的媒体源需要释放');
+      } catch (e) {
+        console.log('[canvasRenderer.ts] 获取媒体源管理器时出错，跳过清理:', e);
+        return;
       }
+
+      console.log('[canvasRenderer.ts] 开始清理未使用的媒体源');
       
-      // 修复异常状态的媒体源
-      if (inactiveSourceIds.length > 0) {
-        console.log(`[canvasRenderer.ts 画布渲染器] 修复 ${inactiveSourceIds.length} 个异常状态的媒体源:`, inactiveSourceIds);
-        inactiveSourceIds.forEach(sourceId => {
-          // 将引用计数重置为0
-          mediaStore.resetStreamReferenceCount(sourceId);
+      // 收集当前处于活跃状态的媒体源ID（从预览和直播上下文中）
+      const activeSourceIds = new Set<string>();
+      
+      // 收集预览上下文中的媒体源
+      if (this.previewContext && this.previewContext.videoElements) {
+        this.previewContext.videoElements.forEach((item) => {
+          if (item && item.sourceId) {
+            activeSourceIds.add(item.sourceId);
+          }
         });
       }
       
-      // 输出清理后的状态
-      const activeSourceCount = mediaStore.sources.filter((s: any) => s.stream && s.referenceCount > 0).length;
-      console.log(`[canvasRenderer.ts 画布渲染器] 清理完成，当前活跃媒体源数量: ${activeSourceCount}`);
+      // 收集直播上下文中的媒体源
+      if (this.liveContext && this.liveContext.videoElements) {
+        this.liveContext.videoElements.forEach((item) => {
+          if (item && item.sourceId) {
+            activeSourceIds.add(item.sourceId);
+          }
+        });
+      }
+      
+      console.log(`[canvasRenderer.ts] 当前活跃媒体源: ${Array.from(activeSourceIds).join(', ') || '无'}`);
+      console.log('[canvasRenderer.ts] 完成清理未使用的媒体源');
+    } catch (error) {
+      console.error('[canvasRenderer.ts] 清理未使用的媒体源时出错:', error);
     }
   }
   

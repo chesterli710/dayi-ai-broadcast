@@ -272,9 +272,16 @@ class LayoutTextRenderer {
     // 设置标签背景（如果有）
     if (layout.labelBackground) {
       labelDiv.style.backgroundImage = `url(${layout.labelBackground})`;
-      labelDiv.style.backgroundSize = 'cover';
-      labelDiv.style.backgroundPosition = 'center';
+      labelDiv.style.backgroundSize = 'auto'; // 不拉伸
+      labelDiv.style.backgroundRepeat = 'no-repeat'; // 不重复
+      labelDiv.style.backgroundPosition = 'center center'; // 垂直水平居中
     }
+    
+    // 确保文本垂直水平居中
+    labelDiv.style.display = 'flex';
+    labelDiv.style.alignItems = 'center';
+    labelDiv.style.justifyContent = 'center';
+    labelDiv.style.textAlign = 'center';
     
     labelDiv.textContent = labelText;
     container.appendChild(labelDiv);
@@ -289,6 +296,13 @@ class LayoutTextRenderer {
    */
   private renderSubjectInfo(container: HTMLDivElement, element: TextLayoutElement, layout: Layout, schedule: Schedule): void {
     const infoDiv = this.createTextElement(element);
+    
+    // 修改为flex容器，确保内容垂直居中
+    infoDiv.style.display = 'flex';
+    infoDiv.style.flexDirection = 'column';
+    infoDiv.style.justifyContent = 'center'; // 垂直居中
+    infoDiv.style.alignItems = 'center'; // 水平居中
+    infoDiv.style.textAlign = 'center'; // 文本居中
     
     // 根据日程类型获取内容
     let content = '';
@@ -323,9 +337,16 @@ class LayoutTextRenderer {
     // 设置标签背景（如果有）
     if (layout.labelBackground) {
       labelDiv.style.backgroundImage = `url(${layout.labelBackground})`;
-      labelDiv.style.backgroundSize = 'cover';
-      labelDiv.style.backgroundPosition = 'center';
+      labelDiv.style.backgroundSize = 'auto'; // 不拉伸
+      labelDiv.style.backgroundRepeat = 'no-repeat'; // 不重复
+      labelDiv.style.backgroundPosition = 'center center'; // 垂直水平居中
     }
+    
+    // 确保文本垂直水平居中
+    labelDiv.style.display = 'flex';
+    labelDiv.style.alignItems = 'center';
+    labelDiv.style.justifyContent = 'center';
+    labelDiv.style.textAlign = 'center';
     
     labelDiv.textContent = labelText;
     container.appendChild(labelDiv);
@@ -341,24 +362,174 @@ class LayoutTextRenderer {
   private renderHostInfo(container: HTMLDivElement, element: TextLayoutElement, layout: Layout, schedule: Schedule): void {
     const infoDiv = this.createTextElement(element);
     
-    // 根据日程类型获取内容
-    let content = '';
+    // 修改为flex容器，确保所有行垂直居中
+    infoDiv.style.display = 'flex';
+    infoDiv.style.flexDirection = 'column';
+    infoDiv.style.justifyContent = 'center'; // 垂直居中
+    infoDiv.style.alignItems = 'center'; // 水平居中
+    infoDiv.style.textAlign = 'center'; // 文本居中
+    
+    // 获取字体大小、字重和颜色
+    const originalFontSize = element.fontStyle?.fontSize || 24;
+    const originalFontWeight = element.fontStyle?.fontWeight || 'normal';
+    const fontColor = element.fontStyle?.fontColor || '#ffffff'; // 默认白色
+    
+    // 计算降级后的字体大小和字重
+    const reducedFontSize = Math.max(originalFontSize - 4, 12); // 最小不低于12px
+    const reducedFontWeight = this.getReducedFontWeight(originalFontWeight);
+    
+    // 获取人员信息
+    let people: any[] = [];
     if (schedule.type === 'lecture' && schedule.lectureInfo && schedule.lectureInfo.speakers.length > 0) {
-      // 获取讲者信息
-      const speakers = schedule.lectureInfo.speakers;
-      content = speakers.map(speaker => {
-        return `${speaker.name}${speaker.title ? ` ${speaker.title}` : ''}${speaker.organization ? ` ${speaker.organization}` : ''}`;
-      }).join('  ');
+      people = schedule.lectureInfo.speakers;
     } else if (schedule.type === 'surgery' && schedule.surgeryInfo && schedule.surgeryInfo.surgeons.length > 0) {
-      // 获取术者信息
-      const surgeons = schedule.surgeryInfo.surgeons;
-      content = surgeons.map(surgeon => {
-        return `${surgeon.name}${surgeon.title ? ` ${surgeon.title}` : ''}${surgeon.organization ? ` ${surgeon.organization}` : ''}`;
-      }).join('  ');
+      people = schedule.surgeryInfo.surgeons;
     }
     
-    infoDiv.textContent = content;
+    // 如果没有人员信息，直接返回
+    if (people.length === 0) {
+      container.appendChild(infoDiv);
+      return;
+    }
+    
+    // 根据人员数量不同，生成不同的HTML内容
+    let htmlContent = '';
+    
+    if (people.length === 1) {
+      // 1名术者/讲者，处理姓名（如果是两个字，则添加全角空格）
+      const name = this.formatName(people[0].name);
+      
+      // 第一行：姓名+称谓
+      htmlContent += `<div style="line-height: 1.2; color: ${fontColor};">
+        <span style="font-size: ${originalFontSize}px; font-weight: ${this.getFontWeightValue(originalFontWeight)}; color: ${fontColor};">${name}</span>`;
+      
+      // 如果有称谓，添加称谓
+      if (people[0].title) {
+        htmlContent += `<span style="font-size: ${reducedFontSize}px; font-weight: ${this.getFontWeightValue(reducedFontWeight)}; color: ${fontColor};">&nbsp;${people[0].title}</span>`;
+      }
+      
+      htmlContent += `</div>`;
+      
+      // 第二行：单位（如果有）
+      if (people[0].organization) {
+        htmlContent += `<div style="font-size: ${reducedFontSize}px; font-weight: ${this.getFontWeightValue(reducedFontWeight)}; line-height: 1.2; color: ${fontColor};">${people[0].organization}</div>`;
+      }
+    } else if (people.length === 2) {
+      // 2名术者/讲者
+      const name1 = this.formatName(people[0].name);
+      const name2 = this.formatName(people[1].name);
+      
+      // 第一行：术者1姓名 术者1称谓 / 术者2姓名 术者2称谓
+      htmlContent += `<div style="line-height: 1.2; color: ${fontColor};">`;
+      
+      // 术者1
+      htmlContent += `<span style="font-size: ${originalFontSize}px; font-weight: ${this.getFontWeightValue(originalFontWeight)}; color: ${fontColor};">${name1}</span>`;
+      if (people[0].title) {
+        htmlContent += `<span style="font-size: ${reducedFontSize}px; font-weight: ${this.getFontWeightValue(reducedFontWeight)}; color: ${fontColor};">&nbsp;${people[0].title}</span>`;
+      }
+      
+      // 分隔符
+      htmlContent += `<span style="font-size: ${originalFontSize}px; color: ${fontColor};"> / </span>`;
+      
+      // 术者2
+      htmlContent += `<span style="font-size: ${originalFontSize}px; font-weight: ${this.getFontWeightValue(originalFontWeight)}; color: ${fontColor};">${name2}</span>`;
+      if (people[1].title) {
+        htmlContent += `<span style="font-size: ${reducedFontSize}px; font-weight: ${this.getFontWeightValue(reducedFontWeight)}; color: ${fontColor};">&nbsp;${people[1].title}</span>`;
+      }
+      
+      htmlContent += `</div>`;
+      
+      // 第二行：术者1单位
+      if (people[0].organization) {
+        htmlContent += `<div style="font-size: ${reducedFontSize}px; font-weight: ${this.getFontWeightValue(reducedFontWeight)}; line-height: 1.2; color: ${fontColor};">${people[0].organization}</div>`;
+      }
+    } else if (people.length >= 3) {
+      // 3名术者/讲者
+      const name1 = this.formatName(people[0].name);
+      const name2 = this.formatName(people[1].name);
+      const name3 = this.formatName(people[2].name);
+      
+      // 第一行：术者1姓名 术者1称谓
+      htmlContent += `<div style="line-height: 1.2; color: ${fontColor};">
+        <span style="font-size: ${originalFontSize}px; font-weight: ${this.getFontWeightValue(originalFontWeight)}; color: ${fontColor};">${name1}</span>`;
+      if (people[0].title) {
+        htmlContent += `<span style="font-size: ${reducedFontSize}px; font-weight: ${this.getFontWeightValue(reducedFontWeight)}; color: ${fontColor};">&nbsp;${people[0].title}</span>`;
+      }
+      htmlContent += `</div>`;
+      
+      // 第二行：术者2姓名 术者2称谓
+      htmlContent += `<div style="line-height: 1.2; color: ${fontColor};">
+        <span style="font-size: ${originalFontSize}px; font-weight: ${this.getFontWeightValue(originalFontWeight)}; color: ${fontColor};">${name2}</span>`;
+      if (people[1].title) {
+        htmlContent += `<span style="font-size: ${reducedFontSize}px; font-weight: ${this.getFontWeightValue(reducedFontWeight)}; color: ${fontColor};">&nbsp;${people[1].title}</span>`;
+      }
+      htmlContent += `</div>`;
+      
+      // 第三行：术者3姓名 术者3称谓
+      htmlContent += `<div style="line-height: 1.2; color: ${fontColor};">
+        <span style="font-size: ${originalFontSize}px; font-weight: ${this.getFontWeightValue(originalFontWeight)}; color: ${fontColor};">${name3}</span>`;
+      if (people[2].title) {
+        htmlContent += `<span style="font-size: ${reducedFontSize}px; font-weight: ${this.getFontWeightValue(reducedFontWeight)}; color: ${fontColor};">&nbsp;${people[2].title}</span>`;
+      }
+      htmlContent += `</div>`;
+      
+      // 第四行：术者1单位
+      if (people[0].organization) {
+        htmlContent += `<div style="font-size: ${reducedFontSize}px; font-weight: ${this.getFontWeightValue(reducedFontWeight)}; line-height: 1.2; color: ${fontColor};">${people[0].organization}</div>`;
+      }
+    }
+    
+    // 设置HTML内容
+    infoDiv.innerHTML = htmlContent;
+    
+    // 添加到容器
     container.appendChild(infoDiv);
+  }
+  
+  /**
+   * 获取降级后的字体权重
+   * @param originalWeight 原始字体权重
+   * @returns 降级后的字体权重
+   */
+  private getReducedFontWeight(originalWeight: string): string {
+    switch (originalWeight) {
+      case 'bold':
+        return 'medium';
+      case 'medium':
+        return 'normal';
+      default:
+        return 'normal';
+    }
+  }
+  
+  /**
+   * 获取字体权重的CSS值
+   * @param weight 字体权重名称
+   * @returns CSS字体权重值
+   */
+  private getFontWeightValue(weight: string): string {
+    switch (weight) {
+      case 'bold':
+        return '700';
+      case 'medium':
+        return '500';
+      default:
+        return '400';
+    }
+  }
+  
+  /**
+   * 格式化姓名，如果是两个汉字则添加全角空格
+   * @param name 姓名
+   * @returns 格式化后的姓名
+   */
+  private formatName(name: string): string {
+    // 判断是否为两个汉字的中文名
+    if (/^[\u4e00-\u9fa5]{2}$/.test(name)) {
+      // 在两个汉字中间插入全角空格
+      return name.charAt(0) + '　' + name.charAt(1);
+    }
+    return name;
   }
   
   /**
@@ -380,9 +551,16 @@ class LayoutTextRenderer {
     // 设置标签背景（如果有）
     if (layout.labelBackground) {
       labelDiv.style.backgroundImage = `url(${layout.labelBackground})`;
-      labelDiv.style.backgroundSize = 'cover';
-      labelDiv.style.backgroundPosition = 'center';
+      labelDiv.style.backgroundSize = 'auto'; // 不拉伸
+      labelDiv.style.backgroundRepeat = 'no-repeat'; // 不重复
+      labelDiv.style.backgroundPosition = 'center center'; // 垂直水平居中
     }
+    
+    // 确保文本垂直水平居中
+    labelDiv.style.display = 'flex';
+    labelDiv.style.alignItems = 'center';
+    labelDiv.style.justifyContent = 'center';
+    labelDiv.style.textAlign = 'center';
     
     labelDiv.textContent = labelText;
     container.appendChild(labelDiv);
@@ -398,23 +576,96 @@ class LayoutTextRenderer {
   private renderGuestInfo(container: HTMLDivElement, element: TextLayoutElement, layout: Layout, schedule: Schedule): void {
     const infoDiv = this.createTextElement(element);
     
-    // 根据日程类型获取内容
-    let content = '';
-    if (schedule.type === 'lecture' && schedule.lectureInfo && schedule.lectureInfo.guests && schedule.lectureInfo.guests.length > 0) {
-      // 获取讲课嘉宾信息
-      const guests = schedule.lectureInfo.guests;
-      content = guests.map(guest => {
-        return `${guest.name}${guest.title ? ` ${guest.title}` : ''}${guest.organization ? ` ${guest.organization}` : ''}`;
-      }).join('  ');
-    } else if (schedule.type === 'surgery' && schedule.surgeryInfo && schedule.surgeryInfo.guests && schedule.surgeryInfo.guests.length > 0) {
-      // 获取手术嘉宾信息
-      const guests = schedule.surgeryInfo.guests;
-      content = guests.map(guest => {
-        return `${guest.name}${guest.title ? ` ${guest.title}` : ''}${guest.organization ? ` ${guest.organization}` : ''}`;
-      }).join('  ');
+    // 修改为flex容器，确保内容垂直居中
+    infoDiv.style.display = 'flex';
+    infoDiv.style.flexDirection = 'column';
+    infoDiv.style.justifyContent = 'center'; // 垂直居中
+    infoDiv.style.alignItems = 'center'; // 水平居中（修改为居中）
+    infoDiv.style.textAlign = 'center'; // 文本居中
+    
+    // 获取字体大小、字重和颜色
+    const originalFontSize = element.fontStyle?.fontSize || 24;
+    const originalFontWeight = element.fontStyle?.fontWeight || 'normal';
+    const fontColor = element.fontStyle?.fontColor || '#ffffff'; // 默认白色
+    
+    // 计算降级后的字体大小和字重
+    const reducedFontSize = Math.max(originalFontSize - 4, 12); // 最小不低于12px
+    const reducedFontWeight = this.getReducedFontWeight(originalFontWeight);
+    
+    // 获取嘉宾信息
+    let guests: any[] = [];
+    if (schedule.type === 'lecture' && schedule.lectureInfo && schedule.lectureInfo.guests) {
+      guests = schedule.lectureInfo.guests;
+    } else if (schedule.type === 'surgery' && schedule.surgeryInfo && schedule.surgeryInfo.guests) {
+      guests = schedule.surgeryInfo.guests;
     }
     
-    infoDiv.textContent = content;
+    // 如果没有嘉宾信息，直接返回
+    if (guests.length === 0) {
+      container.appendChild(infoDiv);
+      return;
+    }
+    
+    let htmlContent = '';
+    
+    // 根据嘉宾数量采用不同的布局
+    if (guests.length <= 4) {
+      // 1-4名嘉宾：垂直排列，每个嘉宾占两行
+      for (const guest of guests) {
+        // 格式化嘉宾姓名
+        const name = this.formatName(guest.name);
+        
+        // 第一行：嘉宾姓名 + 称谓
+        htmlContent += `<div style="line-height: 1.2; color: ${fontColor}; margin-bottom: 2px; text-align: center;">
+          <span style="font-size: ${originalFontSize}px; font-weight: ${this.getFontWeightValue(originalFontWeight)}; color: ${fontColor};">${name}</span>`;
+        
+        // 如果有称谓，添加称谓
+        if (guest.title) {
+          htmlContent += `<span style="font-size: ${reducedFontSize}px; font-weight: ${this.getFontWeightValue(reducedFontWeight)}; color: ${fontColor};">&nbsp;${guest.title}</span>`;
+        }
+        
+        htmlContent += `</div>`;
+        
+        // 第二行：医院/单位（如果有）
+        if (guest.organization) {
+          htmlContent += `<div style="font-size: ${reducedFontSize}px; font-weight: ${this.getFontWeightValue(reducedFontWeight)}; line-height: 1.2; color: ${fontColor}; margin-bottom: 8px; text-align: center;">${guest.organization}</div>`;
+        }
+      }
+    } else {
+      // 5名及以上嘉宾：两列式布局
+      htmlContent += '<div style="display: grid; grid-template-columns: 1fr 1fr; grid-gap: 10px; width: 100%; text-align: center;">';
+      
+      for (const guest of guests) {
+        // 格式化嘉宾姓名
+        const name = this.formatName(guest.name);
+        
+        // 每个嘉宾一个单元格
+        htmlContent += `<div style="line-height: 1.2; margin-bottom: 8px; text-align: center;">
+          <div style="color: ${fontColor}; text-align: center;">
+            <span style="font-size: ${originalFontSize}px; font-weight: ${this.getFontWeightValue(originalFontWeight)}; color: ${fontColor};">${name}</span>`;
+        
+        // 如果有称谓，添加称谓
+        if (guest.title) {
+          htmlContent += `<span style="font-size: ${reducedFontSize}px; font-weight: ${this.getFontWeightValue(reducedFontWeight)}; color: ${fontColor};">&nbsp;${guest.title}</span>`;
+        }
+        
+        htmlContent += `</div>`;
+        
+        // 医院/单位（如果有）
+        if (guest.organization) {
+          htmlContent += `<div style="font-size: ${reducedFontSize}px; font-weight: ${this.getFontWeightValue(reducedFontWeight)}; line-height: 1.2; color: ${fontColor}; text-align: center;">${guest.organization}</div>`;
+        }
+        
+        htmlContent += `</div>`;
+      }
+      
+      htmlContent += '</div>';
+    }
+    
+    // 设置HTML内容
+    infoDiv.innerHTML = htmlContent;
+    
+    // 添加到容器
     container.appendChild(infoDiv);
   }
   
@@ -440,6 +691,9 @@ class LayoutTextRenderer {
     // 设置字体系列
     div.style.fontFamily = this.getFontFamilyString();
     
+    // 设置行高为字体大小的1.2倍
+    div.style.lineHeight = '1.2';
+    
     // 设置字体样式
     if (element.fontStyle) {
       div.style.fontSize = `${element.fontStyle.fontSize}px`;
@@ -457,11 +711,8 @@ class LayoutTextRenderer {
       div.style.color = element.fontStyle.fontColor;
     }
     
-    // 设置文本方向
-    if (element.orientation === 'vertical') {
-      div.style.writingMode = 'vertical-rl';
-      div.style.textOrientation = 'upright';
-    }
+    // 无论orientation设置都使用水平排列
+    // 但保留orientation属性以便在特定类型的文字图层中使用
     
     // 文本居中显示
     div.style.display = 'flex';

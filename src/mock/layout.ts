@@ -186,6 +186,21 @@ export function setupLayoutMock() {
                 fontColor: "#FFFFFF"
               },
               orientation: "vertical"
+            } as TextLayoutElement,
+            {
+              id: 7,
+              x: 12,
+              y: 755,
+              width: 402,
+              height: 233,
+              zIndex: 10004,
+              type: LayoutElementType.GUEST_INFO,
+              fontStyle: {
+                fontSize: 26,
+                fontWeight: "regular",
+                fontColor: "#FFFFFF"
+              },
+              orientation: "vertical"
             } as TextLayoutElement
           ]
         },

@@ -24,7 +24,7 @@ export function setupPlanMock() {
           plannedEndDateTime: new Date('2023-06-15T12:00:00'),
           cover: 'https://picsum.photos/id/237/400/225',
           background: 'https://picsum.photos/id/1/1920/1080',
-          labelBackground: 'https://picsum.photos/id/20/400/100',
+          labelBackground: 'https://picsum.photos/id/337/400/100?grayscale',
           textColor: '#ffffff',
           surgeonLabelDisplayName: '手术团队',
           surgeryLabelDisplayName: '手术名称',
@@ -72,8 +72,25 @@ export function setupPlanMock() {
                         title: '教授',
                         organization: '北京协和医院'
                       }
+                    ],
+                    guests: [
+                      {
+                        name: '胡百',
+                        title: '教授',
+                        organization: '北京协和医院'
+                      },
+                      {
+                        name: '胡千',
+                        title: '教授',
+                        organization: '北京协和医院'
+                      },
+                      {
+                        name: '胡万',
+                        title: '教授',
+                        organization: '北京协和医院'
+                      }
                     ]
-                  }
+                  },
                 },
                 {
                   id: 'schedule-1-2',
@@ -325,7 +342,7 @@ export function setupPlanMock() {
           plannedEndDateTime: new Date('2023-06-18T16:00:00'),
           cover: 'https://picsum.photos/id/250/400/225',
           background: 'https://picsum.photos/id/3/1920/1080',
-          labelBackground: 'https://picsum.photos/id/22/400/100',
+          labelBackground: 'https://picsum.photos/id/337/400/100?grayscale',
           textColor: '#333333',
           surgeonLabelDisplayName: '主讲专家',
           surgeryLabelDisplayName: '讲座主题',
