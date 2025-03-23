@@ -953,9 +953,21 @@ class CanvasRenderer {
       return;
     }
     
-    // 重新加载资源
+    console.log('[canvasRenderer.ts 画布渲染器] 开始刷新预览画布');
+    
     try {
+      // 先刷新文字图层缓存
+      if (this.previewContext.scheduleId && this.previewContext.layoutId) {
+        console.log('[canvasRenderer.ts 画布渲染器] 刷新预览画布的文字图层缓存...');
+        await textLayerCacheManager.refreshLayout(
+          this.previewContext.scheduleId,
+          this.previewContext.layoutId
+        );
+      }
+      
+      // 然后重新加载资源
       await this.loadResources(this.previewContext);
+      console.log('[canvasRenderer.ts 画布渲染器] 预览画布刷新完成');
     } catch (error) {
       console.error('[canvasRenderer.ts 画布渲染器] 刷新预览画布失败', error);
     }
@@ -970,9 +982,21 @@ class CanvasRenderer {
       return;
     }
     
-    // 重新加载资源
+    console.log('[canvasRenderer.ts 画布渲染器] 开始刷新直播画布');
+    
     try {
+      // 先刷新文字图层缓存
+      if (this.liveContext.scheduleId && this.liveContext.layoutId) {
+        console.log('[canvasRenderer.ts 画布渲染器] 刷新直播画布的文字图层缓存...');
+        await textLayerCacheManager.refreshLayout(
+          this.liveContext.scheduleId,
+          this.liveContext.layoutId
+        );
+      }
+      
+      // 然后重新加载资源
       await this.loadResources(this.liveContext);
+      console.log('[canvasRenderer.ts 画布渲染器] 直播画布刷新完成');
     } catch (error) {
       console.error('[canvasRenderer.ts 画布渲染器] 刷新直播画布失败', error);
     }

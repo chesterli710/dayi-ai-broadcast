@@ -139,6 +139,36 @@ class TextLayerCacheManager {
   }
   
   /**
+   * 刷新指定日程的指定布局文字图层缓存
+   * @param scheduleId 日程ID
+   * @param layoutId 布局ID
+   * @returns 是否成功刷新
+   */
+  public async refreshLayout(scheduleId: string, layoutId: number): Promise<boolean> {
+    if (!scheduleId || !layoutId) {
+      console.warn('[textLayerCacheManager.ts 文字图层缓存管理器] 无效的日程ID或布局ID');
+      return false;
+    }
+
+    const cacheKey = this.getCacheKey(scheduleId, layoutId);
+    console.log(`[textLayerCacheManager.ts 文字图层缓存管理器] 刷新布局文字缓存: ${cacheKey}`);
+    
+    try {
+      // 从缓存中移除旧的项
+      if (this.cache.has(cacheKey)) {
+        this.cache.delete(cacheKey);
+        console.log(`[textLayerCacheManager.ts 文字图层缓存管理器] 已删除缓存: ${cacheKey}`);
+      }
+      
+      // 不立即生成新缓存，等待需要时再生成
+      return true;
+    } catch (error) {
+      console.error(`[textLayerCacheManager.ts 文字图层缓存管理器] 刷新布局文字缓存失败: ${cacheKey}`, error);
+      return false;
+    }
+  }
+  
+  /**
    * 检查指定布局的缓存是否存在
    * @param scheduleId 日程ID
    * @param layoutId 布局ID

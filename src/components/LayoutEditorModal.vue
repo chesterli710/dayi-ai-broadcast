@@ -185,10 +185,10 @@
                   </div>
                   <div class="source-info">
                     <div class="source-name">{{ source.name }}</div>
-                    <div class="source-resolution" v-if="source.width && source.height">
+                    <div class="source-details">
                       {{ source.width }}x{{ source.height }}
                     </div>
-                    <div class="source-status" v-if="source.isPrimary">
+                    <div class="source-status" v-if="source.type === 'screen' && (source as any).isPrimary">
                       <el-tag size="small" type="primary">
                         {{ $t('layoutEditor.primary') }}
                       </el-tag>
@@ -562,6 +562,18 @@ function saveSingleLayout() {
   if (updated) {
     ElMessage.success(t('layoutEditor.saveSingleSuccess'));
     console.log('[LayoutEditorModal.vue 布局编辑器] 布局保存成功');
+    
+    // 检查是否需要刷新预览画布
+    if (planStore.isPreviewingScheduleAndLayout(props.scheduleId, editingLayout.value.id)) {
+      console.log('[LayoutEditorModal.vue 布局编辑器] 正在刷新预览画布...');
+      planStore.notifyPreviewLayoutEdited(editingLayout.value);
+    }
+    
+    // 检查是否需要刷新直播画布
+    if (planStore.isLiveScheduleAndLayout(props.scheduleId, editingLayout.value.id)) {
+      console.log('[LayoutEditorModal.vue 布局编辑器] 正在刷新直播画布...');
+      planStore.notifyLiveLayoutEdited(editingLayout.value);
+    }
   } else {
     ElMessage.error(t('layoutEditor.saveError'));
     console.error('[LayoutEditorModal.vue 布局编辑器] 布局保存失败');
@@ -591,6 +603,12 @@ function saveAllSimilarLayouts() {
   if (updated) {
     ElMessage.success(t('layoutEditor.saveAllSuccess', { count: updatedCount + 1 }));
     console.log(`[LayoutEditorModal.vue 布局编辑器] 批量保存成功，共更新 ${updatedCount + 1} 个布局`);
+    
+    // 布局批量更新可能影响预览和直播画布
+    // 不需要传布局参数，planStore会处理更新逻辑
+    console.log('[LayoutEditorModal.vue 布局编辑器] 通知预览和直播画布刷新...');
+    planStore.notifyPreviewLayoutEdited();
+    planStore.notifyLiveLayoutEdited();
   } else {
     ElMessage.error(t('layoutEditor.saveError'));
     console.error('[LayoutEditorModal.vue 布局编辑器] 布局保存失败');
@@ -1170,7 +1188,7 @@ function handleDragLeave(event: DragEvent, element: MediaLayoutElement) {
   text-overflow: ellipsis;
 }
 
-.source-resolution {
+.source-details {
   font-size: 10px;
   color: var(--el-text-color-secondary);
 }

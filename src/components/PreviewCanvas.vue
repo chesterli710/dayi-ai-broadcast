@@ -138,6 +138,22 @@ watch(
   }
 );
 
+// 监听预览布局编辑事件
+watch(
+  () => planStore.previewLayoutEditedEvent,
+  (newValue, oldValue) => {
+    if (newValue !== oldValue) {
+      console.log('[PreviewCanvas.vue 预览画布] 检测到布局编辑事件，刷新画布...');
+      
+      // 检查是否有预览中的日程和布局
+      if (planStore.previewingSchedule && planStore.previewingLayout) {
+        // 使用canvasRenderer刷新预览画布
+        canvasRenderer.refreshPreviewCanvas();
+      }
+    }
+  }
+);
+
 onMounted(() => {
   initCanvas();
 });

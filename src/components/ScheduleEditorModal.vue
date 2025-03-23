@@ -1255,11 +1255,25 @@ async function handleSaveAndReturn(): Promise<boolean> {
       originalFormData.value = cloneDeep(scheduleForm);
       hasUnsavedChanges.value = false;
       
-      // 通知预览和直播布局需要重新渲染文字图层
-      // 这将触发文字图层的重绘，确保显示最新的日程信息
-      console.log(`[ScheduleEditorModal.vue 日程编辑器] 日程保存成功，通知文字图层重绘`);
-      planStore.notifyPreviewLayoutEdited();
-      planStore.notifyLiveLayoutEdited();
+      // 通知预览和直播画布更新
+      console.log(`[ScheduleEditorModal.vue 日程编辑器] 日程保存成功，准备刷新画布...`);
+      
+      // 这里我们做更完整的处理 - 检查是否需要刷新文字图层缓存并更新画布
+      // 1. 检查是否需要刷新预览画布
+      const isPreviewingThisSchedule = planStore.previewingSchedule?.id === schedule.id;
+      if (isPreviewingThisSchedule) {
+        console.log(`[ScheduleEditorModal.vue 日程编辑器] 刷新预览画布，日程ID: ${schedule.id}`);
+        // 调用planStore的通知方法，这会触发文字图层缓存清除和预览画布重绘
+        planStore.notifyPreviewLayoutEdited();
+      }
+      
+      // 2. 检查是否需要刷新直播画布
+      const isLiveThisSchedule = planStore.liveSchedule?.id === schedule.id;
+      if (isLiveThisSchedule) {
+        console.log(`[ScheduleEditorModal.vue 日程编辑器] 刷新直播画布，日程ID: ${schedule.id}`);
+        // 调用planStore的通知方法，这会触发文字图层缓存清除和直播画布重绘
+        planStore.notifyLiveLayoutEdited();
+      }
       
       return true;
     } else {

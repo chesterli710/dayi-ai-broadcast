@@ -77,6 +77,22 @@ watch(
   }
 );
 
+// 监听直播布局编辑事件
+watch(
+  () => planStore.liveLayoutEditedEvent,
+  (newValue, oldValue) => {
+    if (newValue !== oldValue) {
+      console.log('[LiveCanvas.vue 直播画布] 检测到布局编辑事件，刷新画布...');
+      
+      // 检查是否有直播中的日程和布局
+      if (planStore.liveSchedule && planStore.liveLayout) {
+        // 使用canvasRenderer刷新直播画布
+        canvasRenderer.refreshLiveCanvas();
+      }
+    }
+  }
+);
+
 onMounted(() => {
   initCanvas();
 });
