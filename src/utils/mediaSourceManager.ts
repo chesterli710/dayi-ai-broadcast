@@ -69,6 +69,15 @@ const CAMERA_CONFIG = {
 };
 
 /**
+ * 摄像头黑名单
+ * 这些虚拟摄像头可能会导致捕获错误
+ */
+const CAMERA_BLACKLIST = [
+  'vmix', 
+  'gxplayer',
+];
+
+/**
  * 媒体源管理类
  * 单例模式实现，统一管理所有媒体源
  */
@@ -426,10 +435,32 @@ class MediaSourceManager {
       
       // 筛选出视频输入设备(摄像头)
       const videoDevices = devices.filter(device => device.kind === 'videoinput');
-      console.log(`[mediaSourceManager.ts 媒体源管理] 找到 ${videoDevices.length} 个摄像头设备`);
+      
+      // 筛选出不在黑名单中的摄像头
+      const filteredDevices = videoDevices.filter(device => {
+        // 没有标签的设备（可能是未激活的设备）不进行过滤
+        if (!device.label) return true;
+        
+        // 检查设备名称是否包含黑名单关键词（不区分大小写）
+        const deviceLabelLower = device.label.toLowerCase();
+        const isBlacklisted = CAMERA_BLACKLIST.some(keyword => deviceLabelLower.includes(keyword.toLowerCase()));
+        
+        // 保留OBS虚拟摄像头，即使它可能包含黑名单关键词
+        const isObsCamera = deviceLabelLower.includes('obs') && deviceLabelLower.includes('virtual camera');
+        
+        // 如果设备被列入黑名单但不是OBS虚拟摄像头，则排除
+        if (isBlacklisted && !isObsCamera) {
+          console.log(`[mediaSourceManager.ts 媒体源管理] 排除黑名单摄像头: ${device.label}`);
+          return false;
+        }
+        
+        return true;
+      });
+      
+      console.log(`[mediaSourceManager.ts 媒体源管理] 找到 ${videoDevices.length} 个摄像头设备，过滤后剩余 ${filteredDevices.length} 个`);
       
       // 转换为CameraSource格式
-      const cameraSources: CameraSource[] = videoDevices.map((device, index) => ({
+      const cameraSources: CameraSource[] = filteredDevices.map((device, index) => ({
         id: device.deviceId, // 使用原始deviceId
         name: device.label || `摄像头 ${index + 1}`,
         type: 'camera',
