@@ -155,11 +155,10 @@ export interface SystemAudioState {
   /**
    * 捕获方式
    * - 'blackhole': 使用BlackHole插件捕获 (macOS)
-   * - 'wasapi': 使用WASAPI捕获 (Windows)
    * - 'desktop-capturer': 使用Electron的desktopCapturer捕获
    * - 'none': 无法捕获
    */
-  captureMethod: 'blackhole' | 'wasapi' | 'desktop-capturer' | 'none';
+  captureMethod: 'blackhole' | 'desktop-capturer' | 'none';
 }
 
 /**
@@ -172,7 +171,7 @@ export interface AudioSettings {
   selectedMicrophoneId: string | null;
   
   /**
-   * 选中的系统音频输出设备ID（用于WASAPI捕获）
+   * 选中的音频输出设备ID（用于系统音频设置）
    */
   selectedOutputDeviceId: string | null;
   

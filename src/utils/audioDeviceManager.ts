@@ -29,11 +29,6 @@ const isWindows = computed(() => {
 });
 
 /**
- * 判断是否支持WASAPI捕获
- */
-const isWasapiSupported = ref(false);
-
-/**
  * 判断是否安装了BlackHole (仅macOS)
  */
 const isBlackholeInstalled = ref(false);
@@ -87,11 +82,6 @@ const systemAudioState = reactive<SystemAudioState>({
 });
 
 /**
- * WASAPI音频电平监测定时器
- */
-let wasapiLevelTimer: number | null = null;
-
-/**
  * 添加systemAudioGainNode的响应式引用定义
  */
 const systemAudioGainNode = ref<GainNode | null>(null);
@@ -110,15 +100,18 @@ export async function initAudioDeviceManager() {
   // 检查平台特定功能
   if (isElectron.value) {
     if (isMac.value) {
-      isBlackholeInstalled.value = await window.electronAPI?.checkBlackholeInstalled() || false;
+      if (window.electronAPI && window.electronAPI.checkBlackholeInstalled) {
+        isBlackholeInstalled.value = await window.electronAPI.checkBlackholeInstalled() || false;
+      }
     }
 
     if (isWindows.value) {
-      isStereoMixEnabled.value = await window.electronAPI?.checkStereoMixEnabled() || false;
-      isWasapiSupported.value = await window.electronAPI?.checkWasapiAvailable() || false;
+      if (window.electronAPI && window.electronAPI.checkStereoMixEnabled) {
+        isStereoMixEnabled.value = await window.electronAPI.checkStereoMixEnabled() || false;
+      }
       
-      // 获取音频输出设备列表 (仅用于Windows WASAPI捕获)
-      if (isWasapiSupported.value && window.electronAPI?.getAudioOutputDevices) {
+      // 获取音频输出设备列表（Windows平台）
+      if (window.electronAPI && window.electronAPI.getAudioOutputDevices) {
         try {
           const devices = await window.electronAPI.getAudioOutputDevices() || [];
           audioOutputDevices.value = devices;
@@ -309,7 +302,7 @@ export function setMicrophoneVolume(volume: number) {
 
 /**
  * 打开系统音频捕获
- * @param outputDeviceId (可选) 输出设备ID，仅用于WASAPI捕获
+ * @param outputDeviceId (可选) 输出设备ID，用于系统配置
  */
 export async function openSystemAudio(outputDeviceId?: string): Promise<boolean> {
   // 先关闭现有的系统音频捕获
@@ -317,64 +310,19 @@ export async function openSystemAudio(outputDeviceId?: string): Promise<boolean>
   
   // 尝试各种捕获方法
   if (isElectron.value) {
-    // Windows平台只使用desktop capture
-    if (isWindows.value) {
+    // 在任何平台上都使用desktop capturer
+    if (isWindows.value || (!isMac.value) || (!isBlackholeInstalled.value)) {
       return await startDesktopCapturerAudio();
     } else if (isMac.value && isBlackholeInstalled.value) {
       // macOS下通过BlackHole捕获
       return await startBlackholeCapture();
-    } else {
-      // 其他情况下使用desktopCapturer API
-      return await startDesktopCapturerAudio();
     }
   } else {
     console.error('[audioDeviceManager.ts] 当前不在Electron环境中，无法捕获系统音频');
     return false;
   }
-}
-
-/**
- * 使用WASAPI捕获系统音频 (仅限Windows)
- */
-async function startWasapiCapture(outputDeviceId?: string): Promise<boolean> {
-  try {
-    if (!isElectron.value || !isWasapiSupported.value || !window.electronAPI?.startWasapiCapture) {
-      return false;
-    }
-    
-    const result = await window.electronAPI.startWasapiCapture(outputDeviceId) || false;
-    
-    if (result) {
-      systemAudioState.enabled = true;
-      systemAudioState.captureMethod = 'wasapi';
-      console.log('[audioDeviceManager.ts] 成功启动WASAPI音频捕获');
-      
-      // 启动WASAPI电平监测
-      if (wasapiLevelTimer) {
-        window.clearInterval(wasapiLevelTimer);
-      }
-      
-      wasapiLevelTimer = window.setInterval(async () => {
-        if (systemAudioState.muted) {
-          systemAudioState.level = 0;
-          return;
-        }
-        
-        if (window.electronAPI?.getWasapiAudioLevel) {
-          const level = await window.electronAPI.getWasapiAudioLevel() || 0;
-          systemAudioState.level = level;
-        }
-      }, 100);
-      
-      return true;
-    }
-    
-    return false;
-  } catch (error) {
-    console.error('[audioDeviceManager.ts] WASAPI音频捕获失败', error);
-    systemAudioState.captureMethod = 'none';
-    return false;
-  }
+  
+  return false;
 }
 
 /**
@@ -641,33 +589,19 @@ async function startDesktopCapturerAudio(): Promise<boolean> {
  * 关闭系统音频捕获
  */
 export function closeSystemAudio() {
-  // 根据不同的捕获方法进行清理
-  if (systemAudioState.captureMethod === 'wasapi') {
-    // 停止WASAPI捕获
-    if (isElectron.value && window.electronAPI?.stopWasapiCapture) {
-      window.electronAPI.stopWasapiCapture();
-    }
-    
-    // 清除电平监测定时器
-    if (wasapiLevelTimer) {
-      window.clearInterval(wasapiLevelTimer);
-      wasapiLevelTimer = null;
-    }
-  } else {
-    // 停止媒体流
-    if (systemAudioStream.value) {
-      systemAudioStream.value.getTracks().forEach(track => track.stop());
-      systemAudioStream.value = null;
-    }
-    
-    // 断开音频节点
-    if (systemAudioSource.value) {
-      systemAudioSource.value.disconnect();
-      systemAudioSource.value = null;
-    }
-    
-    systemAudioAnalyser.value = null;
+  // 停止媒体流
+  if (systemAudioStream.value) {
+    systemAudioStream.value.getTracks().forEach(track => track.stop());
+    systemAudioStream.value = null;
   }
+  
+  // 断开音频节点
+  if (systemAudioSource.value) {
+    systemAudioSource.value.disconnect();
+    systemAudioSource.value = null;
+  }
+  
+  systemAudioAnalyser.value = null;
   
   // 重置状态
   systemAudioState.enabled = false;
@@ -702,11 +636,6 @@ export function setSystemAudioMuted(muted: boolean) {
     if (muted) {
       systemAudioState.level = 0;
     }
-  } else if (systemAudioState.captureMethod === 'wasapi') {
-    // WASAPI捕获方式下，静音通过电平监测时直接设置电平为0
-    if (muted) {
-      systemAudioState.level = 0;
-    }
   }
   
   console.log('[audioDeviceManager.ts] 设置系统音频静音状态', muted);
@@ -729,14 +658,6 @@ export function setSystemAudioVolume(volume: number) {
     } catch (error) {
       console.error('[audioDeviceManager.ts] 设置系统音频增益失败', error);
     }
-  }
-  // 如果是WASAPI捕获，尝试设置设备音量
-  else if (systemAudioState.captureMethod === 'wasapi' && isElectron.value && window.electronAPI?.setDeviceVolume) {
-    // 发送设置音量请求到主进程
-    const selectedOutputId = systemAudioState.captureMethod === 'wasapi' ? 
-      microphoneState.deviceId : ''; // 此处需要存储选中的输出设备ID，临时使用麦克风ID代替
-    
-    window.electronAPI.setDeviceVolume(selectedOutputId, volume);
   }
 }
 
@@ -773,7 +694,6 @@ export function getSystemAudioState() {
  */
 export function getCaptureSupport() {
   return {
-    isWasapiSupported: isWasapiSupported.value,
     isBlackholeInstalled: isBlackholeInstalled.value,
     isStereoMixEnabled: isStereoMixEnabled.value
   };

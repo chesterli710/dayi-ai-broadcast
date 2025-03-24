@@ -52,7 +52,6 @@ export const useAudioStore = defineStore('audio', () => {
   
   // 捕获支持状态
   const captureSupport = reactive({
-    isWasapiSupported: false,
     isBlackholeInstalled: false,
     isStereoMixEnabled: false
   });
@@ -71,7 +70,7 @@ export const useAudioStore = defineStore('audio', () => {
     volume: 100,
     muted: false,
     level: 0,
-    captureMethod: 'none' as 'blackhole' | 'wasapi' | 'desktop-capturer' | 'none'
+    captureMethod: 'none' as 'blackhole' | 'desktop-capturer' | 'none'
   });
   
   // 当前音频设置
@@ -108,7 +107,6 @@ export const useAudioStore = defineStore('audio', () => {
       
       // 获取捕获支持状况
       const support = getCaptureSupport();
-      captureSupport.isWasapiSupported = support.isWasapiSupported;
       captureSupport.isBlackholeInstalled = support.isBlackholeInstalled;
       captureSupport.isStereoMixEnabled = support.isStereoMixEnabled;
       
@@ -245,16 +243,7 @@ export const useAudioStore = defineStore('audio', () => {
    */
   async function selectAudioOutputDevice(deviceId: string | null) {
     audioSettings.selectedOutputDeviceId = deviceId;
-    
-    // 如果当前正在使用WASAPI捕获系统音频，则需要重新打开
-    if (systemAudioState.enabled && systemAudioState.captureMethod === 'wasapi') {
-      try {
-        await openSystemAudio(deviceId || undefined);
-        console.log('[audioStore.ts] 已切换系统音频捕获设备', deviceId);
-      } catch (error) {
-        console.error('[audioStore.ts] 切换系统音频捕获设备失败', error);
-      }
-    }
+    console.log('[audioStore.ts] 已选择音频输出设备', deviceId);
   }
   
   /**
@@ -381,13 +370,11 @@ export const useAudioStore = defineStore('audio', () => {
    */
   const canCaptureSystemAudio = computed(() => {
     // 在Electron环境下，通过以下任一方式可以捕获系统音频：
-    // 1. Windows下的WASAPI捕获
-    // 2. macOS下安装了BlackHole插件
-    // 3. 使用desktopCapturer API (兼容性不太好，可能在某些平台上不工作)
+    // 1. macOS下安装了BlackHole插件
+    // 2. 使用desktopCapturer API (兼容所有平台)
     return (
-      captureSupport.isWasapiSupported ||
       captureSupport.isBlackholeInstalled ||
-      window.electronAPI !== undefined // 在Electron环境中至少可以尝试使用desktopCapturer
+      window.electronAPI !== undefined // 在Electron环境中可以使用desktopCapturer
     );
   });
   
@@ -395,15 +382,11 @@ export const useAudioStore = defineStore('audio', () => {
    * 判断当前可用的捕获方式
    */
   const availableCaptureMethod = computed(() => {
-    // Windows平台优先使用desktop-capturer
-    if (isWindows.value && window.electronAPI !== undefined) {
+    // 所有平台都优先使用desktop-capturer
+    if (window.electronAPI !== undefined) {
       return 'desktop-capturer';
     } else if (captureSupport.isBlackholeInstalled) {
       return 'blackhole';
-    } else if (captureSupport.isWasapiSupported) {
-      return 'wasapi';
-    } else if (window.electronAPI !== undefined) {
-      return 'desktop-capturer';
     } else {
       return 'none';
     }

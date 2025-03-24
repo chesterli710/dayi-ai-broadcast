@@ -33,12 +33,6 @@ interface IElectronAPI {
   checkStereoMixEnabled: () => Promise<boolean>;
 
   /**
-   * 检查Windows上WASAPI捕获是否可用
-   * @returns Promise<boolean> 是否可用
-   */
-  checkWasapiAvailable: () => Promise<boolean>;
-
-  /**
    * 设置设备音量
    * @param deviceId - 设备ID
    * @param volume - 音量值 (0-100)
@@ -46,25 +40,6 @@ interface IElectronAPI {
    */
   setDeviceVolume?: (deviceId: string, volume: number) => Promise<boolean>;
   
-  /**
-   * 开始WASAPI音频捕获
-   * @param deviceId - 设备ID (可选)
-   * @returns Promise<boolean> 是否成功开始捕获
-   */
-  startWasapiCapture: (deviceId?: string) => Promise<boolean>;
-  
-  /**
-   * 停止WASAPI音频捕获
-   * @returns Promise<boolean> 是否成功停止捕获
-   */
-  stopWasapiCapture: () => Promise<boolean>;
-  
-  /**
-   * 获取WASAPI音频电平
-   * @returns Promise<number> 音频电平(0-100)
-   */
-  getWasapiAudioLevel: () => Promise<number>;
-
   /**
    * 获取音频输出设备列表（Windows平台专用）
    * @returns Promise<AudioOutputDeviceInfo[]> 音频输出设备列表

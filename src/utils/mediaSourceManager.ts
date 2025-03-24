@@ -11,6 +11,9 @@ import type {
   MediaSourceCaptureConfig,
   CaptureResult
 } from '../types/mediaSource';
+import { ref, computed } from 'vue';
+import type { WindowInfo, DisplayInfo, CameraInfo } from '../types/video';
+import type { AudioOutputDeviceInfo } from '../types/audio';
 
 /**
  * Electron API 类型定义
@@ -76,6 +79,67 @@ const CAMERA_BLACKLIST = [
   'vmix', 
   'gxplayer',
 ];
+
+// Electron桌面捕获器选项类型
+interface DesktopCapturerOptions {
+  types: string[];
+  thumbnailSize?: {
+    width: number;
+    height: number;
+  };
+  fetchWindowIcons?: boolean;
+}
+
+// Electron桌面捕获源类型
+interface DesktopCapturerSource {
+  id: string;
+  name: string;
+  thumbnail: Electron.NativeImage;
+  display_id?: string;
+  appIcon?: Electron.NativeImage;
+}
+
+/**
+ * 扩展的Electron API接口，用于类型安全
+ */
+export interface ExtendedElectronAPI {
+  send: (channel: string, data: unknown) => void;
+  receive: (channel: string, func: (...args: unknown[]) => void) => void;
+  
+  // 音频设备相关
+  checkBlackholeInstalled?: () => Promise<boolean>;
+  checkStereoMixEnabled?: () => Promise<boolean>;
+  
+  // 设备音量控制
+  setDeviceVolume?: (deviceId: string, volume: number) => Promise<boolean>;
+  
+  // 获取设备信息
+  getDefaultAudioOutput?: () => Promise<string>;
+  getAudioOutputDevices?: () => Promise<AudioOutputDeviceInfo[]>;
+  
+  // 获取系统信息
+  getGPUInfo?: () => Promise<{ vendor: string; model: string }>;
+  
+  // 系统窗口和显示器
+  getWindows?: () => Promise<WindowInfo[]>;
+  getDisplays?: () => Promise<DisplayInfo[]>;
+  
+  // 摄像头相关
+  getCameras?: () => Promise<CameraInfo[]>;
+  
+  // 媒体源缩略图
+  getSourceThumbnail?: (sourceId: string, sourceType: 'window'|'screen'|'camera', width?: number, height?: number) => Promise<string>;
+  
+  // 捕获媒体源
+  captureWindow?: (options: { windowId: string; frameRate?: number; audio?: boolean }) => Promise<any>;
+  captureScreen?: (options: { displayId: string; frameRate?: number; audio?: boolean }) => Promise<any>;
+  stopCapture?: (sourceId: string) => Promise<boolean>;
+  
+  // 桌面捕获器
+  desktopCapturer?: {
+    getSources: (options: DesktopCapturerOptions) => Promise<DesktopCapturerSource[]>;
+  };
+}
 
 /**
  * 媒体源管理类
