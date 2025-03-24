@@ -318,6 +318,26 @@ Electron版本: ${process.versions.electron}
   setupIPC() {
     try {
       this.logger.info("设置IPC通信");
+      ipcMain.handle("desktop-capturer-get-sources", async (event, options) => {
+        try {
+          this.logger.info("获取桌面捕获器源列表", options);
+          const sources = await desktopCapturer.getSources(options);
+          const processedSources = sources.map((source) => {
+            return {
+              id: source.id,
+              name: source.name,
+              display_id: source.display_id,
+              // 转换缩略图和应用图标为Data URL
+              thumbnail: source.thumbnail ? source.thumbnail.toDataURL() : null,
+              appIcon: source.appIcon ? source.appIcon.toDataURL() : null
+            };
+          });
+          return processedSources;
+        } catch (error) {
+          this.logger.error("获取桌面捕获器源列表失败", error);
+          throw error;
+        }
+      });
       ipcMain.handle("check-blackhole-installed", async () => {
         try {
           if (process.platform !== "darwin") return false;

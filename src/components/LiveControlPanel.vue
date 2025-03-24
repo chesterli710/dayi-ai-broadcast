@@ -107,7 +107,7 @@ function openSettingsModal() {
 function saveSettings() {
   try {
     // 保存音频配置
-    audioStore.updateConfig({
+    audioStore.updateAudioConfig({
       codec: audioConfig.codec,
       sampleRate: audioConfig.sampleRate,
       bitrate: Number(audioConfig.bitrate),

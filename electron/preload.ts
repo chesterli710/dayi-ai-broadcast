@@ -184,5 +184,20 @@ contextBridge.exposeInMainWorld('electronAPI', {
    */
   stopCapture: (sourceId) => {
     return ipcRenderer.invoke('stop-capture', sourceId)
+  },
+
+  /**
+   * 桌面捕获器API
+   * 用于获取可用的桌面媒体源（屏幕、窗口）
+   */
+  desktopCapturer: {
+    /**
+     * 获取可用的桌面媒体源
+     * @param options 选项
+     * @returns Promise<DesktopCapturerSource[]> 可用的桌面媒体源列表
+     */
+    getSources: (options) => {
+      return ipcRenderer.invoke('desktop-capturer-get-sources', options);
+    }
   }
 }) 

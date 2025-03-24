@@ -127,6 +127,7 @@
                   </div>
                   <div class="source-info">
                     <div class="source-name">{{ source.name }}</div>
+                    <div class="source-id">ID: {{ source.id }}</div>
                   </div>
                 </div>
               </div>
@@ -156,6 +157,7 @@
                   </div>
                   <div class="source-info">
                     <div class="source-name">{{ source.name }}</div>
+                    <div class="source-id">ID: {{ source.id }}</div>
                   </div>
                 </div>
               </div>
@@ -185,6 +187,7 @@
                   </div>
                   <div class="source-info">
                     <div class="source-name">{{ source.name }}</div>
+                    <div class="source-id">ID: {{ source.id }}</div>
                     <div class="source-details">
                       {{ source.width }}x{{ source.height }}
                     </div>
@@ -1186,6 +1189,15 @@ function handleDragLeave(event: DragEvent, element: MediaLayoutElement) {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.source-id {
+  font-size: 10px;
+  color: var(--el-text-color-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: monospace;
 }
 
 .source-details {

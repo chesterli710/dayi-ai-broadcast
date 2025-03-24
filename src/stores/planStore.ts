@@ -400,9 +400,9 @@ export const usePlanStore = defineStore('plan', () => {
               mediaElement.sourceType = undefined;
             }
             
-            if (!('resolution' in mediaElement)) {
-              mediaElement.resolution = undefined; // 媒体元素分辨率默认为未定义
-            }
+            // if (!('resolution' in mediaElement)) {
+            //   mediaElement.resolution = undefined; // 媒体元素分辨率默认为未定义
+            // }
             
             if (!('transparentBackground' in mediaElement)) {
               mediaElement.transparentBackground = false; // 默认非透明背景

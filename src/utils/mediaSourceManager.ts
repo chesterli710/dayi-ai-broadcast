@@ -16,16 +16,39 @@ import type {
  * Electron API 类型定义
  */
 interface IElectronAPI {
-  getWindows: () => Promise<any[]>;
-  getDisplays: () => Promise<any[]>;
+  // 全局通信方法
+  send?: (channel: string, ...args: any[]) => void;
+  receive?: (channel: string, func: (...args: any[]) => void) => void;
+  
+  // 媒体设备相关
   getCameras: () => Promise<{success: boolean, message: string, error?: string}>;
   getSourceThumbnail: (sourceId: string, sourceType: string, width?: number, height?: number) => Promise<string | null>;
+  
+  // 媒体捕获相关
   captureWindow: (sourceId: string, options: any) => Promise<{success: boolean, sourceId: string, message?: string, error?: string}>;
   captureScreen: (sourceId: string, options: any) => Promise<{success: boolean, sourceId: string, message?: string, error?: string}>;
   stopCapture: (sourceId: string) => Promise<{success: boolean, sourceId: string, message?: string, error?: string}>;
-  // 添加其他可能存在的Electron API方法
-  send?: (channel: string, ...args: any[]) => void;
-  receive?: (channel: string, func: (...args: any[]) => void) => void;
+  
+  // 桌面捕获器
+  desktopCapturer: {
+    getSources: (options: { 
+      types: string[], 
+      thumbnailSize?: { width: number, height: number }, 
+      fetchWindowIcons?: boolean 
+    }) => Promise<any[]>;
+  };
+  
+  // 其他API...
+  checkBlackholeInstalled?: () => Promise<boolean>;
+  checkStereoMixEnabled?: () => Promise<boolean>;
+  checkWasapiAvailable?: () => Promise<boolean>;
+  startWasapiCapture?: (deviceId?: string) => Promise<any>;
+  stopWasapiCapture?: () => Promise<void>;
+  getWasapiAudioLevel?: (deviceId?: string) => Promise<number>;
+  setDeviceVolume?: (deviceId: string, volume: number) => Promise<boolean>;
+  getDefaultAudioOutput?: () => Promise<string>;
+  getAudioOutputDevices?: () => Promise<any[]>;
+  getGPUInfo?: () => Promise<any>;
 }
 
 // 为window添加electronAPI类型声明
@@ -191,59 +214,30 @@ class MediaSourceManager {
         throw new Error(`无效的窗口源: ${sourceId}`);
       }
       
-      // 使用窗口原始ID进行捕获
-      const windowSource = source as WindowSource;
-      const windowId = windowSource.sourceId || '';
-      if (!windowId) {
-        throw new Error(`窗口没有有效的源ID: ${sourceId}`);
-      }
+      console.log(`[mediaSourceManager.ts 媒体源管理] 捕获窗口: ${sourceId}`);
 
-      console.log(`[mediaSourceManager.ts 媒体源管理] 捕获窗口: ${sourceId}, 使用源ID: ${windowId}`);
-
-      // 使用Electron API捕获窗口，而不是getUserMedia
-      if (window.electronAPI && window.electronAPI.captureWindow) {
-        try {
-          const result = await window.electronAPI.captureWindow(windowId, {
-            frameRate: config.frameRate || 30,
-            audio: config.audio || false
-          });
-          
-          if (!result.success) {
-            throw new Error(`Electron捕获窗口失败: ${result.error || '未知错误'}`);
+      // 使用desktopCapturer提供的sourceId直接构建媒体约束
+      // 使用any类型绕过TypeScript对Electron特有约束的检查
+      const constraints: any = {
+        audio: false, // 通常窗口捕获不包含音频，如需音频需要额外处理
+        video: {
+          mandatory: {
+            chromeMediaSource: 'desktop',
+            chromeMediaSourceId: sourceId,
+            minWidth: 1280,
+            maxWidth: 8192,
+            minHeight: 720,
+            maxHeight: 4320
           }
-          
-          // 从结果中获取媒体流
-          // 使用any类型绕过TypeScript对Electron特有约束的检查
-          const constraints: any = {
-            video: {
-              mandatory: {
-                chromeMediaSource: 'desktop',
-                chromeMediaSourceId: windowId
-              }
-            },
-            audio: false
-          };
-
-          return await this.captureStream(sourceId, constraints);
-        } catch (error) {
-          console.error('[mediaSourceManager.ts 媒体源管理] Electron捕获窗口失败:', error);
-          throw error;
         }
-      } else {
-        // 使用Web API捕获，这种方式在桌面应用中通常无法获取窗口
-        // 使用any类型绕过TypeScript对Electron特有约束的检查
-        const constraints: any = {
-          audio: false,
-          video: {
-            mandatory: {
-              chromeMediaSource: 'desktop',
-              chromeMediaSourceId: windowId
-            }
-          }
-        };
+      };
 
-        return await this.captureStream(sourceId, constraints);
+      // 设置帧率 (如果提供)
+      if (config.frameRate) {
+        constraints.video.mandatory.maxFrameRate = config.frameRate;
       }
+
+      return await this.captureStream(sourceId, constraints);
     } catch (error) {
       console.error('[mediaSourceManager.ts 媒体源管理] 捕获窗口失败:', error);
       return {
@@ -271,59 +265,30 @@ class MediaSourceManager {
         throw new Error(`无效的屏幕源: ${sourceId}`);
       }
       
-      // 使用屏幕原始ID进行捕获
-      const screenSource = source as ScreenSource;
-      const screenId = screenSource.sourceId || '';
-      if (!screenId) {
-        throw new Error(`屏幕没有有效的源ID: ${sourceId}`);
-      }
+      console.log(`[mediaSourceManager.ts 媒体源管理] 捕获屏幕: ${sourceId}`);
 
-      console.log(`[mediaSourceManager.ts 媒体源管理] 捕获屏幕: ${sourceId}, 使用源ID: ${screenId}`);
-
-      // 使用Electron API捕获屏幕，而不是getUserMedia
-      if (window.electronAPI && window.electronAPI.captureScreen) {
-        try {
-          const result = await window.electronAPI.captureScreen(screenId, {
-            frameRate: config.frameRate || 30,
-            audio: config.audio || false
-          });
-          
-          if (!result.success) {
-            throw new Error(`Electron捕获屏幕失败: ${result.error || '未知错误'}`);
+      // 使用desktopCapturer提供的sourceId直接构建媒体约束
+      // 使用any类型绕过TypeScript对Electron特有约束的检查
+      const constraints: any = {
+        audio: false, // 通常屏幕捕获不包含音频，如需音频需要额外处理
+        video: {
+          mandatory: {
+            chromeMediaSource: 'desktop',
+            chromeMediaSourceId: sourceId,
+            minWidth: 1280,
+            maxWidth: 8192,
+            minHeight: 720,
+            maxHeight: 4320
           }
-          
-          // 从结果中获取媒体流
-          // 使用any类型绕过TypeScript对Electron特有约束的检查
-          const constraints: any = {
-            video: {
-              mandatory: {
-                chromeMediaSource: 'desktop',
-                chromeMediaSourceId: screenId
-              }
-            },
-            audio: false
-          };
-
-          return await this.captureStream(sourceId, constraints);
-        } catch (error) {
-          console.error('[mediaSourceManager.ts 媒体源管理] Electron捕获屏幕失败:', error);
-          throw error;
         }
-      } else {
-        // 使用Web API捕获
-        // 使用any类型绕过TypeScript对Electron特有约束的检查
-        const constraints: any = {
-          audio: false,
-          video: {
-            mandatory: {
-              chromeMediaSource: 'desktop',
-              chromeMediaSourceId: screenId
-            }
-          }
-        };
+      };
 
-        return await this.captureStream(sourceId, constraints);
+      // 设置帧率 (如果提供)
+      if (config.frameRate) {
+        constraints.video.mandatory.maxFrameRate = config.frameRate;
       }
+
+      return await this.captureStream(sourceId, constraints);
     } catch (error) {
       console.error('[mediaSourceManager.ts 媒体源管理] 捕获屏幕失败:', error);
       return {
@@ -465,7 +430,7 @@ class MediaSourceManager {
       
       // 转换为CameraSource格式
       const cameraSources: CameraSource[] = videoDevices.map((device, index) => ({
-        id: `camera-${device.deviceId}`,
+        id: device.deviceId, // 使用原始deviceId
         name: device.label || `摄像头 ${index + 1}`,
         type: 'camera',
         deviceId: device.deviceId,
@@ -500,22 +465,28 @@ class MediaSourceManager {
       console.log('[mediaSourceManager.ts 媒体源管理] 获取系统窗口列表');
       this.mediaSourceStore.isLoading = true;
       
-      // 调用Electron API获取窗口列表
+      // 使用Electron API获取窗口列表
       if (!window.electronAPI) {
         throw new Error('Electron API不可用');
       }
       
-      const windows = await window.electronAPI.getWindows();
-      console.log(`[mediaSourceManager.ts 媒体源管理] 找到 ${windows.length} 个窗口`);
+      // 调用预加载脚本中的desktopCapturer.getSources
+      const sources = await window.electronAPI.desktopCapturer.getSources({
+        types: ['window'], // 只获取窗口类型的源
+        thumbnailSize: { width: 150, height: 150 }, // 缩略图尺寸
+        fetchWindowIcons: true // 获取窗口图标
+      });
+      
+      console.log(`[mediaSourceManager.ts 媒体源管理] 找到 ${sources.length} 个窗口`);
       
       // 转换为WindowSource格式
-      const windowSources: WindowSource[] = windows.map(window => ({
-        id: `window-${window.id}`,
-        name: window.name,
+      const windowSources: WindowSource[] = sources.map((source: any) => ({
+        id: source.id, // 使用desktopCapturer提供的id
+        name: source.name || '未知窗口',
         type: 'window',
-        sourceId: window.sourceId,
-        appIcon: window.appIcon,
-        thumbnail: window.thumbnail,
+        sourceId: source.id, // desktopCapturer提供的id直接用作sourceId
+        appIcon: source.appIcon || '', // 已经是Data URL格式
+        thumbnail: source.thumbnail || '', // 已经是Data URL格式
         isActive: false,
         referenceCount: 0
       }));
@@ -545,24 +516,30 @@ class MediaSourceManager {
       console.log('[mediaSourceManager.ts 媒体源管理] 获取系统屏幕列表');
       this.mediaSourceStore.isLoading = true;
       
-      // 调用Electron API获取屏幕列表
+      // 使用Electron API获取屏幕列表
       if (!window.electronAPI) {
         throw new Error('Electron API不可用');
       }
       
-      const displays = await window.electronAPI.getDisplays();
-      console.log(`[mediaSourceManager.ts 媒体源管理] 找到 ${displays.length} 个屏幕`);
+      // 调用预加载脚本中的desktopCapturer.getSources
+      const sources = await window.electronAPI.desktopCapturer.getSources({
+        types: ['screen'], // 只获取屏幕类型的源
+        thumbnailSize: { width: 150, height: 150 }, // 缩略图尺寸
+        fetchWindowIcons: false // 不需要获取窗口图标
+      });
+      
+      console.log(`[mediaSourceManager.ts 媒体源管理] 找到 ${sources.length} 个屏幕`);
       
       // 转换为ScreenSource格式
-      const screenSources: ScreenSource[] = displays.map(display => ({
-        id: `screen-${display.id}`,
-        name: display.name,
+      const screenSources: ScreenSource[] = sources.map((source: any, index: number) => ({
+        id: source.id, // 使用desktopCapturer提供的id
+        name: source.name || `屏幕 ${index + 1}`,
         type: 'screen',
-        sourceId: display.sourceId,
-        width: display.width,
-        height: display.height,
-        isPrimary: display.isPrimary,
-        thumbnail: display.thumbnail,
+        sourceId: source.id, // desktopCapturer提供的id直接用作sourceId
+        width: source.display_id ? source.display_id.width : 0,
+        height: source.display_id ? source.display_id.height : 0,
+        isPrimary: source.display_id ? source.display_id.isPrimary : false,
+        thumbnail: source.thumbnail || '', // 已经是Data URL格式
         isActive: false,
         referenceCount: 0
       }));
@@ -591,13 +568,15 @@ class MediaSourceManager {
     this.mediaSourceStore.isLoading = true;
     
     try {
-      await Promise.all([
+      // 并行执行获取所有媒体源的操作
+      const [cameras, windows, screens] = await Promise.all([
         this.getCameras(),
         this.getWindows(),
         this.getScreens()
       ]);
       
       console.log('[mediaSourceManager.ts 媒体源管理] 所有媒体源刷新完成');
+      console.log(`[mediaSourceManager.ts 媒体源管理] 摄像头: ${cameras.length}, 窗口: ${windows.length}, 屏幕: ${screens.length}`);
     } catch (error) {
       console.error('[mediaSourceManager.ts 媒体源管理] 刷新媒体源失败:', error);
       throw error;
