@@ -156,9 +156,10 @@ export interface SystemAudioState {
    * 捕获方式
    * - 'blackhole': 使用BlackHole插件捕获 (macOS)
    * - 'desktop-capturer': 使用Electron的desktopCapturer捕获
+   * - 'stereo-mix': 使用立体声混音设备捕获
    * - 'none': 无法捕获
    */
-  captureMethod: 'blackhole' | 'desktop-capturer' | 'none';
+  captureMethod: 'blackhole' | 'desktop-capturer' | 'stereo-mix' | 'none';
 }
 
 /**

@@ -282,6 +282,9 @@ const getSystemAudioCaptureTypeLabel = () => {
       return 'BlackHole';
     case 'desktop-capturer':
       return isWindows.value ? t('audio.desktopCapture') : 'Desktop Capturer';
+    case 'stereo-mix':
+      return '立体声混音';
+    case 'none':
     default:
       return t('audio.notCapturing');
   }
@@ -295,7 +298,7 @@ onMounted(async () => {
   if (selectedMicrophoneId.value) {
     audioStore.selectMicrophoneDevice(selectedMicrophoneId.value);
   }
-
+  
   // 自动启用系统音频捕获
   if (canCaptureSystemAudio.value && !systemAudioEnabled.value) {
     console.log('[AudioPanel.vue] 自动启用系统音频捕获');

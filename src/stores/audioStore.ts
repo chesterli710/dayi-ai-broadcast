@@ -70,7 +70,7 @@ export const useAudioStore = defineStore('audio', () => {
     volume: 100,
     muted: false,
     level: 0,
-    captureMethod: 'none' as 'blackhole' | 'desktop-capturer' | 'none'
+    captureMethod: 'none' as 'blackhole' | 'desktop-capturer' | 'stereo-mix' | 'none'
   });
   
   // 当前音频设置
@@ -278,7 +278,7 @@ export const useAudioStore = defineStore('audio', () => {
    */
   async function startSystemAudio() {
     try {
-      const success = await openSystemAudio(audioSettings.selectedOutputDeviceId || undefined);
+      const success = await openSystemAudio();
       
       if (success) {
         // 设置系统音频音量和静音状态

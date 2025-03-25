@@ -141,8 +141,12 @@ export async function refreshMicrophoneDevices() {
     // 获取设备列表
     const devices = await navigator.mediaDevices.enumerateDevices();
     
-    // 过滤出音频输入设备
-    const audioInputDevices = devices.filter(device => device.kind === 'audioinput');
+    // 过滤出音频输入设备，排除立体声混音
+    const audioInputDevices = devices.filter(device => 
+      device.kind === 'audioinput' && 
+      !device.label.toLowerCase().includes('立体声混音') && 
+      !device.label.toLowerCase().includes('stereo mix')
+    );
     
     // 格式化为我们的设备信息结构
     microphoneDevices.value = audioInputDevices.map(device => ({
@@ -302,284 +306,238 @@ export function setMicrophoneVolume(volume: number) {
 
 /**
  * 打开系统音频捕获
- * @param outputDeviceId (可选) 输出设备ID，用于系统配置
  */
-export async function openSystemAudio(outputDeviceId?: string): Promise<boolean> {
+export async function openSystemAudio(): Promise<boolean> {
   // 先关闭现有的系统音频捕获
   closeSystemAudio();
   
-  // 尝试各种捕获方法
-  if (isElectron.value) {
-    // 在任何平台上都使用desktop capturer
-    if (isWindows.value || (!isMac.value) || (!isBlackholeInstalled.value)) {
-      return await startDesktopCapturerAudio();
-    } else if (isMac.value && isBlackholeInstalled.value) {
-      // macOS下通过BlackHole捕获
-      return await startBlackholeCapture();
-    }
-  } else {
-    console.error('[audioDeviceManager.ts] 当前不在Electron环境中，无法捕获系统音频');
-    return false;
-  }
-  
-  return false;
-}
-
-/**
- * 使用BlackHole插件捕获系统音频 (仅限macOS)
- */
-async function startBlackholeCapture(): Promise<boolean> {
   try {
-    if (!isElectron.value || !isBlackholeInstalled.value) {
-      return false;
-    }
-    
-    // 尝试获取BlackHole设备
-    const devices = await navigator.mediaDevices.enumerateDevices();
-    const blackholeDevice = devices.find(device => 
-      device.kind === 'audioinput' && device.label.includes('BlackHole')
-    );
-    
-    if (!blackholeDevice) {
-      console.error('[audioDeviceManager.ts] 找不到BlackHole设备');
-      return false;
-    }
-    
-    // 捕获BlackHole设备的音频
-    const stream = await navigator.mediaDevices.getUserMedia({
-      audio: {
-        deviceId: { exact: blackholeDevice.deviceId }
+    // 在 macOS 平台上使用 BlackHole
+    if (isMac.value) {
+      // 获取所有音频设备
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      
+      // 查找 BlackHole 设备
+      const blackholeDevice = devices.find(device => 
+        device.kind === 'audioinput' && 
+        device.label.toLowerCase().includes('blackhole')
+      );
+      
+      if (!blackholeDevice) {
+        console.error('[audioDeviceManager.ts] 未找到 BlackHole 设备');
+        return false;
       }
-    });
-    
-    systemAudioStream.value = stream;
-    
-    // 创建音频处理节点
-    if (audioContext.value) {
-      systemAudioSource.value = audioContext.value.createMediaStreamSource(stream);
-      systemAudioAnalyser.value = audioContext.value.createAnalyser();
-      systemAudioAnalyser.value.fftSize = 256;
       
-      // 连接节点
-      systemAudioSource.value.connect(systemAudioAnalyser.value);
+      console.log('[audioDeviceManager.ts] 找到 BlackHole 设备:', blackholeDevice);
       
-      // 创建数据数组
-      const dataArray = new Uint8Array(systemAudioAnalyser.value.frequencyBinCount);
-      
-      // 开始分析音频电平
-      const analyzeLevel = () => {
-        if (!systemAudioAnalyser.value) return;
-        
-        // 如果已静音，则强制电平为0
-        if (systemAudioState.muted) {
-          systemAudioState.level = 0;
-          requestAnimationFrame(analyzeLevel);
-          return;
-        }
-        
-        // 获取音频数据
-        systemAudioAnalyser.value.getByteFrequencyData(dataArray);
-        
-        // 计算平均电平
-        let sum = 0;
-        for (let i = 0; i < dataArray.length; i++) {
-          sum += dataArray[i];
-        }
-        
-        // 计算平均值并转换到0-100范围
-        const average = sum / dataArray.length;
-        systemAudioState.level = Math.min(100, Math.round((average / 256) * 100));
-        
-        // 继续下一帧分析
-        requestAnimationFrame(analyzeLevel);
-      };
-      
-      // 开始分析
-      analyzeLevel();
-    }
-    
-    systemAudioState.enabled = true;
-    systemAudioState.captureMethod = 'blackhole';
-    console.log('[audioDeviceManager.ts] 成功启动BlackHole音频捕获');
-    
-    return true;
-  } catch (error) {
-    console.error('[audioDeviceManager.ts] BlackHole音频捕获失败', error);
-    systemAudioState.captureMethod = 'none';
-    return false;
-  }
-}
-
-/**
- * 使用desktopCapturer API捕获系统音频
- */
-async function startDesktopCapturerAudio(): Promise<boolean> {
-  try {
-    if (!isElectron.value) {
-      return false;
-    }
-    
-    console.log('[audioDeviceManager.ts] 尝试使用desktopCapturer捕获系统音频');
-    
-    // 使用getUserMedia和desktopCapturer结合捕获系统音频
-    const constraints: MediaStreamConstraints = {
-      audio: {
-        // 添加TypeScript注释忽略类型检查，因为这是Electron特有的非标准参数
-        // @ts-ignore
-        mandatory: {
-          chromeMediaSource: 'desktop'
-        }
-      },
-      video: {
-        // @ts-ignore
-        mandatory: {
-          chromeMediaSource: 'desktop',
-          chromeMediaSourceId: 'screen:0:0',
-          minWidth: 1,
-          maxWidth: 1,
-          minHeight: 1,
-          maxHeight: 1
-        }
-      }
-    };
-    
-    const stream = await navigator.mediaDevices.getUserMedia(constraints);
-    
-    // 安全地移除视频轨道，防止removeChild错误
-    const videoTracks = stream.getVideoTracks();
-    if (videoTracks.length > 0) {
-      videoTracks.forEach(track => {
-        try {
-          track.stop();
-          stream.removeTrack(track);
-        } catch (e) {
-          console.warn('[audioDeviceManager.ts] 移除视频轨道时出错', e);
-          track.enabled = false; // 如果无法移除，至少禁用它
+      // 捕获 BlackHole 设备的音频
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          deviceId: { exact: blackholeDevice.deviceId },
+          // 添加其他音频约束以确保最佳质量
+          autoGainControl: false,
+          echoCancellation: false,
+          noiseSuppression: false
         }
       });
-    }
-    
-    // 确保我们只处理音频轨道
-    const audioTracks = stream.getAudioTracks();
-    if (audioTracks.length === 0) {
-      console.error('[audioDeviceManager.ts] 捕获的桌面流中没有音频轨道');
-      return false;
-    }
-    
-    // 创建一个只包含音频轨道的新流
-    const audioOnlyStream = new MediaStream(audioTracks);
-    systemAudioStream.value = audioOnlyStream;
-    
-    // 创建音频处理节点
-    if (audioContext.value && systemAudioStream.value) {
-      // 首先检查音频上下文的状态
-      if (audioContext.value.state === 'suspended') {
-        await audioContext.value.resume();
+      
+      systemAudioStream.value = stream;
+      
+      // 创建音频处理节点
+      if (audioContext.value) {
+        systemAudioSource.value = audioContext.value.createMediaStreamSource(stream);
+        systemAudioAnalyser.value = audioContext.value.createAnalyser();
+        systemAudioGainNode.value = audioContext.value.createGain();
+        
+        // 配置分析器节点
+        systemAudioAnalyser.value.fftSize = 2048;
+        systemAudioAnalyser.value.smoothingTimeConstant = 0.3;
+        systemAudioAnalyser.value.minDecibels = -90;
+        systemAudioAnalyser.value.maxDecibels = -10;
+        
+        // 设置增益值
+        systemAudioGainNode.value.gain.value = systemAudioState.volume / 100;
+        
+        // 连接音频节点链，但不连接到 destination
+        systemAudioSource.value.connect(systemAudioGainNode.value);
+        systemAudioGainNode.value.connect(systemAudioAnalyser.value);
+        
+        // 创建数据数组并开始分析音频电平
+        const bufferLength = systemAudioAnalyser.value.frequencyBinCount;
+        const dataArray = new Uint8Array(bufferLength);
+        
+        const analyzeLevel = () => {
+          if (!systemAudioAnalyser.value) return;
+          
+          if (systemAudioState.muted) {
+            systemAudioState.level = 0;
+            requestAnimationFrame(analyzeLevel);
+            return;
+          }
+          
+          systemAudioAnalyser.value.getByteFrequencyData(dataArray);
+          
+          let sumOfSquares = 0;
+          let significantBins = 0;
+          
+          for (let i = 0; i < bufferLength; i++) {
+            const value = dataArray[i] / 256.0;
+            sumOfSquares += value * value;
+            if (value > 0.1) {
+              significantBins++;
+            }
+          }
+          
+          const rms = Math.sqrt(sumOfSquares / bufferLength);
+          const level = Math.min(100, Math.round(rms * 100 * 2));
+          
+          if (level > 0) {
+            console.log('[audioDeviceManager.ts] 音频电平:', {
+              level,
+              significantBins,
+              rms
+            });
+          }
+          
+          systemAudioState.level = level;
+          requestAnimationFrame(analyzeLevel);
+        };
+        
+        analyzeLevel();
       }
       
-      // 创建和连接音频节点
-      systemAudioSource.value = audioContext.value.createMediaStreamSource(systemAudioStream.value);
-      systemAudioAnalyser.value = audioContext.value.createAnalyser();
+      systemAudioState.enabled = true;
+      systemAudioState.captureMethod = 'blackhole';
+      console.log('[audioDeviceManager.ts] 成功启动 BlackHole 音频捕获');
       
-      // 增强音频分析配置
-      systemAudioAnalyser.value.fftSize = 1024; // 更高的FFT尺寸以获得更好的频率分辨率
-      systemAudioAnalyser.value.smoothingTimeConstant = 0.8; // 增加平滑系数，使电平变化更平滑
-      
-      // 连接节点
-      systemAudioSource.value.connect(systemAudioAnalyser.value);
-      
-      // 创建一个增益节点，用于应用系统音量
-      systemAudioGainNode.value = audioContext.value.createGain();
-      systemAudioGainNode.value.gain.value = systemAudioState.volume / 100;
-      
-      // 连接增益节点
-      systemAudioAnalyser.value.connect(systemAudioGainNode.value);
-      
-      // 创建数据数组
-      const bufferLength = systemAudioAnalyser.value.frequencyBinCount;
-      const dataArray = new Uint8Array(bufferLength);
-      
-      // 开始分析音频电平
-      const analyzeLevel = () => {
-        if (!systemAudioAnalyser.value) return;
-        
-        // 如果已静音，则强制电平为0
-        if (systemAudioState.muted) {
-          systemAudioState.level = 0;
-          requestAnimationFrame(analyzeLevel);
-          return;
-        }
-        
-        // 获取频域数据
-        systemAudioAnalyser.value.getByteFrequencyData(dataArray);
-        
-        // Windows平台优化的电平检测算法
-        let sum = 0;
-        let significantBins = 0;
-        
-        // 低频范围（通常包含大部分听觉上重要的声音）
-        const lowFreqEndIndex = Math.floor(bufferLength * 0.4); // 低频占总频谱的40%
-        for (let i = 0; i < lowFreqEndIndex; i++) {
-          // 给予低频更高的权重，因为人耳对低频更敏感
-          const weight = 1.5 - (i / lowFreqEndIndex) * 0.5; // 权重从1.5线性降至1.0
-          sum += dataArray[i] * weight;
-          
-          // 只统计有显著能量的频率
-          if (dataArray[i] > 5) {
-            significantBins++;
-          }
-        }
-        
-        // 中高频范围（检测语音、音乐等）
-        for (let i = lowFreqEndIndex; i < bufferLength; i++) {
-          // 给予中高频正常权重
-          sum += dataArray[i];
-          
-          // 只统计有显著能量的频率
-          if (dataArray[i] > 10) { // 中高频要求更高的能量才算显著
-            significantBins++;
-          }
-        }
-        
-        // 计算加权平均值并应用调整因子
-        let average = sum / bufferLength;
-        
-        // 增加Windows平台的电平灵敏度
-        if (isWindows.value) {
-          const sensitivity = 2.5; // Windows平台需要更高的灵敏度
-          average *= sensitivity;
-          
-          // 确保有意义的微弱信号也能显示
-          if (significantBins > 3 && average < 10) {
-            average = Math.max(average, 10); // 至少显示10%的电平
-          }
-        }
-        
-        // 计算最终电平值（0-100）
-        systemAudioState.level = Math.min(100, Math.round((average / 256) * 100));
-        
-        // 继续下一帧分析
-        requestAnimationFrame(analyzeLevel);
-      };
-      
-      // 开始分析
-      analyzeLevel();
-      
-      // 创建一个静音的音频节点连接到目标，防止"AudioContext was not allowed to start"警告
-      const silentNode = audioContext.value.createGain();
-      silentNode.gain.value = 0;
-      silentNode.connect(audioContext.value.destination);
-      
-      console.log('[audioDeviceManager.ts] 音频分析器已设置，电平检测已启动');
+      return true;
     }
     
-    systemAudioState.enabled = true;
-    systemAudioState.captureMethod = 'desktop-capturer';
-    console.log('[audioDeviceManager.ts] 成功启动desktopCapturer音频捕获');
+    // Windows 平台使用立体声混音
+    if (isWindows.value) {
+      // 获取所有音频设备
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      
+      // 查找立体声混音设备
+      const stereoMixDevice = devices.find(device => 
+        device.kind === 'audioinput' && 
+        (device.label.toLowerCase().includes('立体声混音') || 
+         device.label.toLowerCase().includes('stereo mix'))
+      );
+      
+      if (!stereoMixDevice) {
+        console.error('[audioDeviceManager.ts] 未找到立体声混音设备');
+        return false;
+      }
+      
+      console.log('[audioDeviceManager.ts] 找到立体声混音设备:', stereoMixDevice);
+      
+      // 捕获立体声混音设备的音频
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          deviceId: { exact: stereoMixDevice.deviceId },
+          // 添加其他音频约束以确保最佳质量
+          autoGainControl: false,
+          echoCancellation: false,
+          noiseSuppression: false
+        }
+      });
+      
+      // 检查音频轨道状态
+      const audioTrack = stream.getAudioTracks()[0];
+      console.log('[audioDeviceManager.ts] 音频轨道状态:', {
+        enabled: audioTrack.enabled,
+        muted: audioTrack.muted,
+        readyState: audioTrack.readyState,
+        settings: audioTrack.getSettings()
+      });
+      
+      systemAudioStream.value = stream;
+      
+      // 创建音频处理节点
+      if (audioContext.value) {
+        // 确保音频上下文是激活状态
+        if (audioContext.value.state === 'suspended') {
+          await audioContext.value.resume();
+        }
+        
+        systemAudioSource.value = audioContext.value.createMediaStreamSource(stream);
+        systemAudioAnalyser.value = audioContext.value.createAnalyser();
+        systemAudioGainNode.value = audioContext.value.createGain();
+        
+        // 配置分析器节点
+        systemAudioAnalyser.value.fftSize = 2048; // 增加FFT大小以提高精度
+        systemAudioAnalyser.value.smoothingTimeConstant = 0.3; // 降低平滑系数以提高响应速度
+        systemAudioAnalyser.value.minDecibels = -90; // 扩大分析范围
+        systemAudioAnalyser.value.maxDecibels = -10;
+        
+        // 设置增益值
+        systemAudioGainNode.value.gain.value = systemAudioState.volume / 100;
+        
+        // 正确连接音频节点链，但不连接到destination
+        systemAudioSource.value.connect(systemAudioGainNode.value);
+        systemAudioGainNode.value.connect(systemAudioAnalyser.value);
+        
+        console.log('[audioDeviceManager.ts] 音频节点已连接（仅用于分析）');
+        
+        // 创建数据数组
+        const bufferLength = systemAudioAnalyser.value.frequencyBinCount;
+        const dataArray = new Uint8Array(bufferLength);
+        
+        // 开始分析音频电平
+        const analyzeLevel = () => {
+          if (!systemAudioAnalyser.value) return;
+          
+          if (systemAudioState.muted) {
+            systemAudioState.level = 0;
+            requestAnimationFrame(analyzeLevel);
+            return;
+          }
+          
+          systemAudioAnalyser.value.getByteFrequencyData(dataArray);
+          
+          // 计算有效值（RMS）而不是简单平均
+          let sumOfSquares = 0;
+          let significantBins = 0;
+          
+          for (let i = 0; i < bufferLength; i++) {
+            const value = dataArray[i] / 256.0; // 归一化到0-1范围
+            sumOfSquares += value * value;
+            if (value > 0.1) { // 10% 阈值
+              significantBins++;
+            }
+          }
+          
+          // 计算RMS值并转换到0-100范围
+          const rms = Math.sqrt(sumOfSquares / bufferLength);
+          const level = Math.min(100, Math.round(rms * 100 * 2)); // 乘2以提高灵敏度
+          
+          // // 添加调试日志
+          // if (level > 0) {
+          //   console.log('[audioDeviceManager.ts] 音频电平:', {
+          //     level,
+          //     significantBins,
+          //     rms
+          //   });
+          // }
+          
+          systemAudioState.level = level;
+          requestAnimationFrame(analyzeLevel);
+        };
+        
+        analyzeLevel();
+      }
+      
+      systemAudioState.enabled = true;
+      systemAudioState.captureMethod = 'stereo-mix';
+      console.log('[audioDeviceManager.ts] 成功启动立体声混音音频捕获');
+      
+      return true;
+    }
     
-    return true;
+    return false;
   } catch (error) {
-    console.error('[audioDeviceManager.ts] desktopCapturer音频捕获失败', error);
+    console.error('[audioDeviceManager.ts] 系统音频捕获失败', error);
     systemAudioState.captureMethod = 'none';
     return false;
   }
