@@ -14,6 +14,7 @@ import type {
 import { ref, computed } from 'vue';
 import type { WindowInfo, DisplayInfo, CameraInfo } from '../types/video';
 import type { AudioOutputDeviceInfo } from '../types/audio';
+import type { NativeImage } from 'electron';
 
 /**
  * Electron API 类型定义
@@ -94,9 +95,9 @@ interface DesktopCapturerOptions {
 interface DesktopCapturerSource {
   id: string;
   name: string;
-  thumbnail: Electron.NativeImage;
+  thumbnail: NativeImage;
   display_id?: string;
-  appIcon?: Electron.NativeImage;
+  appIcon?: NativeImage;
 }
 
 /**

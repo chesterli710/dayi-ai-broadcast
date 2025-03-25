@@ -280,8 +280,6 @@ const getSystemAudioCaptureTypeLabel = () => {
   switch (method) {
     case 'blackhole':
       return 'BlackHole';
-    case 'wasapi':
-      return 'WASAPI';
     case 'desktop-capturer':
       return isWindows.value ? t('audio.desktopCapture') : 'Desktop Capturer';
     default:
