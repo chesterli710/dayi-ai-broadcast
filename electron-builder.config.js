@@ -5,7 +5,7 @@
 module.exports = {
   productName: '大医AI导播系统',
   appId: 'com.dayi.ai.broadcast',
-  copyright: `Copyright © ${new Date().getFullYear()} 大医AI导播系统`,
+  copyright: `Copyright © ${new Date().getFullYear()} 大医直播`,
   asar: true,
   compression: 'maximum', // 最大压缩级别
   
@@ -37,6 +37,12 @@ module.exports = {
     // 如需公证，取消下方注释并配置
     // identity: null, // Apple开发者ID
     // notarize: false // 是否进行公证
+    extraResources: [
+      {
+        "from": "resources/ffmpeg/mac/ffmpeg",
+        "to": "ffmpeg/ffmpeg"
+      }
+    ]
   },
   
   // DMG配置
@@ -79,6 +85,12 @@ module.exports = {
     // certificateFile: process.env.WINDOWS_CERTIFICATE_FILE,
     // certificatePassword: process.env.WINDOWS_CERTIFICATE_PASSWORD,
     // signDlls: true
+    extraResources: [
+      {
+        "from": "resources/ffmpeg/win/ffmpeg.exe",
+        "to": "ffmpeg/ffmpeg.exe"
+      }
+    ]
   },
   
   // NSIS安装包配置
@@ -94,10 +106,7 @@ module.exports = {
     installerHeaderIcon: 'build/icon.ico'
   },
   
-  // 便携版配置
-  portable: {
-    artifactName: '${productName}-${version}-portable.exe'
-  },
+
   
   // 自动更新配置（如需使用）
   // publish: {

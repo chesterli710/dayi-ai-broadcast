@@ -21,13 +21,19 @@
     "package:win": "cross-env NODE_ENV=production electron-builder --config electron-builder.config.js --win --x64",
     "package:mac": "cross-env NODE_ENV=production electron-builder --config electron-builder.config.js --mac",
     "postinstall": "electron-builder install-app-deps",
-    "clean": "rimraf dist dist-electron release"
+    "clean": "rimraf dist dist-electron release",
+    "download:fonts": "./download-fonts.sh",
+    "download:ffmpeg": "./download-ffmpeg.sh"
   },
   "dependencies": {
     "@element-plus/icons-vue": "^2.3.1",
+    "@ffmpeg/core": "^0.10.0",
+    "@ffmpeg/ffmpeg": "^0.10.1",
+    "@types/fluent-ffmpeg": "^2.1.27",
     "axios": "^1.8.3",
     "bootstrap-icons": "^1.11.3",
     "element-plus": "^2.9.6",
+    "fluent-ffmpeg": "^2.1.3",
     "html2canvas": "^1.4.1",
     "mockjs": "^1.1.0",
     "pinia": "^2.1.7",

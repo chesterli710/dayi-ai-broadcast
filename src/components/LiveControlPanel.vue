@@ -10,8 +10,9 @@
       </div>
     </div>
     <div class="panel-content">
-      <!-- 直播控制面板内容将在这里实现 -->
-      <el-empty :description="$t('liveControlPanel.emptyText')" />
+      <el-button type="primary" size="large" @click="startStreaming">
+        {{ $t('liveControlPanel.startLive') }}
+      </el-button>
     </div>
 
     <!-- 设置弹窗 -->
